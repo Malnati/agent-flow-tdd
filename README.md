@@ -476,3 +476,44 @@ O visualizador mostra:
   - Itens gerados entre agentes
   - Resultados de guardrails
   - Respostas brutas do LLM
+
+## Comandos Disponíveis
+
+Para ver todos os comandos disponíveis:
+
+```bash
+make help
+```
+
+### Ambiente
+
+- `make install` - Instala dependências do projeto
+- `make clean` - Remove arquivos temporários
+- `make dev` - Executa em modo desenvolvimento
+
+### Qualidade
+
+- `make test` - Executa testes
+- `make coverage` - Gera relatório de cobertura
+- `make lint` - Executa linters
+- `make format` - Formata código
+
+### Banco de Dados
+
+- `make db-init` - Inicializa banco de dados
+- `make db-clean` - Remove banco de dados
+- `make db-backup` - Faz backup do banco
+- `make logs` - Visualiza logs do banco
+
+### Exemplos
+
+```bash
+# Executa o agente com um prompt
+make dev prompt-tdd="Cadastro de pessoas" mode=mcp format=markdown
+
+# Visualiza os últimos 20 logs de uma sessão
+make logs ARGS="--limit 20 --session abc123"
+
+# Visualiza detalhes de uma execução específica
+make logs ARGS="--id 42"
+```

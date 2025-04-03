@@ -1,6 +1,6 @@
 # Makefile para o projeto prompt-tdd
 
-.PHONY: install test run clean autoflake dev db-init db-clean db-backup logs
+.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs
 
 # Configuração do ambiente virtual
 VENV = .venv
@@ -12,6 +12,31 @@ ifneq (,$(wildcard .env))
     include .env
     export
 endif
+
+# Ajuda
+help:
+	@echo "Comandos disponíveis:"
+	@echo ""
+	@echo "Ambiente:"
+	@echo "  make install    - Instala dependências do projeto"
+	@echo "  make clean      - Remove arquivos temporários"
+	@echo "  make dev        - Executa em modo desenvolvimento"
+	@echo ""
+	@echo "Qualidade:"
+	@echo "  make test       - Executa testes"
+	@echo "  make coverage   - Gera relatório de cobertura"
+	@echo "  make lint       - Executa linters"
+	@echo "  make format     - Formata código"
+	@echo ""
+	@echo "Banco de Dados:"
+	@echo "  make db-init    - Inicializa banco de dados"
+	@echo "  make db-clean   - Remove banco de dados"
+	@echo "  make db-backup  - Faz backup do banco"
+	@echo "  make logs       - Visualiza logs do banco"
+	@echo ""
+	@echo "Exemplos:"
+	@echo "  make dev prompt-tdd=\"Cadastro de pessoas\" mode=mcp format=markdown"
+	@echo "  make logs ARGS=\"--limit 20 --session abc123\""
 
 # Instalação e setup
 install:
