@@ -5,6 +5,8 @@ Módulo com funções comuns usadas em diferentes partes do sistema.
 
 import os
 from typing import Any, List
+import json
+from datetime import datetime
 
 def mask_sensitive_data(data: Any, mask_str: str = '***') -> Any:
     """
@@ -104,5 +106,37 @@ def log_env_status(logger, env_vars: List[str]) -> None:
     for var in env_vars:
         status = get_env_status(var)
         logger.info(f"Variável de ambiente {var}: {status}")
+
+def format_timestamp(timestamp: str) -> str:
+    """
+    Formata timestamp para exibição.
+    
+    Args:
+        timestamp: String com o timestamp
+        
+    Returns:
+        String formatada no padrão YYYY-MM-DD HH:MM:SS
+    """
+    try:
+        dt = datetime.fromisoformat(timestamp)
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+    except:
+        return timestamp
+
+def format_json(data: str) -> str:
+    """
+    Formata JSON para exibição.
+    
+    Args:
+        data: String com o JSON
+        
+    Returns:
+        String formatada com indentação
+    """
+    try:
+        parsed = json.loads(data)
+        return json.dumps(parsed, indent=2)
+    except:
+        return data
 
 # Importar classe TokenValidator

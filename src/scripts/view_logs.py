@@ -2,8 +2,6 @@
 Script para visualização dos logs do banco de dados.
 """
 import argparse
-import json
-from datetime import datetime
 from typing import Dict, Any, List
 
 from rich.console import Console
@@ -12,24 +10,9 @@ from rich.panel import Panel
 from rich.text import Text
 
 from src.core.db import DatabaseManager
+from src.core.utils import format_timestamp, format_json
 
 console = Console()
-
-def format_timestamp(timestamp: str) -> str:
-    """Formata timestamp para exibição."""
-    try:
-        dt = datetime.fromisoformat(timestamp)
-        return dt.strftime("%Y-%m-%d %H:%M:%S")
-    except:
-        return timestamp
-
-def format_json(data: str) -> str:
-    """Formata JSON para exibição."""
-    try:
-        parsed = json.loads(data)
-        return json.dumps(parsed, indent=2)
-    except:
-        return data
 
 def show_run_details(run: Dict[str, Any]) -> None:
     """Mostra detalhes de uma execução."""
