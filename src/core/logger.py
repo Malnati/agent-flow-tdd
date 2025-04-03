@@ -1,6 +1,5 @@
 # src/core/logger.py
 import os
-import sys
 import logging
 import logging.handlers
 import uuid
@@ -8,11 +7,9 @@ import time
 from contextvars import ContextVar
 from pathlib import Path
 from functools import wraps
-from typing import Optional, Union, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass, field
 import json
-from rich.console import Console
-from rich.logging import RichHandler
 
 # Diretório base do projeto
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -100,85 +97,41 @@ class SecureLogFilter(logging.Filter):
         suffix = text[-4:] if len(text) > 8 else ''
         return f"{prefix}{mask_str}{suffix}"
 
-def setup_logging(
-    name: str = 'agent_flow_tdd',
-    level: Union[str, int] = NUMERIC_LOG_LEVEL,
-    log_file: Optional[str] = None,
-    enable_rich: bool = True,
-    file_max_mb: int = 10,
-    backup_count: int = 7,
-    trace_config: Optional['TraceConfig'] = None
-) -> logging.Logger:
+def setup_logger(name: str, level: Optional[str] = None) -> logging.Logger:
     """
-    Configura o sistema de logging unificado com suporte a Rich e segurança
+    Configura um logger com o formato padrão.
     
     Args:
         name: Nome do logger
-        level: Nível de log (int ou string)
-        log_file: Caminho para arquivo de log
-        enable_rich: Habilita saída formatada com Rich
-        file_max_mb: Tamanho máximo do arquivo em MB
-        backup_count: Número de arquivos de backup
-        trace_config: Configuração do sistema de tracing
+        level: Nível de log (DEBUG, INFO, etc)
         
     Returns:
         Logger configurado
     """
-    # Converter nível de log se necessário
-    if isinstance(level, str):
-        level = LOG_LEVEL_MAP.get(level.upper(), logging.INFO)
-    
+    # Cria logger
     logger = logging.getLogger(name)
-    logger.setLevel(level)
     
-    # Remover handlers existentes
-    if logger.handlers:
-        logger.handlers.clear()
+    # Define nível
+    log_level = level or os.getenv("LOG_LEVEL", "INFO")
+    logger.setLevel(getattr(logging, log_level))
     
-    # Adicionar filtro de segurança
-    logger.addFilter(SecureLogFilter())
+    # Remove handlers existentes
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
     
-    # Configurar console handler com Rich
-    if enable_rich and sys.stdout.isatty():
-        console = Console(color_system="auto")
-        rich_handler = RichHandler(
-            console=console,
-            show_time=True,
-            show_path=True,
-            markup=True,
-            rich_tracebacks=True,
-            tracebacks_show_locals=False
-        )
-        rich_handler.setLevel(level)
-        logger.addHandler(rich_handler)
+    # Adiciona handler de console
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.DEBUG)
     
-    # Configurar file handler com rotação
-    if log_file:
-        log_path = Path(LOG_DIR) / log_file
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        file_handler = logging.handlers.RotatingFileHandler(
-            filename=log_path,
-            maxBytes=file_max_mb*1024*1024,
-            backupCount=backup_count,
-            encoding='utf-8'
-        )
-        file_formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        file_handler.setFormatter(file_formatter)
-        file_handler.setLevel(level)
-        logger.addHandler(file_handler)
+    # Define formato
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    console_handler.setFormatter(formatter)
     
-    # Configuração padrão do tracing
-    if trace_config is None:
-        trace_config = TraceConfig(
-            tracing_disabled=os.environ.get("OPENAI_AGENTS_DISABLE_TRACING", "0") == "1",
-            trace_processors=[FileTraceProcessor()]
-        )
+    # Adiciona handler
+    logger.addHandler(console_handler)
     
-    logger.trace_config = trace_config
     return logger
 
 def log_execution(func=None, level=logging.INFO):
@@ -209,10 +162,10 @@ def log_execution(func=None, level=logging.INFO):
     return decorator(func) if func else decorator
 
 # Alias para compatibilidade
-get_logger = setup_logging
+get_logger = setup_logger
 
 # Logger global padrão
-logger = setup_logging()
+logger = setup_logger('agent_flow_tdd')
 
 # Funções auxiliares de conveniência
 def log_error(message: str, exc_info=False) -> None:
