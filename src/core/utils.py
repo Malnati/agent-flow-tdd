@@ -360,6 +360,11 @@ FIX_PATTERNS = [
     r'correc[aã]o'
 ]
 
+class VersionAnalyzer:
+    """
+    Analisador de versões para controle semântico.
+    """
+
     def __init__(self):
         self.logger = get_logger(__name__)
 

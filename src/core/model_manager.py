@@ -2,21 +2,17 @@
 Gerenciador de modelos de IA com suporte a múltiplos provedores e fallback automático.
 """
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import os
 import json
 import time
 
 import google.generativeai as genai
-import openai
-import openrouter
-from cachetools import TTLCache
 from pydantic import BaseModel
-from tenacity import retry, stop_after_attempt, wait_exponential
 from openai import OpenAI
 from anthropic import Anthropic
 
-from src.core.utils import get_env_var, mask_sensitive_data
+from src.core.utils import get_env_var
 from src.core.logger import get_logger
 
 logger = get_logger(__name__)

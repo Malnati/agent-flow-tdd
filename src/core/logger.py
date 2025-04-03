@@ -10,8 +10,8 @@ from functools import wraps
 from typing import Optional, Dict, Any, List, Tuple, Callable
 from dataclasses import dataclass, field
 import json
-import sys
 from datetime import datetime
+import functools
 
 # Diretório base do projeto
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
