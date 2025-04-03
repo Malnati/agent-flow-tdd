@@ -136,4 +136,7 @@ logs:
 # Testes end-to-end
 test-e2e:
 	@echo "🧪 Executando testes end-to-end..."
+	@echo "🗄️ Reinicializando banco de dados..."
+	@make db-clean
+	@make db-init
 	$(PYTHON) -m pytest -v -m e2e src/tests/test_e2e.py 
