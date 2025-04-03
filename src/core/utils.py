@@ -7,7 +7,7 @@ import re
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Any, List, Dict, Tuple
+from typing import Optional, Any, List, Dict, Tuple, Union
 
 from src.core.logger import get_logger, log_execution
 
@@ -121,44 +121,33 @@ def validate_env() -> None:
             "IMPORTANTE: Não use arquivos .env. Configure as variáveis diretamente no ambiente ou via argumentos."
         )
 
-def mask_sensitive_data(data: Any, mask_str: str = '***') -> Any:
+def mask_sensitive_data(data: Union[str, Dict[str, Any], List[Any]]) -> Union[str, Dict[str, Any], List[Any]]:
     """
-    Mascara dados sensíveis em strings e dicionários.
-    
+    Mascara dados sensíveis em strings, dicionários ou listas.
+
     Args:
-        data: Dados a serem mascarados (string, dict ou outro tipo)
-        mask_str: String de substituição para dados sensíveis
-        
+        data: Dados a serem mascarados. Pode ser uma string, dicionário ou lista.
+
     Returns:
-        Dados com informações sensíveis mascaradas
+        Dados com informações sensíveis mascaradas.
     """
-    # Se for None, retorna diretamente
-    if data is None:
-        return None
-        
-    # Se for uma string, verificar e mascarar dados sensíveis
     if isinstance(data, str):
-        return mask_partially(data, mask_str)
-        
-    # Se for um dicionário, processar valores recursivamente
+        # Mascara tokens e chaves de API
+        patterns = [
+            (r'["\']?[a-zA-Z0-9-_]{20,}["\']?', '***API_KEY***'),  # API keys
+            (r'Bearer\s+[a-zA-Z0-9-_.]+', 'Bearer ***TOKEN***'),  # Bearer tokens
+            (r'github_pat_[a-zA-Z0-9_]+', '***GITHUB_PAT***'),  # GitHub PATs
+            (r'ghp_[a-zA-Z0-9]+', '***GITHUB_TOKEN***'),  # GitHub tokens
+            (r'sk-[a-zA-Z0-9]+', '***OPENAI_KEY***'),  # OpenAI keys
+        ]
+        masked = data
+        for pattern, replacement in patterns:
+            masked = re.sub(pattern, replacement, masked)
+        return masked
     elif isinstance(data, dict):
-        masked_data = {}
-        for key, value in data.items():
-            # Chaves sensíveis são completamente mascaradas
-            if any(keyword in key.lower() for keyword in [
-                'password', 'senha', 'secret', 'token', 'key', 'auth', 'credential', 'private'
-            ]):
-                masked_data[key] = mask_str
-            else:
-                # Processar valores normais recursivamente
-                masked_data[key] = mask_sensitive_data(value, mask_str)
-        return masked_data
-        
-    # Se for uma lista, processar itens
+        return {k: mask_sensitive_data(v) for k, v in data.items()}
     elif isinstance(data, list):
-        return [mask_sensitive_data(item, mask_str) for item in data]
-        
-    # Para outros tipos, retornar sem alteração
+        return [mask_sensitive_data(item) for item in data]
     return data
 
 def mask_partially(text, mask_str='***'):
