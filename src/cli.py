@@ -7,6 +7,7 @@ import time
 
 import typer
 from rich.console import Console
+from rich.markdown import Markdown
 
 from src.app import AgentOrchestrator
 from src.core.logger import setup_logger
@@ -48,19 +49,21 @@ def main(
         )
         
         # Formata e exibe resultado
-        output = {
-            "content": result.output,
-            "metadata": {
-                "type": "feature",
-                "options": {
-                    "format": format,
-                    "model": model,
-                    "temperature": temperature
+        if format == "markdown":
+            console.print(Markdown(result.output))
+        else:
+            output = {
+                "content": result.output,
+                "metadata": {
+                    "type": "feature",
+                    "options": {
+                        "format": format,
+                        "model": model,
+                        "temperature": temperature
+                    }
                 }
             }
-        }
-        
-        print(json.dumps(output))
+            print(json.dumps(output))
         
     except Exception as e:
         logger.error(f"FALHA - main | Erro: {str(e)}", exc_info=True)
