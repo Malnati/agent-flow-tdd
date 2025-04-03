@@ -126,7 +126,7 @@ db-backup:
 
 # Visualização de logs
 logs:
-	python src/scripts/view_logs.py $(ARGS)
+	python src/scripts/utils_view_logs.py $(ARGS)
 
 # Permite argumentos extras para o comando run
 %:
