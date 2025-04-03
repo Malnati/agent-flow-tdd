@@ -113,7 +113,7 @@ def validate_env() -> None:
     Raises:
         ValueError: Se alguma variável obrigatória não estiver definida.
     """
-    status = get_env_status()
+    status = {get_env_status(})
     if not status["all_required_set"]:
         missing = [var for var, set_ in status["required"].items() if not set_]
         raise ValueError(
@@ -401,10 +401,6 @@ FIX_PATTERNS = [
     r'correc[aã]o'
 ]
 
-"""
-Módulo para análise de commits e determinação automática de versões.
-"""
-class VersionAnalyzer:
     def __init__(self):
         self.logger = get_logger(__name__)
 
