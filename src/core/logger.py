@@ -7,9 +7,11 @@ import time
 from contextvars import ContextVar
 from pathlib import Path
 from functools import wraps
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, Callable
 from dataclasses import dataclass, field
 import json
+import sys
+from datetime import datetime
 
 # Diretório base do projeto
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -134,32 +136,62 @@ def setup_logger(name: str, level: Optional[str] = None) -> logging.Logger:
     
     return logger
 
-def log_execution(func=None, level=logging.INFO):
-    """Decorador para logar execução de funções com segurança"""
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            logger = logging.getLogger('agent_flow_tdd')
+def log_execution(func: Callable) -> Callable:
+    """
+    Decorador para logging de execução de funções.
+    
+    Args:
+        func: Função a ser decorada
+        
+    Returns:
+        Função decorada com logging
+    """
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        logger = get_logger(func.__module__)
+        
+        # Log de início
+        logger.info(f"INÍCIO - {func.__name__} | Args: {args}, Kwargs: {kwargs}")
+        
+        try:
+            # Executa função
+            result = func(*args, **kwargs)
             
-            safe_args = [logger.getEffectiveLevel() >= logging.DEBUG or SecureLogFilter().mask_sensitive_data(arg) 
-                        for arg in args]
-            safe_kwargs = {k: logger.getEffectiveLevel() >= logging.DEBUG or SecureLogFilter().mask_sensitive_data(v) 
-                          for k, v in kwargs.items()}
+            # Log de sucesso
+            logger.info(f"SUCESSO - {func.__name__}")
+            return result
             
-            logger.log(level, f"Iniciando {func.__qualname__} - Args: {safe_args}, Kwargs: {safe_kwargs}")
+        except Exception as e:
+            # Log de erro
+            logger.error(
+                f"FALHA - {func.__name__} | Erro: {str(e)}", 
+                exc_info=True
+            )
+            raise
             
-            start_time = time.time()
-            try:
-                result = func(*args, **kwargs)
-                elapsed = time.time() - start_time
-                logger.log(level, f"Concluído {func.__qualname__} em {elapsed:.3f}s")
-                return result
-            except Exception:
-                elapsed = time.time() - start_time
-                logger.error(f"Erro em {func.__qualname__} após {elapsed:.3f}s", exc_info=True)
-                raise
-        return wrapper
-    return decorator(func) if func else decorator
+    return wrapper
+
+def log_error(error: Exception, context: Optional[Dict[str, Any]] = None) -> None:
+    """
+    Loga um erro com contexto adicional.
+    
+    Args:
+        error: Exceção a ser logada
+        context: Dicionário com informações de contexto
+    """
+    logger = get_logger(__name__)
+    
+    error_data = {
+        'error_type': type(error).__name__,
+        'error_message': str(error),
+        'timestamp': datetime.now().isoformat(),
+        'context': context or {}
+    }
+    
+    logger.error(
+        f"Erro: {json.dumps(error_data, indent=2)}", 
+        exc_info=True
+    )
 
 # Alias para compatibilidade
 get_logger = setup_logger

@@ -113,7 +113,7 @@ def validate_env() -> None:
     Raises:
         ValueError: Se alguma variável obrigatória não estiver definida.
     """
-    status = {get_env_status(})
+    status = get_env_status()
     if not status["all_required_set"]:
         missing = [var for var, set_ in status["required"].items() if not set_]
         raise ValueError(
@@ -167,47 +167,6 @@ def mask_partially(text, mask_str='***'):
     # Mostra os primeiros 4 caracteres e mascara o resto
     visible = min(4, len(text) // 3)
     return text[:visible] + mask_str
-
-def get_env_status(var_name: str) -> str:
-    """
-    Retorna o status de uma variável de ambiente sem expor seu valor.
-    
-    Args:
-        var_name: Nome da variável de ambiente
-        
-    Returns:
-        String indicando o status da variável
-    """
-    # Lista de palavras-chave para identificar dados sensíveis
-    SENSITIVE_KEYWORDS = [
-        'pass', 'senha', 'password', 
-        'token', 'access_token', 'refresh_token', 'jwt', 
-        'secret', 'api_key', 'apikey', 'key', 
-        'auth', 'credential', 'oauth', 
-        'private', 'signature'
-    ]
-    
-    value = os.environ.get(var_name)
-    if not value:
-        return "não definido"
-    elif any(keyword in var_name.lower() for keyword in SENSITIVE_KEYWORDS):
-        return "configurado"
-    else:
-        # Para variáveis não sensíveis, podemos retornar o valor
-        # Mas aplicamos mascaramento para garantir segurança
-        return mask_partially(value)
-
-def log_env_status(logger, env_vars: List[str]) -> None:
-    """
-    Loga o status de múltiplas variáveis de ambiente.
-    
-    Args:
-        logger: Instância do logger
-        env_vars: Lista de nomes de variáveis de ambiente
-    """
-    for var in env_vars:
-        status = get_env_status(var)
-        logger.info(f"Variável de ambiente {var}: {status}")
 
 def format_timestamp(timestamp: str) -> str:
     """

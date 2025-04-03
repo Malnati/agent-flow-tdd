@@ -2,8 +2,10 @@
 Gerenciador de modelos de IA com suporte a múltiplos provedores e fallback automático.
 """
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, Tuple
 import os
+import json
+import time
 
 import google.generativeai as genai
 import openai
@@ -11,8 +13,10 @@ import openrouter
 from cachetools import TTLCache
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential
+from openai import OpenAI
+from anthropic import Anthropic
 
-from src.core.utils import get_env_var
+from src.core.utils import get_env_var, mask_sensitive_data
 from src.core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -39,338 +43,320 @@ class ModelConfig(BaseModel):
 class ModelManager:
     """Gerenciador de modelos de IA."""
 
-    def __init__(self) -> None:
-        """Inicializa o gerenciador de modelos."""
-        self.cache = TTLCache(
-            maxsize=int(get_env_var("CACHE_MAXSIZE", "100")),
-            ttl=int(get_env_var("CACHE_TTL", "3600"))
-        )
-        self.configs: Dict[str, ModelConfig] = {}
-        self._load_configs()
-        self.model = None
-        self.temperature = None
-        self.api_key = None
-
-    def _load_configs(self) -> None:
-        """Carrega as configurações dos modelos."""
-        # OpenAI
-        openai_key = get_env_var("OPENAI_KEY")
-        if openai_key:
-            self._add_openai_models(openai_key)
-
-        # OpenRouter
-        openrouter_key = get_env_var("OPENROUTER_KEY")
-        if openrouter_key:
-            self._add_openrouter_models(openrouter_key)
-
-        # Gemini
-        gemini_key = get_env_var("GEMINI_KEY")
-        if gemini_key:
-            self._add_gemini_models(gemini_key)
-
-    def _add_openai_models(self, api_key: str) -> None:
-        """Adiciona modelos OpenAI."""
-        models = [
-            ("gpt-4-turbo", "gpt-4-turbo-preview"),
-            ("gpt-4", "gpt-4"),
-            ("gpt-3.5-turbo", "gpt-3.5-turbo"),
-        ]
-        
-        for name, model_id in models:
-            self.configs[name] = ModelConfig(
-                provider=ModelProvider.OPENAI,
-                model_id=model_id,
-                api_key=api_key,
-                timeout=int(get_env_var(f"OPENAI_{name.upper()}_TIMEOUT", get_env_var("OPENAI_TIMEOUT", "30"))),
-                max_retries=int(get_env_var(f"OPENAI_{name.upper()}_MAX_RETRIES", get_env_var("OPENAI_MAX_RETRIES", "3"))),
-                temperature=float(get_env_var(f"OPENAI_{name.upper()}_TEMPERATURE", get_env_var("OPENAI_TEMPERATURE", "0.7"))),
-                max_tokens=int(get_env_var(f"OPENAI_{name.upper()}_MAX_TOKENS", get_env_var("OPENAI_MAX_TOKENS", "4000"))),
-            )
-
-    def _add_openrouter_models(self, api_key: str) -> None:
-        """Adiciona modelos OpenRouter."""
-        models = [
-            ("openrouter/auto", "auto"),
-            ("anthropic/claude-3-opus", "anthropic/claude-3-opus"),
-            ("anthropic/claude-3-sonnet", "anthropic/claude-3-sonnet"),
-        ]
-        
-        for name, model_id in models:
-            self.configs[name] = ModelConfig(
-                provider=ModelProvider.OPENROUTER,
-                model_id=model_id,
-                api_key=api_key,
-                timeout=int(get_env_var(f"OPENROUTER_{name.upper().replace('/', '_')}_TIMEOUT", get_env_var("OPENROUTER_TIMEOUT", "30"))),
-                max_retries=int(get_env_var(f"OPENROUTER_{name.upper().replace('/', '_')}_MAX_RETRIES", get_env_var("OPENROUTER_MAX_RETRIES", "3"))),
-                temperature=float(get_env_var(f"OPENROUTER_{name.upper().replace('/', '_')}_TEMPERATURE", get_env_var("OPENROUTER_TEMPERATURE", "0.7"))),
-                max_tokens=int(get_env_var(f"OPENROUTER_{name.upper().replace('/', '_')}_MAX_TOKENS", get_env_var("OPENROUTER_MAX_TOKENS", "4000"))),
-            )
-
-    def _add_gemini_models(self, api_key: str) -> None:
-        """Adiciona modelos Gemini."""
-        models = [
-            ("gemini-pro", "gemini-pro"),
-            ("gemini-pro-vision", "gemini-pro-vision"),
-        ]
-        
-        for name, model_id in models:
-            self.configs[name] = ModelConfig(
-                provider=ModelProvider.GEMINI,
-                model_id=model_id,
-                api_key=api_key,
-                timeout=int(get_env_var(f"GEMINI_{name.upper().replace('-', '_')}_TIMEOUT", get_env_var("GEMINI_TIMEOUT", "30"))),
-                max_retries=int(get_env_var(f"GEMINI_{name.upper().replace('-', '_')}_MAX_RETRIES", get_env_var("GEMINI_MAX_RETRIES", "3"))),
-                temperature=float(get_env_var(f"GEMINI_{name.upper().replace('-', '_')}_TEMPERATURE", get_env_var("GEMINI_TEMPERATURE", "0.7"))),
-                max_tokens=int(get_env_var(f"GEMINI_{name.upper().replace('-', '_')}_MAX_TOKENS", get_env_var("GEMINI_MAX_TOKENS", "4000"))),
-            )
-
-    def get_available_models(self) -> List[str]:
-        """Retorna a lista de modelos disponíveis."""
-        return list(self.configs.keys())
-
-    def get_model_config(self, model_name: str) -> Optional[ModelConfig]:
-        """Retorna a configuração de um modelo."""
-        return self.configs.get(model_name)
-
-    def configure(self, model: str, temperature: float = 0.7):
-        """Configura o modelo a ser usado."""
-        self.model = model
-        self.temperature = temperature
-
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
-    )
-    def generate(
-        self,
-        prompt: str,
-        model_name: str = "gpt-4-turbo",
-        elevation_model: Optional[str] = None,
-        force: bool = False,
-        **kwargs: Any,
-    ) -> Union[str, Dict[str, Any]]:
+    def __init__(self, model_name: Optional[str] = None):
         """
-        Gera uma resposta usando o modelo especificado.
-
+        Inicializa o gerenciador com configurações do modelo.
+        
         Args:
-            prompt: O prompt para gerar a resposta.
-            model_name: Nome do modelo a ser usado.
-            elevation_model: Modelo alternativo para fallback.
-            force: Se True, força o uso do modelo especificado sem fallback.
-            **kwargs: Argumentos adicionais para a API do modelo.
+            model_name: Nome do modelo a ser usado (opcional)
+        """
+        self.model_name = model_name or get_env_var('DEFAULT_MODEL', 'gpt-4')
+        self.elevation_model = get_env_var('ELEVATION_MODEL', 'gpt-4')
+        
+        # Configurações de retry e timeout
+        self.max_retries = int(get_env_var('MAX_RETRIES', '3'))
+        self.timeout = int(get_env_var('MODEL_TIMEOUT', '120'))
+        
+        # Configuração de fallback
+        self.fallback_enabled = get_env_var('FALLBACK_ENABLED', 'true').lower() == 'true'
+        
+        # Cache de respostas
+        self.cache_enabled = get_env_var('CACHE_ENABLED', 'true').lower() == 'true'
+        self.cache_ttl = int(get_env_var('CACHE_TTL', '3600'))  # 1 hora
+        self.cache_dir = get_env_var('CACHE_DIR', 'cache')
+        self._setup_cache()
+        
+        # Inicializa clientes
+        self._setup_clients()
+        
+        logger.info(f"ModelManager inicializado com modelo {self.model_name}")
 
+    def _setup_cache(self) -> None:
+        """Configura diretório de cache"""
+        if self.cache_enabled:
+            os.makedirs(self.cache_dir, exist_ok=True)
+            
+    def _setup_clients(self) -> None:
+        """Inicializa clientes para diferentes provedores"""
+        # OpenAI
+        self.openai_client = OpenAI(
+            api_key=get_env_var('OPENAI_KEY'),
+            timeout=self.timeout
+        )
+        
+        # OpenRouter (opcional)
+        openrouter_key = get_env_var('OPENROUTER_KEY')
+        if openrouter_key:
+            self.openrouter_client = OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=openrouter_key,
+                timeout=self.timeout
+            )
+        else:
+            self.openrouter_client = None
+            
+        # Gemini (opcional)
+        gemini_key = get_env_var('GEMINI_KEY') 
+        if gemini_key:
+            genai.configure(api_key=gemini_key)
+            self.gemini_model = genai.GenerativeModel('gemini-pro')
+        else:
+            self.gemini_model = None
+            
+        # Anthropic (opcional)
+        anthropic_key = get_env_var('ANTHROPIC_KEY')
+        if anthropic_key:
+            self.anthropic_client = Anthropic(api_key=anthropic_key)
+        else:
+            self.anthropic_client = None
+            
+    def _get_cache_key(self, prompt: str, model: str) -> str:
+        """
+        Gera chave única para cache.
+        
+        Args:
+            prompt: Prompt para o modelo
+            model: Nome do modelo
+            
         Returns:
-            A resposta gerada pelo modelo.
-
-        Raises:
-            ValueError: Se o modelo não estiver disponível.
-            Exception: Se ocorrer um erro na geração.
+            String com a chave de cache
+        """
+        import hashlib
+        key = f"{prompt}:{model}"
+        return hashlib.md5(key.encode()).hexdigest()
+        
+    def _get_cached_response(self, cache_key: str) -> Optional[str]:
+        """
+        Busca resposta em cache.
+        
+        Args:
+            cache_key: Chave do cache
+            
+        Returns:
+            Resposta em cache ou None
+        """
+        if not self.cache_enabled:
+            return None
+            
+        cache_file = os.path.join(self.cache_dir, f"{cache_key}.json")
+        if not os.path.exists(cache_file):
+            return None
+            
+        # Verifica TTL
+        mtime = os.path.getmtime(cache_file)
+        if time.time() - mtime > self.cache_ttl:
+            os.remove(cache_file)
+            return None
+            
+        with open(cache_file) as f:
+            return json.load(f)
+            
+    def _save_to_cache(self, cache_key: str, response: Dict[str, Any]) -> None:
+        """
+        Salva resposta em cache.
+        
+        Args:
+            cache_key: Chave do cache
+            response: Resposta a ser cacheada
+        """
+        if not self.cache_enabled:
+            return
+            
+        cache_file = os.path.join(self.cache_dir, f"{cache_key}.json")
+        with open(cache_file, 'w') as f:
+            json.dump(response, f)
+            
+    def _get_provider(self, model: str) -> str:
+        """
+        Identifica o provedor com base no nome do modelo.
+        
+        Args:
+            model: Nome do modelo
+            
+        Returns:
+            String com o nome do provedor
+        """
+        if model.startswith(('gpt-', 'text-')):
+            return 'openai'
+        elif model.startswith('gemini-'):
+            return 'gemini'
+        elif model.startswith('claude-'):
+            return 'anthropic'
+        elif model.startswith('deepseek-'):
+            return 'openrouter'
+        else:
+            return 'openai'  # default
+            
+    def _generate_with_provider(
+        self, 
+        prompt: str,
+        model: str,
+        provider: str,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        stop: Optional[List[str]] = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        Gera resposta usando provedor específico.
+        
+        Args:
+            prompt: Prompt para o modelo
+            model: Nome do modelo
+            provider: Nome do provedor
+            temperature: Temperatura para geração
+            max_tokens: Número máximo de tokens
+            stop: Lista de strings para parar geração
+            
+        Returns:
+            Tupla com (texto gerado, metadados)
         """
         try:
-            # Verifica se o modelo está disponível
-            config = self.get_model_config(model_name)
-            if not config:
-                raise ValueError(f"Modelo {model_name} não disponível")
-
-            # Tenta usar o cache
-            cache_key = f"{model_name}:{prompt}"
-            if cached := self.cache.get(cache_key):
-                return cached
-
-            # Adiciona parâmetros do modelo aos kwargs
-            kwargs.update({
-                "model": model_name,
-                "force": force,
-            })
-
-            # Gera a resposta usando o modelo apropriado
-            response = self._generate_with_provider(config, prompt, **kwargs)
-            self.cache[cache_key] = response
-            return response
-
-        except Exception as e:
-            if force or not elevation_model:
-                raise e
-
-            # Tenta usar o modelo de elevação
-            elevation_config = self.get_model_config(elevation_model)
-            if not elevation_config:
-                raise ValueError(f"Modelo de elevação {elevation_model} não disponível")
-
-            # Adiciona parâmetros do modelo aos kwargs
-            kwargs.update({
-                "model": elevation_model,
-                "elevation_model": None,  # Evita recursão infinita
-                "force": True,  # Força o uso do modelo de elevação
-            })
-
-            return self._generate_with_provider(elevation_config, prompt, **kwargs)
-
-    def _generate_with_provider(
-        self,
-        config: ModelConfig,
-        prompt: str,
-        **kwargs: Any,
-    ) -> Union[str, Dict[str, Any]]:
-        """Gera uma resposta usando um provedor específico."""
-        try:
-            if config.provider == ModelProvider.OPENAI:
-                client = openai.Client(api_key=config.api_key)
-                messages = []
-                
-                # Se houver system_prompt nos kwargs, adiciona como mensagem do sistema
-                if "system_prompt" in kwargs:
-                    messages.append({"role": "system", "content": kwargs.pop("system_prompt")})
-                
-                # Adiciona o prompt do usuário
-                messages.append({"role": "user", "content": prompt})
-                
-                # Remove parâmetros não suportados
-                kwargs.pop("model", None)
-                kwargs.pop("elevation_model", None)
-                kwargs.pop("force", None)
-                
-                # Configura parâmetros padrão
-                if "temperature" not in kwargs:
-                    kwargs["temperature"] = config.temperature
-                if "max_tokens" not in kwargs and config.max_tokens:
-                    kwargs["max_tokens"] = config.max_tokens
-                
-                try:
-                    response = client.chat.completions.create(
-                        model=config.model_id,
-                        messages=messages,
-                        **kwargs,
-                    )
-                    return response.choices[0].message.content
-                except Exception as e:
-                    logger.error(f"Erro ao gerar resposta com {config.model_id}: {str(e)}")
-                    raise
-
-            elif config.provider == ModelProvider.OPENROUTER:
-                client = openrouter.Client(api_key=config.api_key)
-                messages = []
-                
-                # Se houver system_prompt nos kwargs, adiciona como mensagem do sistema
-                if "system_prompt" in kwargs:
-                    messages.append({"role": "system", "content": kwargs.pop("system_prompt")})
-                
-                # Adiciona o prompt do usuário
-                messages.append({"role": "user", "content": prompt})
-                
-                # Remove parâmetros não suportados
-                kwargs.pop("model", None)
-                kwargs.pop("elevation_model", None)
-                kwargs.pop("force", None)
-                
-                # Configura parâmetros padrão
-                if "temperature" not in kwargs:
-                    kwargs["temperature"] = config.temperature
-                if "max_tokens" not in kwargs and config.max_tokens:
-                    kwargs["max_tokens"] = config.max_tokens
-                
-                try:
-                    response = client.chat.completions.create(
-                        model=config.model_id,
-                        messages=messages,
-                        **kwargs,
-                    )
-                    return response.choices[0].message.content
-                except Exception as e:
-                    logger.error(f"Erro ao gerar resposta com {config.model_id}: {str(e)}")
-                    raise
-
-            elif config.provider == ModelProvider.GEMINI:
-                genai.configure(api_key=config.api_key)
-                model = genai.GenerativeModel(config.model_id)
-                
-                # Remove parâmetros não suportados
-                kwargs.pop("system_prompt", None)
-                kwargs.pop("model", None)
-                kwargs.pop("elevation_model", None)
-                kwargs.pop("force", None)
-                
-                # Configura os parâmetros do modelo
-                generation_config = {
-                    "temperature": kwargs.pop("temperature", config.temperature),
-                    "max_output_tokens": kwargs.pop("max_tokens", config.max_tokens),
+            if provider == 'openai':
+                response = self.openai_client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    stop=stop
+                )
+                return response.choices[0].message.content, {
+                    "model": model,
+                    "provider": "openai",
+                    "finish_reason": response.choices[0].finish_reason,
+                    "created": response.created,
+                    "id": response.id
                 }
                 
-                try:
-                    response = model.generate_content(
-                        prompt,
-                        generation_config=generation_config,
-                        **kwargs
-                    )
-                    return response.text
-                except Exception as e:
-                    logger.error(f"Erro ao gerar resposta com {config.model_id}: {str(e)}")
-                    raise
-
-            raise ValueError(f"Provedor {config.provider} não suportado")
-            
+            elif provider == 'gemini':
+                response = self.gemini_model.generate_content(
+                    prompt,
+                    generation_config={
+                        "temperature": temperature,
+                        "max_output_tokens": max_tokens,
+                        "stop_sequences": stop
+                    }
+                )
+                return response.text, {
+                    "model": model,
+                    "provider": "gemini",
+                    "finish_reason": "stop",
+                    "created": int(time.time()),
+                    "id": None
+                }
+                
+            elif provider == 'anthropic':
+                response = self.anthropic_client.messages.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    stop_sequences=stop
+                )
+                return response.content[0].text, {
+                    "model": model,
+                    "provider": "anthropic",
+                    "finish_reason": "stop",
+                    "created": int(time.time()),
+                    "id": response.id
+                }
+                
+            elif provider == 'openrouter':
+                response = self.openrouter_client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    stop=stop
+                )
+                return response.choices[0].message.content, {
+                    "model": model,
+                    "provider": "openrouter",
+                    "finish_reason": response.choices[0].finish_reason,
+                    "created": response.created,
+                    "id": response.id
+                }
+                
+            else:
+                raise ValueError(f"Provedor não suportado: {provider}")
+                
         except Exception as e:
-            logger.error(f"Erro ao gerar resposta com {config.provider}: {str(e)}")
+            logger.error(f"Erro ao gerar com {provider}: {str(e)}")
             raise
-
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-    def generate_response(self, prompt: str) -> Dict[str, Any]:
-        """Gera uma resposta usando o modelo configurado."""
-        if not self.model:
-            raise ValueError("Modelo não configurado")
-
-        if "gpt" in self.model:
-            return self._generate_openai_response(prompt)
-        elif "gemini" in self.model:
-            return self._generate_gemini_response(prompt)
-        elif "claude" in self.model:
-            return self._generate_anthropic_response(prompt)
-        else:
-            raise ValueError(f"Modelo não suportado: {self.model}")
-
-    def _generate_openai_response(self, prompt: str) -> Dict[str, Any]:
-        """Gera uma resposta usando o modelo OpenAI."""
-        client = openai.OpenAI(api_key=os.getenv("OPENAI_KEY"))
-        response = client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=self.temperature
-        )
-        return {
-            "content": response.choices[0].message.content,
-            "model": self.model,
-            "usage": {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens
-            }
-        }
-
-    def _generate_gemini_response(self, prompt: str) -> Dict[str, Any]:
-        """Gera uma resposta usando o modelo Gemini."""
-        genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-        model = genai.GenerativeModel(self.model)
-        response = model.generate_content(prompt)
-        return {
-            "content": response.text,
-            "model": self.model,
-            "usage": {}  # Gemini não fornece informações de uso
-        }
-
-    def _generate_anthropic_response(self, prompt: str) -> Dict[str, Any]:
-        """Gera uma resposta usando o modelo Anthropic via OpenRouter."""
-        client = openrouter.OpenRouter(api_key=os.getenv("OPENROUTER_KEY"))
-        response = client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=self.temperature
-        )
-        return {
-            "content": response.choices[0].message.content,
-            "model": self.model,
-            "usage": {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens
-            }
-        } 
+            
+    def generate(
+        self, 
+        prompt: str,
+        model: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        stop: Optional[List[str]] = None,
+        use_cache: bool = True
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        Gera resposta para um prompt.
+        
+        Args:
+            prompt: Prompt para o modelo
+            model: Nome do modelo (opcional)
+            temperature: Temperatura para geração
+            max_tokens: Número máximo de tokens
+            stop: Lista de strings para parar geração
+            use_cache: Se deve usar cache
+            
+        Returns:
+            Tupla com (texto gerado, metadados)
+        """
+        model = model or self.model_name
+        
+        # Tenta cache primeiro
+        if use_cache and self.cache_enabled:
+            cache_key = self._get_cache_key(prompt, model)
+            cached = self._get_cached_response(cache_key)
+            if cached:
+                logger.info(f"Usando resposta em cache para {model}")
+                return cached["text"], cached["metadata"]
+                
+        # Identifica provedor
+        provider = self._get_provider(model)
+        
+        # Tenta gerar resposta com retry
+        for attempt in range(self.max_retries):
+            try:
+                text, metadata = self._generate_with_provider(
+                    prompt=prompt,
+                    model=model,
+                    provider=provider,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    stop=stop
+                )
+                
+                # Salva em cache
+                if use_cache and self.cache_enabled:
+                    self._save_to_cache(cache_key, {
+                        "text": text,
+                        "metadata": metadata
+                    })
+                    
+                return text, metadata
+                
+            except Exception as e:
+                logger.warning(
+                    f"Tentativa {attempt + 1} falhou: {str(e)}"
+                )
+                if attempt == self.max_retries - 1:
+                    if self.fallback_enabled and model != self.elevation_model:
+                        logger.info(
+                            f"Tentando fallback para {self.elevation_model}"
+                        )
+                        return self.generate(
+                            prompt=prompt,
+                            model=self.elevation_model,
+                            temperature=temperature,
+                            max_tokens=max_tokens,
+                            stop=stop,
+                            use_cache=use_cache
+                        )
+                    else:
+                        raise
+                time.sleep(2 ** attempt)  # Exponential backoff 
