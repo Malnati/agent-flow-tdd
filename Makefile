@@ -136,4 +136,4 @@ logs:
 # Testes end-to-end
 test-e2e:
 	@echo "🧪 Executando testes end-to-end..."
-	pytest -v -m e2e src/tests/test_e2e.py 
+	$(PYTHON) -m pytest -v -m e2e src/tests/test_e2e.py 
