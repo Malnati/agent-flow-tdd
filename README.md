@@ -13,7 +13,7 @@ Um sistema para desenvolvimento orientado a testes usando prompts de IA.
 ## 📋 Pré-requisitos
 
 - Python 3.13+
-- Chave de API OpenAI (`OPENAI_KEY`)
+- Chave de API OpenAI (`OPENAI_API_KEY`)
 - Ambiente virtual Python (venv)
 
 ## 🛠️ Instalação
@@ -139,7 +139,7 @@ handler.run()
 
 ```bash
 # OpenAI GPT-4
-prompt-tdd feature "Criar API" --model gpt-4-turbo --api-key $OPENAI_KEY
+prompt-tdd feature "Criar API" --model gpt-4-turbo --api-key $OPENAI_API_KEY
 
 # Anthropic Claude
 prompt-tdd feature "Criar API" --model claude-3 --api-key $ANTHROPIC_KEY
@@ -188,7 +188,7 @@ Os logs são gerados automaticamente com:
 
 ## 🔒 Variáveis de Ambiente
 
-- `OPENAI_KEY`: Chave da API OpenAI (obrigatória)
+- `OPENAI_API_KEY`: Chave da API OpenAI (obrigatória)
 - `ELEVATION_MODEL`: Modelo para fallback (opcional)
 
 ## 🤝 Contribuindo

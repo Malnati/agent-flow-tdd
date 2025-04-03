@@ -69,7 +69,7 @@ def get_env_status() -> Dict[str, Dict[str, bool]]:
         Dicionário com o status de cada variável.
     """
     required_vars = {
-        "OPENAI_KEY": False,
+        "OPENAI_API_KEY": False,
         "GITHUB_TOKEN": False,
         "GITHUB_OWNER": False,
         "GITHUB_REPO": False,
@@ -138,7 +138,7 @@ def mask_sensitive_data(data: Union[str, Dict[str, Any], List[Any]]) -> Union[st
             (r'Bearer\s+[a-zA-Z0-9-_.]+', 'Bearer ***TOKEN***'),  # Bearer tokens
             (r'github_pat_[a-zA-Z0-9_]+', '***GITHUB_PAT***'),  # GitHub PATs
             (r'ghp_[a-zA-Z0-9]+', '***GITHUB_TOKEN***'),  # GitHub tokens
-            (r'sk-[a-zA-Z0-9]+', '***OPENAI_KEY***'),  # OpenAI keys
+            (r'sk-[a-zA-Z0-9]+', '***OPENAI_API_KEY***'),  # OpenAI keys
         ]
         masked = data
         for pattern, replacement in patterns:
@@ -256,7 +256,7 @@ class TokenValidator:
         """
         # Se não fornecido, tenta buscar da variável de ambiente
         if token is None:
-            token = os.environ.get("OPENAI_KEY", "")
+            token = os.environ.get("OPENAI_API_KEY", "")
             
         # Verificação específica para tokens da OpenAI (geralmente começam com "sk-")
         if token and not token.startswith("sk-"):

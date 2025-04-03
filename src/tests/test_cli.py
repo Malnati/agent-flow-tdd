@@ -65,7 +65,7 @@ def mock_get_env_status():
     """Mock da função get_env_status."""
     with patch("src.cli.get_env_status") as mock:
         mock.return_value = {
-            "required": {"OPENAI_KEY": True},
+            "required": {"OPENAI_API_KEY": True},
             "optional": {"ELEVATION_MODEL": False}
         }
         yield mock
@@ -176,7 +176,7 @@ def test_mcp_command_feature(mock_orchestrator, capsys, monkeypatch, mock_mcp_sd
     mock_handler.initialize.return_value = None
     mock_handler.run.side_effect = lambda: None
 
-    with patch.dict(os.environ, {"OPENAI_KEY": "test-key"}), \
+    with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}), \
          patch("src.mcp.MCPHandler", return_value=mock_handler):
 
         # Execução
@@ -192,7 +192,7 @@ def test_mcp_command_error(mock_orchestrator, capsys, monkeypatch, mock_mcp_sdk)
     with patch("src.mcp.MCPHandler") as mock_handler:
         mock_handler.side_effect = Exception("Erro ao inicializar MCP")
 
-        with patch.dict(os.environ, {"OPENAI_KEY": "test-key"}):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
             # Execução
             result = runner.invoke(app, ["--mode", "mcp", ""])
 
@@ -203,13 +203,13 @@ def test_mcp_command_error(mock_orchestrator, capsys, monkeypatch, mock_mcp_sdk)
 def test_mcp_command_no_api_key(mock_orchestrator, capsys, monkeypatch, mock_mcp_sdk):
     """Testa o comando MCP sem chave de API."""
     # Setup
-    with patch.dict(os.environ, {"OPENAI_KEY": ""}, clear=True):
+    with patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=True):
         # Execução
         result = runner.invoke(app, ["--mode", "mcp", ""])
 
         # Verificações
         assert result.exit_code == 1
-        assert "OPENAI_KEY não definida" in result.stdout
+        assert "OPENAI_API_KEY não definida" in result.stdout
 
 def test_feature_command_address_requirements(mock_model_manager, mock_orchestrator, mock_validate_env):
     """Testa o comando feature via terminal para requisitos de endereço."""

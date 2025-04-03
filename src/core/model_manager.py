@@ -76,7 +76,7 @@ class ModelManager:
         """Inicializa clientes para diferentes provedores"""
         # OpenAI
         self.openai_client = OpenAI(
-            api_key=get_env_var('OPENAI_KEY'),
+            api_key=get_env_var('OPENAI_API_KEY'),
             timeout=self.timeout
         )
         
