@@ -59,16 +59,25 @@ class AgentOrchestrator:
             )
             
             # Registra no banco de dados
-            self.db.log_run(
+            run_id = self.db.log_run(
                 session_id=kwargs.get("session_id", "default"),
                 input=prompt,
                 final_output=result.output,
                 last_agent="OpenAI",
-                output_type="text",
-                items=result.items,
-                guardrails=result.guardrails,
-                raw_responses=result.raw_responses
+                output_type="text"
             )
+            
+            # Registra itens gerados
+            for item in result.items:
+                self.db.log_run_item(run_id, "item", item)
+                
+            # Registra guardrails
+            for guardrail in result.guardrails:
+                self.db.log_guardrail_results(run_id, "output", guardrail)
+                
+            # Registra respostas brutas
+            for response in result.raw_responses:
+                self.db.log_raw_response(run_id, response)
             
             logger.info(f"SUCESSO - execute | Tamanho da resposta: {len(result.output)}")
             return result
