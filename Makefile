@@ -1,6 +1,6 @@
 # Makefile para o projeto prompt-tdd
 
-.PHONY: install test run clean autoflake dev
+.PHONY: install test run clean autoflake dev db-init db-clean db-backup logs
 
 # Configuração do ambiente virtual
 VENV = .venv
@@ -56,15 +56,52 @@ dev:
 # Limpeza de código com autoflake
 autoflake:
 	@echo "🧹 Limpando código com autoflake..."
-	@$(PYTHON) -m autoflake --remove-all-unused-imports --remove-unused-variables --in-place --recursive .
+	@find . -type f -name "*.py" -not -path "./.venv/*" -exec autoflake --remove-all-unused-imports --remove-unused-variables --in-place {} \;
 	@echo "✨ Limpeza de código concluída!"
 
-# Limpeza
+# Limpeza geral
 clean:
 	@echo "🧹 Limpando arquivos temporários..."
-	@rm -rf .venv *.egg-info dist build .pytest_cache .coverage htmlcov mcp*.log logs/mcp_pipe.log
-	@find . -type d -name __pycache__ -exec rm -rf {} +
+	rm -rf build/
+	rm -rf dist/
+	rm -rf *.egg-info/
+	rm -rf .pytest_cache/
+	rm -rf .coverage
+	rm -rf htmlcov/
+	find . -type d -name "__pycache__" -exec rm -rf {} +
+	find . -type f -name "*.pyc" -delete
+	find . -type f -name "*.pyo" -delete
+	find . -type f -name "*.pyd" -delete
+	find . -type f -name ".coverage" -delete
+	find . -type f -name "coverage.xml" -delete
+	find . -type d -name ".mypy_cache" -exec rm -rf {} +
 	@echo "✨ Limpeza concluída!"
+
+# Comandos de banco de dados
+db-init:
+	@echo "🗄️ Inicializando banco de dados..."
+	@mkdir -p logs
+	@$(PYTHON) -c "from src.core.db import DatabaseManager; DatabaseManager()"
+	@echo "✅ Banco de dados inicializado!"
+
+db-clean:
+	@echo "🧹 Limpando banco de dados..."
+	@rm -f logs/agent_logs.db
+	@echo "✅ Banco de dados removido!"
+
+db-backup:
+	@echo "💾 Criando backup do banco de dados..."
+	@mkdir -p backups
+	@if [ -f logs/agent_logs.db ]; then \
+		cp logs/agent_logs.db backups/agent_logs_$$(date +%Y%m%d_%H%M%S).db; \
+		echo "✅ Backup criado em backups/agent_logs_$$(date +%Y%m%d_%H%M%S).db"; \
+	else \
+		echo "❌ Banco de dados não encontrado!"; \
+	fi
+
+# Visualização de logs
+logs:
+	python src/scripts/view_logs.py $(ARGS)
 
 # Permite argumentos extras para o comando run
 %:

@@ -12,8 +12,8 @@ from cachetools import TTLCache
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from src.core.utils.env import get_env_var
-from src.core.utils.logger import get_logger
+from src.core.env import get_env_var
+from src.core.logger import get_logger
 
 logger = get_logger(__name__)
 

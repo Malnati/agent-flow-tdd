@@ -301,7 +301,7 @@ def trace(
             if logger.trace_config.tracing_disabled or disabled:
                 return func(*args, **kwargs)
 
-            parent_trace = current_trace.get()
+            current_trace.get()
             new_trace = Trace(
                 workflow_name=workflow_name,
                 group_id=group_id,

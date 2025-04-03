@@ -6,12 +6,13 @@ import json
 import logging
 import os
 import sys
-import time
+import uuid
 from typing import Optional, Dict, Any
 
 from src.app import AgentOrchestrator
 from src.core.logger import trace, agent_span, generation_span
-from src.core.utils import ModelManager
+from src.core import ModelManager
+from src.core.db import DatabaseManager
 
 from openai import OpenAI
 
@@ -152,12 +153,14 @@ class LLMProvider:
 class MCPHandler:
     """Manipulador do protocolo MCP."""
 
-    def __init__(self, llm_provider: LLMProvider, prompt_manager: PromptManager):
+    def __init__(self, llm_provider: 'LLMProvider', prompt_manager: 'PromptManager'):
         """Inicializa o manipulador MCP."""
         self.orchestrator = None
         self.model_manager = ModelManager()
         self.llm_provider = llm_provider
         self.prompt_manager = prompt_manager
+        self.db = DatabaseManager()
+        self.session_id = str(uuid.uuid4())
         logger.info("MCPHandler inicializado com sucesso")
 
     def initialize(self, api_key: Optional[str] = None):
@@ -173,7 +176,15 @@ class MCPHandler:
     @trace(workflow_name="MCP Workflow")
     @agent_span()
     def process_message(self, message: Dict[str, Any]) -> Optional[str]:
-        """Processa uma mensagem recebida."""
+        """
+        Processa uma mensagem recebida.
+        
+        Args:
+            message: Mensagem a ser processada
+            
+        Returns:
+            Resposta processada ou None em caso de erro
+        """
         try:
             content = message.get("content")
             metadata = message.get("metadata", {})
@@ -185,10 +196,28 @@ class MCPHandler:
             logger.info(f"Processando mensagem: {content}")
             logger.info(f"Metadata: {metadata}")
             
+            # Registra a execução no banco
+            run_id = self.db.log_run(
+                session_id=self.session_id,
+                input_text=content,
+                last_agent=None,  # Será atualizado após a execução
+                output_type=metadata.get("options", {}).get("format", "json")
+            )
+            
             with generation_span(name="LLM Generation"):
                 response = self.llm_provider.generate(content, metadata.get("options", {}))
             
             if response:
+                # Atualiza o registro com a resposta
+                self.db.log_raw_response(run_id, response)
+                
+                # Registra a resposta final
+                self.db.log_run_item(
+                    run_id=run_id,
+                    item_type="MessageOutput",
+                    raw_item={"content": response["content"]}
+                )
+                
                 logger.info(f"Resposta gerada: {response['content']}")
                 return response["content"]
             
@@ -198,40 +227,81 @@ class MCPHandler:
             logger.error(f"Erro ao processar mensagem: {str(e)}")
             return None
 
+    def handle_message(self, message: Message) -> Response:
+        """
+        Manipula uma mensagem MCP.
+        
+        Args:
+            message: Mensagem MCP recebida
+            
+        Returns:
+            Resposta MCP formatada
+        """
+        try:
+            # Processa a mensagem
+            result = self.process_message({
+                "content": message.content,
+                "metadata": message.metadata
+            })
+            
+            if result:
+                # Busca o último registro do banco para metadados
+                history = self.db.get_run_history(limit=1)
+                metadata = {}
+                
+                if history:
+                    last_run = history[0]
+                    metadata = {
+                        "last_agent": last_run["last_agent"],
+                        "output_type": last_run["output_type"],
+                        "session_id": last_run["session_id"],
+                        "items_count": len(last_run["items"]),
+                        "guardrails_count": len(last_run["guardrails"]),
+                        "raw_responses_count": len(last_run["raw_responses"])
+                    }
+                
+                return Response({"content": result}, metadata=metadata)
+            
+            return Response({"error": "Falha ao processar mensagem"}, metadata={"status": "error"})
+            
+        except Exception as e:
+            logger.error(f"Erro ao manipular mensagem: {str(e)}")
+            return Response({"error": str(e)}, metadata={"status": "error"})
+
     def run(self):
         """Executa o manipulador MCP."""
-        pipe_path = "logs/mcp_pipe.log"
-        logger.info(f"Iniciando leitura do arquivo: {pipe_path}")
-        
         try:
-            # Espera até que o arquivo exista
-            while not os.path.exists(pipe_path):
-                logger.info("Aguardando criação do arquivo...")
-                time.sleep(1)
+            # Lê o arquivo de pipe
+            pipe_file = "logs/mcp_pipe.log"
+            logger.info(f"Iniciando leitura do arquivo: {pipe_file}")
             
-            # Lê o conteúdo do arquivo
-            with open(pipe_path, 'r') as f:
+            with open(pipe_file, "r") as f:
                 content = f.read().strip()
-                if content:
-                    try:
-                        message = json.loads(content)
-                        response = self.process_message(message)
-                        if response:
-                            logger.info(f"Resposta gerada: {response}")
-                            print(response)
-                        else:
-                            logger.warning("Nenhuma resposta gerada")
-                    except json.JSONDecodeError as e:
-                        logger.error(f"Erro ao decodificar JSON: {str(e)}")
-                else:
-                    logger.warning("Arquivo vazio")
-                    
+                
+            if not content:
+                logger.warning("Arquivo vazio")
+                return
+                
+            # Processa o conteúdo
+            try:
+                message_data = json.loads(content)
+                message = Message(
+                    content=message_data["content"],
+                    metadata=message_data.get("metadata", {})
+                )
+            except json.JSONDecodeError:
+                message = Message(content=content, metadata={})
+            
+            # Processa a mensagem
+            self.handle_message(message)
+            
+            # Remove o arquivo após processamento
+            os.remove(pipe_file)
+            logger.info("Arquivo removido")
+            
         except Exception as e:
-            logger.error(f"Erro ao ler arquivo: {str(e)}")
-        finally:
-            if os.path.exists(pipe_path):
-                os.remove(pipe_path)
-                logger.info("Arquivo removido")
+            logger.error(f"Erro ao executar MCP: {str(e)}")
+            raise
 
 if __name__ == "__main__":
     # Executar como serviço standalone

@@ -1,9 +1,20 @@
+"""
+Módulo principal do Agent SDK.
+"""
 import time
+import uuid
 from typing import List, Dict, Any
 import json
 
-from src.core.utils import ModelManager
-from src.core.logger import trace, agent_span, generation_span
+from openai.agent import Runner, RunResult
+from openai.agent.items import (
+    MessageOutputItem, HandoffCallItem, HandoffOutputItem,
+    ToolCallItem, ToolCallOutputItem, ReasoningItem
+)
+
+from src.core import ModelManager
+from src.core.logger import trace, agent_span
+from src.core.db import DatabaseManager
 
 class Message:
     def __init__(self, content: str, source: str, timestamp: float):
@@ -111,8 +122,10 @@ class ToolVisualizationAgent:
 
 class AgentOrchestrator:
     def __init__(self, api_key: str = None):
-        self.history = ConversationHistory()
+        self.history = []
         self.model_manager = ModelManager()
+        self.db = DatabaseManager()
+        self.session_id = str(uuid.uuid4())
         
         if api_key:
             self.model_manager.configure(
@@ -120,58 +133,134 @@ class AgentOrchestrator:
                 temperature=0.7
             )
             
-        self.triage = TriageAgent(self.model_manager)
-        self.preprocessor = DeterministicPreprocessingAgent(self.model_manager)
-        self.analyst = AnalyticalAnalysisAgent(self.model_manager)
-        self.visualizer = ToolVisualizationAgent(self.model_manager)
+        self.runner = Runner()
+        self.triage = None  # Será inicializado sob demanda
+        self.preprocessor = None
+        self.analyst = None
+        self.visualizer = None
+    
+    def _log_run_result(self, result: RunResult, input_text: str) -> None:
+        """
+        Registra os resultados da execução no banco de dados.
+        
+        Args:
+            result: Resultado da execução do agente
+            input_text: Texto de entrada original
+        """
+        try:
+            # Registra a execução principal
+            run_id = self.db.log_run(
+                session_id=self.session_id,
+                input_text=input_text,
+                last_agent=result.last_agent.name if result.last_agent else None,
+                output_type=str(result.last_agent.output_type) if result.last_agent else None,
+                final_output=str(result.final_output) if result.final_output else None
+            )
+            
+            # Registra os novos itens gerados
+            for item in result.new_items:
+                item_data = {
+                    "raw_item": str(item.raw_item),
+                    "timestamp": time.time()
+                }
+                
+                if isinstance(item, MessageOutputItem):
+                    self.db.log_run_item(run_id, "MessageOutput", item_data)
+                
+                elif isinstance(item, HandoffCallItem):
+                    self.db.log_run_item(
+                        run_id, "HandoffCall", item_data,
+                        source_agent=str(item.source_agent) if item.source_agent else None,
+                        target_agent=str(item.target_agent) if item.target_agent else None
+                    )
+                
+                elif isinstance(item, HandoffOutputItem):
+                    self.db.log_run_item(
+                        run_id, "HandoffOutput", item_data,
+                        source_agent=str(item.source_agent) if item.source_agent else None,
+                        target_agent=str(item.target_agent) if item.target_agent else None
+                    )
+                
+                elif isinstance(item, ToolCallItem):
+                    self.db.log_run_item(run_id, "ToolCall", item_data)
+                
+                elif isinstance(item, ToolCallOutputItem):
+                    self.db.log_run_item(run_id, "ToolCallOutput", item_data)
+                
+                elif isinstance(item, ReasoningItem):
+                    self.db.log_run_item(run_id, "Reasoning", item_data)
+            
+            # Registra resultados dos guardrails
+            if result.input_guardrail_results:
+                self.db.log_guardrail_results(run_id, "input", result.input_guardrail_results)
+            
+            if result.output_guardrail_results:
+                self.db.log_guardrail_results(run_id, "output", result.output_guardrail_results)
+            
+            # Registra respostas brutas do LLM
+            for response in result.raw_responses:
+                self.db.log_raw_response(run_id, response.dict())
+            
+        except Exception as e:
+            logger.error(f"Erro ao registrar resultados no banco: {str(e)}")
+            raise
     
     @trace(workflow_name="Agent Workflow")
     @agent_span()
     def handle_input(self, user_input: str) -> Dict[str, Any]:
-        # Registrar entrada do usuário
-        self.history.add_message(Message(user_input, "User", time.time()))
+        """
+        Processa uma entrada do usuário através do Agent SDK.
         
-        # Loop de processamento iterativo
-        final_output = None
-        processed = None
-        analysis = None
+        Args:
+            user_input: Texto de entrada do usuário
+            
+        Returns:
+            Dicionário com o resultado do processamento
+        """
+        try:
+            # Registra entrada do usuário
+            self.history.append(Message(user_input, "User", time.time()))
+            
+            # Executa o runner com os agentes disponíveis
+            result = self.runner.run(
+                input=user_input,
+                agents=[
+                    self.triage,
+                    self.preprocessor,
+                    self.analyst,
+                    self.visualizer
+                ]
+            )
+            
+            # Registra resultados no banco
+            self._log_run_result(result, user_input)
+            
+            # Processa resultado final
+            if result.final_output:
+                if isinstance(result.final_output, str):
+                    try:
+                        return json.loads(result.final_output)
+                    except:
+                        return {"result": result.final_output}
+                return result.final_output
+            
+            return {"error": "Nenhuma saída gerada"}
+            
+        except Exception as e:
+            logger.error(f"Erro ao processar entrada: {str(e)}")
+            return {"error": str(e)}
         
-        context = self.history.get_context()
+    def get_run_history(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Retorna o histórico das últimas execuções.
         
-        # Etapa 1: Triagem
-        agents = self.triage.route(context)
-        
-        # Etapa 2: Pré-processamento
-        if "preprocessor" in agents:
-            with generation_span(name="Preprocessing"):
-                processed = self.preprocessor.process(user_input, context)
-                self.history.add_message(Message(processed, "Preprocessor", time.time()))
-        
-        # Etapa 3: Análise
-        if "analyst" in agents:
-            with generation_span(name="Analysis"):
-                analysis = self.analyst.analyze(processed or user_input, context)
-                self.history.add_message(Message(analysis, "Analyst", time.time()))
-                
-                # Visualização intermediária
-                markdown_output = self.visualizer.visualize(analysis, "markdown")
-                print(f"Análise Parcial:\n{markdown_output}")
-        
-        # Etapa 4: Visualização Final
-        if "visualizer" in agents:
-            with generation_span(name="Visualization"):
-                final_output = self.visualizer.visualize(analysis or processed or user_input, "json")
-                self.history.add_message(Message(final_output, "Visualizer", time.time()))
-                return json.loads(final_output)
-        
-        # Se não houver visualizador, retorna o último resultado disponível
-        last_output = analysis or processed or user_input
-        if isinstance(last_output, str):
-            try:
-                return json.loads(last_output)
-            except:
-                return {"result": last_output}
-        return last_output
+        Args:
+            limit: Número máximo de registros
+            
+        Returns:
+            Lista de execuções com seus detalhes
+        """
+        return self.db.get_run_history(limit)
 
 # Uso
 if __name__ == "__main__":

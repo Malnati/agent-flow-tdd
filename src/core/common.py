@@ -1,7 +1,7 @@
 # Configurações comuns para todos os ambientes
 import os
 from pathlib import Path
-from .utils.logger import get_logger, log_execution
+from .logger import get_logger, log_execution
 
 logger = get_logger(__name__)
 

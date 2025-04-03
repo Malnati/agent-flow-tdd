@@ -36,7 +36,7 @@ class MockMCPHandler:
 @pytest.fixture
 def mock_model_manager():
     """Mock do ModelManager."""
-    with patch("src.core.utils.ModelManager") as mock:
+    with patch("src.core.ModelManager") as mock:
         mock_instance = Mock()
         mock_instance.configure = Mock()
         mock_instance.get_available_models = Mock(return_value=["gpt-4", "gpt-3.5"])

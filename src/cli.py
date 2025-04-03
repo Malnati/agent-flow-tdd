@@ -10,7 +10,7 @@ from typing import Optional
 import typer
 from rich.console import Console
 
-from src.core.utils import validate_env
+from src.core import validate_env
 from src.app import AgentOrchestrator
 from src.core.logger import trace, agent_span, generation_span
 

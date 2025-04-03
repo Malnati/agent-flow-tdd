@@ -261,3 +261,218 @@ make test
 ```bash
 make clean
 ```
+
+# Agent Flow TDD
+
+Framework para desenvolvimento orientado a testes com agentes de IA.
+
+## Recursos
+
+- Desenvolvimento orientado a testes para agentes de IA
+- Integração com OpenAI Agent SDK
+- Logging estruturado em SQLite
+- Suporte a múltiplos provedores de LLM
+- Sistema de tracing e monitoramento
+- Interface MCP (Model Context Protocol)
+
+## Instalação
+
+```bash
+# Instalação básica
+pip install agent-flow-tdd
+
+# Instalação com dependências de desenvolvimento
+pip install agent-flow-tdd[dev]
+```
+
+## Uso Básico
+
+```python
+from src.app import AgentOrchestrator
+
+# Inicializa o orquestrador
+orchestrator = AgentOrchestrator(api_key="sua-chave-api")
+
+# Processa uma entrada
+result = orchestrator.handle_input("Criar sistema de login")
+print(result)
+```
+
+## Logging Estruturado
+
+O framework inclui um sistema de logging estruturado que armazena todas as interações em SQLite:
+
+### Dados Armazenados
+
+- **Execuções de Agentes**
+  - Session ID
+  - Input/Output
+  - Último agente executado
+  - Tipo de saída
+  - Timestamp
+
+- **Itens Gerados**
+  - MessageOutput
+  - HandoffCall/HandoffOutput
+  - ToolCall/ToolCallOutput
+  - ReasoningItem
+
+- **Guardrails**
+  - Resultados de input/output
+  - Mensagens de validação
+
+- **Respostas Brutas**
+  - Respostas do LLM
+  - Metadados de execução
+
+### Consulta de Logs
+
+```python
+from src.core.db import DatabaseManager
+
+# Inicializa o gerenciador
+db = DatabaseManager()
+
+# Busca histórico de execuções
+history = db.get_run_history(limit=10)
+
+# Exemplo de processamento
+for run in history:
+    print(f"Execução {run['id']}:")
+    print(f"- Input: {run['input']}")
+    print(f"- Agente: {run['last_agent']}")
+    print(f"- Items gerados: {len(run['items'])}")
+    print(f"- Guardrails: {len(run['guardrails'])}")
+    print(f"- Respostas: {len(run['raw_responses'])}")
+```
+
+### Schema SQL
+
+```sql
+-- Tabela principal de execuções
+CREATE TABLE agent_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    session_id TEXT NOT NULL,
+    input TEXT NOT NULL,
+    last_agent TEXT,
+    output_type TEXT,
+    final_output TEXT
+);
+
+-- Tabela de itens gerados
+CREATE TABLE run_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    item_type TEXT NOT NULL,
+    raw_item TEXT NOT NULL,
+    source_agent TEXT,
+    target_agent TEXT,
+    FOREIGN KEY(run_id) REFERENCES agent_runs(id)
+);
+
+-- Tabela de resultados de guardrails
+CREATE TABLE guardrail_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    guardrail_type TEXT CHECK(guardrail_type IN ('input', 'output')),
+    results TEXT NOT NULL,
+    FOREIGN KEY(run_id) REFERENCES agent_runs(id)
+);
+
+-- Tabela de respostas brutas do LLM
+CREATE TABLE raw_responses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    response TEXT NOT NULL,
+    FOREIGN KEY(run_id) REFERENCES agent_runs(id)
+);
+```
+
+## Desenvolvimento
+
+### Configuração do Ambiente
+
+```bash
+# Clone o repositório
+git clone https://github.com/seu-usuario/agent-flow-tdd.git
+cd agent-flow-tdd
+
+# Crie um ambiente virtual
+python -m venv .venv
+source .venv/bin/activate  # Linux/Mac
+.venv\Scripts\activate     # Windows
+
+# Instale em modo desenvolvimento
+pip install -e ".[dev]"
+```
+
+### Executando Testes
+
+```bash
+# Executa todos os testes
+make test
+
+# Executa testes com cobertura
+pytest --cov=src tests/
+
+# Executa testes específicos
+pytest tests/test_db.py -v
+```
+
+### Linting e Formatação
+
+```bash
+# Formata o código
+make format
+
+# Executa linters
+make lint
+
+# Limpa imports não utilizados
+make autoflake
+```
+
+## Contribuindo
+
+1. Fork o projeto
+2. Crie uma branch para sua feature (`git checkout -b feature/nova-feature`)
+3. Commit suas mudanças (`git commit -am 'Adiciona nova feature'`)
+4. Push para a branch (`git push origin feature/nova-feature`)
+5. Crie um Pull Request
+
+## Licença
+
+Este projeto está licenciado sob a licença MIT - veja o arquivo [LICENSE](LICENSE) para detalhes.
+
+## Visualização de Logs
+
+O framework inclui um visualizador de logs que permite consultar o histórico de execuções dos agentes. Para usar:
+
+```bash
+# Lista as últimas 10 execuções
+make logs
+
+# Lista as últimas N execuções
+make logs ARGS="--limit 20"
+
+# Filtra por session ID
+make logs ARGS="--session abc123"
+
+# Filtra por agente
+make logs ARGS="--agent CodeReviewer"
+
+# Mostra detalhes de uma execução específica
+make logs ARGS="--id 42"
+```
+
+O visualizador mostra:
+- Lista resumida de execuções com timestamp, session, agente e contadores
+- Detalhes completos de uma execução específica incluindo:
+  - Input/output
+  - Itens gerados entre agentes
+  - Resultados de guardrails
+  - Respostas brutas do LLM
