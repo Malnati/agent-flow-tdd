@@ -64,7 +64,7 @@ class AgentOrchestrator:
                 input=prompt,
                 final_output=result.output,
                 last_agent="OpenAI",
-                output_type="text"
+                output_type=kwargs.get("format", "json")  # Usa o formato passado nos kwargs
             )
             
             # Registra itens gerados

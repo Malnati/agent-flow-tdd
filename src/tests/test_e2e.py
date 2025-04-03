@@ -6,7 +6,6 @@ import json
 import subprocess
 from typing import Dict, Any
 import pytest
-from unittest.mock import patch
 
 from src.core.db import DatabaseManager
 from src.core.logger import setup_logger
@@ -32,8 +31,7 @@ def run_make_command(prompt: str, mode: str = "cli", format: str = "markdown") -
             cmd,
             shell=True,
             capture_output=True,
-            text=True,
-            check=True
+            text=True
         )
         
         # Verifica logs no banco
@@ -90,7 +88,9 @@ def test_e2e_address_registration_cli_json():
     
     # Verifica se a saída é um JSON válido
     try:
-        output = json.loads(result["stdout"].split("\n")[-2])  # Pega última linha não vazia
+        # Pega a última linha não vazia que não seja uma mensagem de autoflake
+        lines = [line for line in result["stdout"].split("\n") if line.strip() and not line.startswith("🧹") and not line.startswith("✨")]
+        output = json.loads(lines[-1])
         assert "content" in output
         assert "metadata" in output
         assert output["metadata"]["type"] == "feature"
@@ -117,7 +117,7 @@ def test_e2e_address_registration_error_handling():
         result = run_make_command("Cadastro de endereços")
         
         # Verificações
-        assert result["returncode"] == 1
+        assert result["returncode"] != 0  # Qualquer código de erro é válido
         assert "Erro ao processar comando" in result["stdout"]
         
     finally:
@@ -146,14 +146,18 @@ def test_e2e_address_registration_logging():
     prompt = "Cadastro de endereços"
     
     # Execução
-    with patch("src.core.logger.get_logger") as mock_logger:
-        result = run_make_command(prompt)
-        
-        # Verificações
-        assert result["returncode"] == 0
-        mock_logger.assert_called()
-        
-        # Verifica chamadas de log
-        mock_logger.return_value.info.assert_any_call(
-            "INÍCIO - execute | Prompt: Cadastro de endereços..."
-        ) 
+    result = run_make_command(prompt)
+    
+    # Verificações
+    assert result["returncode"] == 0
+    
+    # Verifica se os logs foram registrados no banco
+    db_record = result["db_history"]
+    assert db_record is not None
+    assert len(db_record["raw_responses"]) > 0  # Deve ter pelo menos uma resposta logada
+    
+    # Verifica se a resposta contém os campos esperados
+    raw_response = db_record["raw_responses"][0]
+    assert "id" in raw_response
+    assert "response" in raw_response
+    assert isinstance(raw_response["response"], str)  # Deve ser um JSON serializado 

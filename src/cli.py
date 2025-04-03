@@ -45,7 +45,8 @@ def main(
             prompt=prompt_tdd,
             model=model,
             temperature=temperature,
-            session_id=str(time.time())
+            session_id=str(time.time()),
+            format=format  # Passa o formato para o orchestrator
         )
         
         # Formata e exibe resultado
@@ -63,10 +64,13 @@ def main(
                     }
                 }
             }
-            print(json.dumps(output))
+            # Garante que a saída seja um JSON válido em uma única linha
+            print(json.dumps(output, ensure_ascii=False))
         
     except Exception as e:
-        logger.error(f"FALHA - main | Erro: {str(e)}", exc_info=True)
+        error_msg = f"Erro ao processar comando: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        console.print(error_msg, style="red")
         sys.exit(1)
 
 if __name__ == "__main__":
