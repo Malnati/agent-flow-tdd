@@ -1,6 +1,6 @@
 # Makefile para o projeto prompt-tdd
 
-.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs
+.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs test-e2e
 
 # Configuração do ambiente virtual
 VENV = .venv
@@ -130,4 +130,9 @@ logs:
 
 # Permite argumentos extras para o comando run
 %:
-	@: 
+	@:
+
+# Testes end-to-end
+test-e2e:
+	@echo "🧪 Executando testes end-to-end..."
+	pytest -v -m e2e src/tests/test_e2e.py 
