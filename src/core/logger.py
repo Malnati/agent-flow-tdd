@@ -195,8 +195,8 @@ current_span: ContextVar[Optional['Span']] = ContextVar('current_span', default=
 @dataclass
 class Span:
     """Representa uma operação temporal dentro de um trace"""
-    span_id: str = field(default_factory=lambda: f"span_{uuid.uuid4().hex}")
     trace_id: str
+    span_id: str = field(default_factory=lambda: f"span_{uuid.uuid4().hex}")
     parent_id: Optional[str] = None
     span_type: str = "custom"
     name: Optional[str] = None

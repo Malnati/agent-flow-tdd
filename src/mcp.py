@@ -11,7 +11,7 @@ from typing import Optional, Dict, Any
 
 from src.app import AgentOrchestrator
 from src.core.logger import trace, agent_span, generation_span
-from src.core import ModelManager
+from src.core.model_manager import ModelManager
 from src.core.db import DatabaseManager
 
 from openai import OpenAI
