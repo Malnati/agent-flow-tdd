@@ -2,7 +2,34 @@
 """
 Script de instalação do pacote.
 """
+import subprocess
+import sys
 from setuptools import find_packages, setup
+from setuptools.command.develop import develop
+from setuptools.command.install import install
+
+class PreInstallCommand:
+    """Classe base para executar comandos antes da instalação."""
+    def run_pre_install(self):
+        """Executa a limpeza de instalações anteriores."""
+        print("🧹 Removendo instalações anteriores do pacote...")
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "uninstall", "-y", "agent-flow-tdd"])
+            print("✅ Pacote removido com sucesso!")
+        except subprocess.CalledProcessError:
+            print("ℹ️  Nenhuma instalação anterior encontrada.")
+
+class CustomInstallCommand(install, PreInstallCommand):
+    """Comando customizado para instalação normal."""
+    def run(self):
+        self.run_pre_install()
+        install.run(self)
+
+class CustomDevelopCommand(develop, PreInstallCommand):
+    """Comando customizado para instalação em modo desenvolvimento."""
+    def run(self):
+        self.run_pre_install()
+        develop.run(self)
 
 # Dependências principais
 install_requires = [
@@ -50,6 +77,10 @@ setup(
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     url="https://github.com/seu-usuario/agent-flow-tdd",
+    cmdclass={
+        'install': CustomInstallCommand,
+        'develop': CustomDevelopCommand,
+    },
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
