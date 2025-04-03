@@ -7,17 +7,30 @@ import sys
 from setuptools import find_packages, setup
 from setuptools.command.develop import develop
 from setuptools.command.install import install
+import pkg_resources
 
 class PreInstallCommand:
     """Classe base para executar comandos antes da instalação."""
+    def check_if_installed(self):
+        """Verifica se o pacote já está instalado."""
+        try:
+            pkg_resources.get_distribution('agent-flow-tdd')
+            return True
+        except pkg_resources.DistributionNotFound:
+            return False
+
     def run_pre_install(self):
         """Executa a limpeza de instalações anteriores."""
-        print("🧹 Removendo instalações anteriores do pacote...")
+        if not self.check_if_installed():
+            print("ℹ️  Nenhuma instalação anterior encontrada. Prosseguindo com instalação...")
+            return
+
+        print("🧹 Removendo instalação anterior do pacote...")
         try:
             subprocess.check_call([sys.executable, "-m", "pip", "uninstall", "-y", "agent-flow-tdd"])
             print("✅ Pacote removido com sucesso!")
-        except subprocess.CalledProcessError:
-            print("ℹ️  Nenhuma instalação anterior encontrada.")
+        except subprocess.CalledProcessError as e:
+            print(f"⚠️  Erro ao remover pacote: {e}")
 
 class CustomInstallCommand(install, PreInstallCommand):
     """Comando customizado para instalação normal."""
