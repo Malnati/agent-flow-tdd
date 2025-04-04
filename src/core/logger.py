@@ -4,6 +4,7 @@ import logging
 import logging.handlers
 import uuid
 import time
+import re
 from contextvars import ContextVar
 from pathlib import Path
 from functools import wraps
@@ -12,49 +13,47 @@ from dataclasses import dataclass, field
 import json
 from datetime import datetime
 import functools
+import yaml
 
 # Diretório base do projeto
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-LOG_DIR = os.path.join(BASE_DIR, 'logs')
 
-# Garantir que o diretório de logs existe
+def load_config() -> Dict[str, Any]:
+    """
+    Carrega as configurações do logger do arquivo YAML.
+    
+    Returns:
+        Dict com as configurações
+    """
+    config_path = os.path.join(BASE_DIR, 'src', 'configs', 'logger.yaml')
+    with open(config_path, 'r') as f:
+        return yaml.safe_load(f)
+
+# Carrega configurações
+CONFIG = load_config()
+
+# Configura diretório de logs
+LOG_DIR = os.path.join(BASE_DIR, CONFIG['directories']['logs'])
 os.makedirs(LOG_DIR, exist_ok=True)
 
 # Configuração de níveis de log
-LOG_LEVEL_MAP = {
-    'DEBUG': logging.DEBUG,
-    'INFO': logging.INFO,
-    'WARNING': logging.WARNING,
-    'ERROR': logging.ERROR,
-    'CRITICAL': logging.CRITICAL
-}
-
-# Nível de log padrão - pode ser sobrescrito via variável de ambiente
-DEFAULT_LOG_LEVEL = 'INFO'
+LOG_LEVEL_MAP = CONFIG['log_levels']['map']
+DEFAULT_LOG_LEVEL = CONFIG['log_levels']['default']
 LOG_LEVEL = os.environ.get('LOG_LEVEL', DEFAULT_LOG_LEVEL).upper()
-NUMERIC_LOG_LEVEL = LOG_LEVEL_MAP.get(LOG_LEVEL, logging.INFO)
+NUMERIC_LOG_LEVEL = LOG_LEVEL_MAP.get(LOG_LEVEL, LOG_LEVEL_MAP['INFO'])
 
 # Lista de palavras-chave para identificar dados sensíveis
-SENSITIVE_KEYWORDS = [
-    'pass', 'senha', 'password', 
-    'token', 'access_token', 'refresh_token', 'jwt', 
-    'secret', 'api_key', 'apikey', 'key', 
-    'auth', 'credential', 'oauth', 
-    'private', 'signature'
-]
+SENSITIVE_KEYWORDS = CONFIG['security']['sensitive_keywords']
 
 # Padrões de tokens a serem mascarados
-TOKEN_PATTERNS = [
-    r'sk-[a-zA-Z0-9]{20,}',
-    r'sk-proj-[a-zA-Z0-9_-]{20,}',
-    r'gh[pous]_[a-zA-Z0-9]{20,}',
-    r'github_pat_[a-zA-Z0-9]{20,}',
-    r'eyJ[a-zA-Z0-9_-]{5,}\.eyJ[a-zA-Z0-9_-]{5,}\.[a-zA-Z0-9_-]{5,}',
-    r'[a-zA-Z0-9_-]{30,}'
-]
+TOKEN_PATTERNS = CONFIG['security']['token_patterns']
 
 class SecureLogFilter(logging.Filter):
     """Filtro para mascarar dados sensíveis nos registros de log"""
+    
+    def __init__(self):
+        super().__init__()
+        self.mask_config = CONFIG['security']['masking']
     
     def filter(self, record: logging.LogRecord) -> bool:
         """Processa e mascara dados sensíveis no registro de log"""
@@ -65,8 +64,9 @@ class SecureLogFilter(logging.Filter):
             record.args = tuple(self.mask_sensitive_data(arg) for arg in record.args)
         return True
 
-    def mask_sensitive_data(self, data: Any, mask_str: str = '***') -> Any:
+    def mask_sensitive_data(self, data: Any, mask_str: Optional[str] = None) -> Any:
         """Mascara dados sensíveis em strings e estruturas de dados"""
+        mask_str = mask_str or self.mask_config['default_mask']
         if isinstance(data, dict):
             return {k: self.mask_value(k, v, mask_str) for k, v in data.items()}
         elif isinstance(data, list):
@@ -83,7 +83,7 @@ class SecureLogFilter(logging.Filter):
 
     def mask_string(self, text: str, mask_str: str) -> str:
         """Mascara padrões sensíveis em strings"""
-        if len(text) > 20:
+        if len(text) > self.mask_config['min_length_for_masking']:
             for pattern in TOKEN_PATTERNS:
                 if re.search(pattern, text):
                     return self.mask_partially(text, mask_str)
@@ -93,10 +93,10 @@ class SecureLogFilter(logging.Filter):
 
     def mask_partially(self, text: str, mask_str: str) -> str:
         """Mascara parcialmente mantendo parte do conteúdo"""
-        if len(text) <= 10:
+        if len(text) <= self.mask_config['min_length_for_partial']:
             return mask_str
-        prefix = text[:4]
-        suffix = text[-4:] if len(text) > 8 else ''
+        prefix = text[:self.mask_config['prefix_length']]
+        suffix = text[-self.mask_config['suffix_length']:] if len(text) > (self.mask_config['prefix_length'] + self.mask_config['suffix_length']) else ''
         return f"{prefix}{mask_str}{suffix}"
 
 def setup_logger(name: str, level: Optional[str] = None) -> logging.Logger:
@@ -114,7 +114,7 @@ def setup_logger(name: str, level: Optional[str] = None) -> logging.Logger:
     logger = logging.getLogger(name)
     
     # Define nível
-    log_level = level or os.getenv("LOG_LEVEL", "INFO")
+    log_level = level or os.getenv("LOG_LEVEL", CONFIG['log_levels']['default'])
     logger.setLevel(getattr(logging, log_level))
     
     # Remove handlers existentes
@@ -126,10 +126,12 @@ def setup_logger(name: str, level: Optional[str] = None) -> logging.Logger:
     console_handler.setLevel(logging.DEBUG)
     
     # Define formato
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    formatter = logging.Formatter(CONFIG['format']['default'])
     console_handler.setFormatter(formatter)
+    
+    # Adiciona filtro de segurança
+    secure_filter = SecureLogFilter()
+    console_handler.addFilter(secure_filter)
     
     # Adiciona handler
     logger.addHandler(console_handler)
@@ -228,9 +230,9 @@ current_span: ContextVar[Optional['Span']] = ContextVar('current_span', default=
 class Span:
     """Representa uma operação temporal dentro de um trace"""
     trace_id: str
-    span_id: str = field(default_factory=lambda: f"span_{uuid.uuid4().hex}")
+    span_id: str = field(default_factory=lambda: f"{CONFIG['trace']['prefixes']['span']}{uuid.uuid4().hex}")
     parent_id: Optional[str] = None
-    span_type: str = "custom"
+    span_type: str = CONFIG['trace']['default_span_type']
     name: Optional[str] = None
     start_time: float = field(default_factory=time.time)
     end_time: Optional[float] = None
@@ -240,8 +242,8 @@ class Span:
 @dataclass
 class Trace:
     """Representa um fluxo completo de execução"""
-    trace_id: str = field(default_factory=lambda: f"trace_{uuid.uuid4().hex}")
-    workflow_name: str = "Agent Workflow"
+    trace_id: str = field(default_factory=lambda: f"{CONFIG['trace']['prefixes']['trace']}{uuid.uuid4().hex}")
+    workflow_name: str = CONFIG['trace']['default_workflow_name']
     group_id: Optional[str] = None
     start_time: float = field(default_factory=time.time)
     end_time: Optional[float] = None
@@ -253,8 +255,8 @@ class Trace:
 @dataclass
 class TraceConfig:
     """Configuração para controle do tracing"""
-    tracing_disabled: bool = False
-    trace_include_sensitive_data: bool = False
+    tracing_disabled: bool = CONFIG['trace']['tracing_disabled']
+    trace_include_sensitive_data: bool = CONFIG['trace']['trace_include_sensitive_data']
     trace_processors: List['TraceProcessor'] = field(default_factory=list)
 
 class TraceProcessor:
@@ -263,17 +265,13 @@ class TraceProcessor:
         raise NotImplementedError
 
 class FileTraceProcessor(TraceProcessor):
-    """Armazena traces em arquivo JSON"""
-    def __init__(self, file_path: str = "traces.json"):
-        self.file_path = Path(LOG_DIR) / file_path
-        self.file_path.parent.mkdir(parents=True, exist_ok=True)
-
-    def process_trace(self, trace: Trace):
-        with open(self.file_path, "a") as f:
-            f.write(json.dumps(trace.__dict__, default=str) + "\n")
+    """Processador que salva traces em arquivo"""
+    
+    def __init__(self, file_path: Optional[str] = None):
+        self.file_path = file_path or CONFIG['trace']['file_processor']['default_file']
 
 def trace(
-    workflow_name: str = "Agent Workflow",
+    workflow_name: str = CONFIG['trace']['default_workflow_name'],
     group_id: Optional[str] = None,
     disabled: Optional[bool] = None,
     metadata: Optional[Dict] = None
@@ -315,7 +313,7 @@ def trace(
     return decorator
 
 def span(
-    span_type: str = "custom",
+    span_type: str = CONFIG['trace']['default_span_type'],
     name: Optional[str] = None,
     capture_args: bool = False
 ):
