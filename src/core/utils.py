@@ -61,59 +61,82 @@ def get_env_var(name: str, default: Optional[str] = None, args_value: Optional[s
     return os.environ.get(name, default)
 
 
-def get_env_status() -> Dict[str, Dict[str, bool]]:
+def get_env_status(context: str = "cli") -> Dict[str, Dict[str, bool]]:
     """
     Verifica o status das variáveis de ambiente necessárias.
+
+    Args:
+        context: Contexto de execução ("cli", "github", "all")
 
     Returns:
         Dicionário com o status de cada variável.
     """
+    # Variáveis obrigatórias por contexto
     required_vars = {
-        "OPENAI_API_KEY": False,
-        "GITHUB_TOKEN": False,
-        "GITHUB_OWNER": False,
-        "GITHUB_REPO": False,
+        "cli": {
+            "OPENAI_API_KEY": False
+        },
+        "github": {
+            "GITHUB_TOKEN": False,
+            "GITHUB_OWNER": False,
+            "GITHUB_REPO": False
+        }
     }
 
+    # Variáveis opcionais por contexto
     optional_vars = {
-        "OPENROUTER_KEY": False,
-        "DEEPSEEK_KEY": False,
-        "GEMINI_KEY": False,
-        "DEFAULT_MODEL": False,
-        "ELEVATION_MODEL": False,
-        "FALLBACK_ENABLED": False,
-        "MODEL_TIMEOUT": False,
-        "MAX_RETRIES": False,
-        "CACHE_ENABLED": False,
-        "CACHE_TTL": False,
-        "CACHE_DIR": False,
-        "LOG_LEVEL": False,
-        "LOG_FILE": False,
+        "cli": {
+            "OPENROUTER_KEY": False,
+            "DEEPSEEK_KEY": False,
+            "GEMINI_KEY": False,
+            "DEFAULT_MODEL": False,
+            "ELEVATION_MODEL": False,
+            "FALLBACK_ENABLED": False,
+            "MODEL_TIMEOUT": False,
+            "MAX_RETRIES": False,
+            "CACHE_ENABLED": False,
+            "CACHE_TTL": False,
+            "CACHE_DIR": False,
+            "LOG_LEVEL": False,
+            "LOG_FILE": False
+        },
+        "github": {}
     }
+
+    # Seleciona as variáveis baseado no contexto
+    if context == "all":
+        selected_required = {k: v for d in required_vars.values() for k, v in d.items()}
+        selected_optional = {k: v for d in optional_vars.values() for k, v in d.items()}
+    else:
+        selected_required = required_vars.get(context, {})
+        selected_optional = optional_vars.get(context, {})
 
     # Verifica variáveis obrigatórias
-    for var in required_vars:
-        required_vars[var] = bool(get_env_var(var))
+    for var in selected_required:
+        selected_required[var] = bool(get_env_var(var))
 
     # Verifica variáveis opcionais
-    for var in optional_vars:
-        optional_vars[var] = bool(get_env_var(var))
+    for var in selected_optional:
+        selected_optional[var] = bool(get_env_var(var))
 
     return {
-        "required": required_vars,
-        "optional": optional_vars,
-        "all_required_set": all(required_vars.values()),
+        "required": selected_required,
+        "optional": selected_optional,
+        "all_required_set": all(selected_required.values()),
     }
 
 
-def validate_env() -> None:
+def validate_env(context: str = "cli") -> None:
     """
     Valida se todas as variáveis de ambiente obrigatórias estão definidas.
+
+    Args:
+        context: Contexto de execução ("cli", "github", "all")
 
     Raises:
         ValueError: Se alguma variável obrigatória não estiver definida.
     """
-    status = get_env_status()
+    status = get_env_status(context)
     if not status["all_required_set"]:
         missing = [var for var, set_ in status["required"].items() if not set_]
         raise ValueError(

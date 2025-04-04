@@ -1,9 +1,11 @@
 """
-CLI do Agent Flow TDD.
+CLI para o sistema.
+Módulo principal que define os comandos disponíveis na interface de linha de comando.
 """
 import json
 import sys
 import time
+from typing import Dict
 
 import typer
 from rich.console import Console
@@ -11,36 +13,37 @@ from rich.markdown import Markdown
 
 from src.app import AgentOrchestrator
 from src.core.model_manager import ModelManager
-from src.core.logger import setup_logger
-from src.core.utils import get_env_var, get_env_status as get_utils_env_status
+from src.core.logger import get_logger, log_execution
+from src.core.utils import get_env_var, get_env_status as get_utils_env_status, validate_env as validate_utils_env
+
+logger = get_logger(__name__)
 
 app = typer.Typer()
 output_console = Console()  # Console para saída normal
-logger = setup_logger(__name__)
 
+def get_env_status() -> Dict[str, Dict[str, bool]]:
+    """
+    Obtém o status das variáveis de ambiente.
+
+    Returns:
+        Dict com o status das variáveis.
+    """
+    return get_utils_env_status("cli")
+
+@log_execution
 def validate_env() -> None:
     """
-    Valida variáveis de ambiente necessárias.
-    
-    Raises:
-        typer.Exit: Se alguma variável obrigatória não estiver definida
-    """
-    status = get_utils_env_status()
-    if not status["all_required_set"]:
-        missing = [var for var, set_ in status["required"].items() if not set_]
-        error_msg = f"Variáveis de ambiente obrigatórias não definidas: {', '.join(missing)}"
-        logger.error(error_msg)
-        print(error_msg, file=sys.stderr)
-        raise typer.Exit(code=1)
+    Valida se todas as variáveis de ambiente obrigatórias estão definidas.
 
-def get_env_status() -> dict:
+    Raises:
+        ValueError: Se alguma variável obrigatória não estiver definida.
     """
-    Retorna status das variáveis de ambiente.
-    
-    Returns:
-        Dict com status das variáveis obrigatórias e opcionais
-    """
-    return get_utils_env_status()
+    try:
+        validate_utils_env("cli")
+    except ValueError as e:
+        logger.error(str(e))
+        print(str(e), file=sys.stderr)
+        raise typer.Exit(code=1)
 
 def get_orchestrator() -> AgentOrchestrator:
     """
