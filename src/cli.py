@@ -12,7 +12,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 
 from src.app import AgentOrchestrator
-from src.core.model_manager import ModelManager
+from src.core.models import ModelManager
 from src.core.logger import get_logger, log_execution
 from src.core.kernel import get_env_var, get_env_status as get_kernel_env_status, validate_env as validate_kernel_env
 
@@ -64,8 +64,8 @@ def status():
         env_status = get_env_status()
         
         # Obtém modelos disponíveis
-        model_manager = ModelManager()
-        available_models = model_manager.get_available_models()
+        models = ModelManager()
+        available_models = models.get_available_models()
         
         # Formata saída
         status = {

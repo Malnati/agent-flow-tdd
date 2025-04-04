@@ -24,7 +24,7 @@ class AgentOrchestrator:
 
     def __init__(self):
         """Inicializa o orquestrador."""
-        self.model_manager = ModelManager()
+        self.models = ModelManager()
         self.db = DatabaseManager()
         logger.info("AgentOrchestrator inicializado")
 
@@ -43,13 +43,13 @@ class AgentOrchestrator:
             logger.info(f"INÍCIO - execute | Prompt: {prompt[:100]}...")
             
             # Configura o modelo
-            self.model_manager.configure(
+            self.models.configure(
                 model=kwargs.get("model", "gpt-3.5-turbo"),
                 temperature=kwargs.get("temperature", 0.7)
             )
             
             # Gera resposta
-            text, metadata = self.model_manager.generate(prompt)
+            text, metadata = self.models.generate(prompt)
             
             # Processa o resultado
             result = AgentResult(

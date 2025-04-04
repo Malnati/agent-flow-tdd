@@ -11,7 +11,7 @@ from typing import Optional, Dict, Any
 
 from src.app import AgentOrchestrator
 from src.core.logger import trace, agent_span, generation_span
-from src.core.model_manager import ModelManager
+from src.core.models import ModelManager
 from src.core.db import DatabaseManager
 
 from openai import OpenAI
@@ -156,7 +156,7 @@ class MCPHandler:
     def __init__(self, llm_provider: 'LLMProvider', prompt_manager: 'PromptManager'):
         """Inicializa o manipulador MCP."""
         self.orchestrator = None
-        self.model_manager = ModelManager()
+        self.models = ModelManager()
         self.llm_provider = llm_provider
         self.prompt_manager = prompt_manager
         self.db = DatabaseManager()
@@ -167,7 +167,7 @@ class MCPHandler:
         """Inicializa o orquestrador com a chave da API."""
         logger.info("Inicializando MCPHandler...")
         self.orchestrator = AgentOrchestrator(api_key=api_key)
-        self.model_manager.configure(
+        self.models.configure(
             model="gpt-3.5-turbo",
             temperature=0.7
         )
