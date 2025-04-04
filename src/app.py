@@ -49,16 +49,16 @@ class AgentOrchestrator:
             )
             
             # Gera resposta
-            response = self.model_manager.generate(prompt)
+            text, metadata = self.model_manager.generate(prompt)
             
             # Processa o resultado
             result = AgentResult(
-                output=response.choices[0].message.content,
+                output=text,
                 items=[],  # Implementar geração de itens
                 guardrails=[],  # Implementar verificação de guardrails
                 raw_responses=[{
-                    "id": response.id,
-                    "response": response.model_dump()
+                    "id": metadata.get("id"),
+                    "response": metadata
                 }]
             )
             

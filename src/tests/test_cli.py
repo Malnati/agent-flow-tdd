@@ -9,6 +9,7 @@ import pytest
 from typer.testing import CliRunner
 
 from src.cli import app
+from src.app import AgentResult
 
 # Setup
 runner = CliRunner()
@@ -273,3 +274,39 @@ def test_feature_command_address_requirements(mock_model_manager, mock_orchestra
         mock_validate_env.assert_called_once()
         captured = capsys.readouterr()
         assert "🛠️ Executando CLI em modo desenvolvimento..." in captured.out 
+
+def test_feature_command_with_cache(mock_model_manager, mock_orchestrator, mock_validate_env, capsys):
+    """Testa o comando feature com resposta em cache."""
+    # Setup
+    cached_response = {
+        "text": "# Feature: Login\n\n## Testes\n- Test 1",
+        "metadata": {
+            "model": "gpt-3.5-turbo",
+            "provider": "openai",
+            "finish_reason": "stop",
+            "created": 1234567890,
+            "id": "test-id"
+        }
+    }
+
+    mock_orchestrator.execute.return_value = AgentResult(
+        output=cached_response["text"],
+        items=[],
+        guardrails=[],
+        raw_responses=[{
+            "id": cached_response["metadata"]["id"],
+            "response": cached_response["metadata"]
+        }]
+    )
+
+    with patch("src.cli.get_orchestrator", return_value=mock_orchestrator):
+        # Execução
+        with pytest.raises(SystemExit) as exc_info:
+            app(["feature", "Criar login", "--format", "markdown"])
+            
+        # Verificações
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        assert "🛠️ Executando CLI em modo desenvolvimento..." in captured.out
+        assert "Feature: Login" in captured.out
+        assert "Test 1" in captured.out 
