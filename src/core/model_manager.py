@@ -65,7 +65,27 @@ class ModelManager:
         # Inicializa clientes
         self._setup_clients()
         
+        # Configurações padrão
+        self.temperature = 0.7
+        self.max_tokens = None
+        
         logger.info(f"ModelManager inicializado com modelo {self.model_name}")
+
+    def configure(self, model: Optional[str] = None, temperature: float = 0.7, max_tokens: Optional[int] = None) -> None:
+        """
+        Configura parâmetros do modelo.
+        
+        Args:
+            model: Nome do modelo a ser usado
+            temperature: Temperatura para geração (0.0 a 1.0)
+            max_tokens: Número máximo de tokens na resposta
+        """
+        if model:
+            self.model_name = model
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        
+        logger.info(f"ModelManager configurado: model={self.model_name}, temperature={self.temperature}, max_tokens={self.max_tokens}")
 
     def _setup_cache(self) -> None:
         """Configura diretório de cache"""

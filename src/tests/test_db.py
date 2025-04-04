@@ -2,6 +2,7 @@
 Testes para o módulo de banco de dados.
 """
 import json
+import sqlite3
 import pytest
 from unittest.mock import patch
 
@@ -31,7 +32,7 @@ def test_log_run(db_manager):
     """Testa o registro de uma execução."""
     run_id = db_manager.log_run(
         session_id="test-session",
-        input_text="test input",
+        input="test input",
         last_agent="TestAgent",
         output_type="json",
         final_output='{"result": "test"}'
@@ -113,8 +114,20 @@ def test_log_raw_response(db_manager):
 def test_get_run_history(db_manager):
     """Testa a recuperação do histórico de execuções."""
     # Cria algumas execuções
-    run_id1 = db_manager.log_run("session1", "input1", "Agent1", "json", '{"result": 1}')
-    run_id2 = db_manager.log_run("session2", "input2", "Agent2", "json", '{"result": 2}')
+    run_id1 = db_manager.log_run(
+        session_id="session1",
+        input="input1",
+        last_agent="Agent1",
+        output_type="json",
+        final_output='{"result": 1}'
+    )
+    run_id2 = db_manager.log_run(
+        session_id="session2",
+        input="input2",
+        last_agent="Agent2",
+        output_type="json",
+        final_output='{"result": 2}'
+    )
     
     # Adiciona itens, guardrails e respostas
     db_manager.log_run_item(run_id1, "MessageOutput", {"content": "msg1"})

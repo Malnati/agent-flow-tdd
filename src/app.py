@@ -1,15 +1,15 @@
 """
-Módulo principal da aplicação.
+Orquestrador de agentes do sistema.
 """
 from typing import Any, Dict, List
-
-from openai import OpenAI
 from pydantic import BaseModel
 
+from src.core import ModelManager
 from src.core.db import DatabaseManager
-from src.core.logger import setup_logger
+from src.core.logger import get_logger
 
-logger = setup_logger(__name__)
+logger = get_logger(__name__)
+
 
 class AgentResult(BaseModel):
     """Resultado de uma execução do agente."""
@@ -18,34 +18,38 @@ class AgentResult(BaseModel):
     guardrails: List[Dict[str, Any]] = []
     raw_responses: List[Dict[str, Any]] = []
 
+
 class AgentOrchestrator:
-    """Orquestrador de agentes."""
-    
+    """Orquestrador de agentes do sistema."""
+
     def __init__(self):
         """Inicializa o orquestrador."""
-        self.client = OpenAI()
+        self.model_manager = ModelManager()
         self.db = DatabaseManager()
-        
+        logger.info("AgentOrchestrator inicializado")
+
     def execute(self, prompt: str, **kwargs) -> AgentResult:
         """
-        Executa um prompt usando o agente apropriado.
+        Executa o processamento do prompt.
         
         Args:
-            prompt: O prompt a ser executado
-            **kwargs: Argumentos adicionais para configuração
+            prompt: Texto de entrada
+            **kwargs: Argumentos adicionais
             
         Returns:
-            AgentResult com o resultado da execução
+            AgentResult com o resultado do processamento
         """
-        logger.info(f"INÍCIO - execute | Prompt: {prompt[:100]}...")
-        
         try:
-            # Executa o prompt usando a API do OpenAI
-            response = self.client.chat.completions.create(
+            logger.info(f"INÍCIO - execute | Prompt: {prompt[:100]}...")
+            
+            # Configura o modelo
+            self.model_manager.configure(
                 model=kwargs.get("model", "gpt-3.5-turbo"),
-                messages=[{"role": "user", "content": prompt}],
                 temperature=kwargs.get("temperature", 0.7)
             )
+            
+            # Gera resposta
+            response = self.model_manager.generate(prompt)
             
             # Processa o resultado
             result = AgentResult(

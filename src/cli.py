@@ -10,35 +10,145 @@ from rich.console import Console
 from rich.markdown import Markdown
 
 from src.app import AgentOrchestrator
+from src.core.model_manager import ModelManager
 from src.core.logger import setup_logger
+from src.core.utils import get_env_var
 
 app = typer.Typer()
-console = Console()
+output_console = Console()  # Console para saída normal
 logger = setup_logger(__name__)
 
-@app.command()
-def main(
-    prompt_tdd: str,
-    mode: str = "mcp",
-    format: str = "json",
-    model: str = "gpt-3.5-turbo",
-    temperature: float = 0.7,
-):
+def validate_env() -> None:
     """
-    Executa o Agent Flow TDD.
+    Valida variáveis de ambiente necessárias.
     
-    Args:
-        prompt_tdd: Prompt para o TDD
-        mode: Modo de execução (mcp, cli)
-        format: Formato de saída (json, markdown)
-        model: Modelo a ser usado
-        temperature: Temperatura para geração
+    Raises:
+        typer.Exit: Se alguma variável obrigatória não estiver definida
+    """
+    required_vars = {
+        'OPENAI_API_KEY': 'Chave de API do OpenAI',
+    }
+    
+    missing = []
+    for var, desc in required_vars.items():
+        if not get_env_var(var):
+            missing.append(f"{var} ({desc})")
+            
+    if missing:
+        error_msg = f"Variáveis de ambiente obrigatórias não definidas: {', '.join(missing)}"
+        logger.error(error_msg)
+        print(error_msg, file=sys.stderr)
+        raise typer.Exit(code=1)
+
+def get_env_status() -> dict:
+    """
+    Retorna status das variáveis de ambiente.
+    
+    Returns:
+        Dict com status das variáveis obrigatórias e opcionais
+    """
+    required = {
+        'OPENAI_API_KEY': bool(get_env_var('OPENAI_API_KEY')),
+    }
+    
+    optional = {
+        'ELEVATION_MODEL': bool(get_env_var('ELEVATION_MODEL')),
+        'CACHE_ENABLED': bool(get_env_var('CACHE_ENABLED')),
+        'FALLBACK_ENABLED': bool(get_env_var('FALLBACK_ENABLED')),
+    }
+    
+    return {
+        'required': required,
+        'optional': optional
+    }
+
+def get_orchestrator() -> AgentOrchestrator:
+    """
+    Retorna uma instância do AgentOrchestrator.
+    
+    Returns:
+        AgentOrchestrator: Nova instância do orquestrador
+    """
+    return AgentOrchestrator()
+
+@app.command()
+def status():
+    """
+    Exibe o status do ambiente e configurações.
     """
     try:
-        console.print("🛠️ Executando CLI em modo desenvolvimento...")
+        # Obtém status do ambiente
+        env_status = get_env_status()
+        
+        # Obtém modelos disponíveis
+        model_manager = ModelManager()
+        available_models = model_manager.get_available_models()
+        
+        # Formata saída
+        status = {
+            "environment": env_status,
+            "models": available_models
+        }
+        
+        output_console.print(json.dumps(status, indent=2))
+        return 0
+        
+    except Exception as e:
+        error_msg = f"Erro ao processar comando: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        print(error_msg, file=sys.stderr)
+        raise typer.Exit(code=1)
+
+@app.command()
+def mcp(
+    prompt_tdd: str = typer.Argument(""),
+    format: str = typer.Option("json", help="Formato de saída (json, markdown)"),
+    model: str = typer.Option("gpt-3.5-turbo", help="Modelo a ser usado"),
+    temperature: float = typer.Option(0.7, help="Temperatura para geração")
+):
+    """
+    Executa o Agent Flow TDD em modo MCP.
+    """
+    try:
+        print("🛠️ Executando CLI em modo desenvolvimento...")
+        
+        # Valida ambiente
+        validate_env()
+        
+        from src.mcp import MCPHandler
+        
+        # Inicializa handler MCP
+        handler = MCPHandler()
+        handler.initialize(api_key=get_env_var("OPENAI_API_KEY"))
+        
+        # Executa loop MCP
+        handler.run()
+        return 0
+        
+    except Exception as e:
+        error_msg = f"Erro ao processar comando: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        print(error_msg, file=sys.stderr)
+        raise typer.Exit(code=1)
+
+@app.command()
+def feature(
+    prompt_tdd: str = typer.Argument(..., help="Prompt para o TDD"),
+    format: str = typer.Option("json", help="Formato de saída (json, markdown)"),
+    model: str = typer.Option("gpt-3.5-turbo", help="Modelo a ser usado"),
+    temperature: float = typer.Option(0.7, help="Temperatura para geração")
+):
+    """
+    Executa o Agent Flow TDD para gerar uma feature.
+    """
+    try:
+        print("🛠️ Executando CLI em modo desenvolvimento...")
+        
+        # Valida ambiente
+        validate_env()
         
         # Inicializa orquestrador
-        orchestrator = AgentOrchestrator()
+        orchestrator = get_orchestrator()
         
         # Executa o prompt
         result = orchestrator.execute(
@@ -46,15 +156,22 @@ def main(
             model=model,
             temperature=temperature,
             session_id=str(time.time()),
-            format=format  # Passa o formato para o orchestrator
+            format=format
         )
         
         # Formata e exibe resultado
         if format == "markdown":
-            console.print(Markdown(result.output))
+            output_console.print(Markdown(result.output))
         else:
+            try:
+                # Tenta carregar como JSON
+                content = json.loads(result.output)
+            except json.JSONDecodeError:
+                # Se falhar, usa como string
+                content = result.output
+                
             output = {
-                "content": result.output,
+                "content": content,
                 "metadata": {
                     "type": "feature",
                     "options": {
@@ -64,14 +181,15 @@ def main(
                     }
                 }
             }
-            # Garante que a saída seja um JSON válido em uma única linha
             print(json.dumps(output, ensure_ascii=False))
+            
+        return 0
         
     except Exception as e:
         error_msg = f"Erro ao processar comando: {str(e)}"
         logger.error(error_msg, exc_info=True)
-        console.print(error_msg, style="red")
-        sys.exit(1)
+        print(error_msg, file=sys.stderr)
+        raise typer.Exit(code=1)
 
 if __name__ == "__main__":
     app()

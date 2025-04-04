@@ -177,14 +177,14 @@ class DatabaseManager:
             limit: Número máximo de registros
             
         Returns:
-            Lista de execuções com seus detalhes
+            Lista de execuções com seus detalhes, ordenada por timestamp decrescente
         """
         cursor = self.conn.cursor()
         
         # Busca execuções
         cursor.execute("""
         SELECT * FROM agent_runs
-        ORDER BY timestamp DESC
+        ORDER BY id DESC
         LIMIT ?
         """, (limit,))
         
@@ -193,16 +193,16 @@ class DatabaseManager:
             run_dict = dict(run)
             
             # Busca itens
-            cursor.execute("SELECT * FROM run_items WHERE run_id = ?", (run['id'],))
+            cursor.execute("SELECT * FROM run_items WHERE run_id = ? ORDER BY id DESC", (run['id'],))
             run_dict['items'] = [dict(item) for item in cursor.fetchall()]
             
             # Busca guardrails
-            cursor.execute("SELECT * FROM guardrail_results WHERE run_id = ?", (run['id'],))
-            run_dict['guardrails'] = [dict(guard) for guard in cursor.fetchall()]
+            cursor.execute("SELECT * FROM guardrail_results WHERE run_id = ? ORDER BY id DESC", (run['id'],))
+            run_dict['guardrails'] = [dict(guardrail) for guardrail in cursor.fetchall()]
             
             # Busca respostas brutas
-            cursor.execute("SELECT * FROM raw_responses WHERE run_id = ?", (run['id'],))
-            run_dict['raw_responses'] = [dict(resp) for resp in cursor.fetchall()]
+            cursor.execute("SELECT * FROM raw_responses WHERE run_id = ? ORDER BY id DESC", (run['id'],))
+            run_dict['raw_responses'] = [dict(response) for response in cursor.fetchall()]
             
             runs.append(run_dict)
         
