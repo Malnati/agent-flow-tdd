@@ -8,7 +8,7 @@ import json
 import yaml
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Any, List, Dict, Tuple, Union
+from typing import Optional, Any, List, Dict, Union
 
 from src.core.logger import get_logger, log_execution
 
@@ -42,23 +42,25 @@ def setup_paths():
 # Executa a configuração de caminhos
 BASE_DIR, LOG_DIR, CONFIGS_DIR = setup_paths()
 
-def load_config() -> Dict[str, Any]:
+def load_config(config_file: str) -> dict:
     """
-    Carrega as configurações do arquivo YAML.
+    Carrega configurações de um arquivo YAML.
     
+    Args:
+        config_file: Caminho do arquivo de configuração
+        
     Returns:
-        Dict[str, Any]: Configurações carregadas
+        dict: Configurações carregadas
     """
     try:
-        config_path = os.path.join(Path(__file__).resolve().parent.parent, 'configs', 'kernel.yaml')
-        with open(config_path, 'r') as f:
+        with open(config_file, 'r', encoding='utf-8') as f:
             return yaml.safe_load(f)
     except Exception as e:
-        logger.error(f"Erro ao carregar configurações: {str(e)}")
+        logger.error(f"FALHA - Erro ao carregar configuração: {str(e)}", exc_info=True)
         raise
 
 # Carrega configurações
-CONFIG = load_config()
+CONFIG = load_config('src/configs/kernel.yaml')
 
 def get_env_var(name: str, default: Optional[str] = None, args_value: Optional[str] = None) -> Optional[str]:
     """
@@ -117,21 +119,34 @@ def get_env_status(context: str = "cli") -> Dict[str, Dict[str, bool]]:
     }
 
 
-def validate_env(context: str = "cli") -> None:
+def validate_env(component: str) -> None:
     """
-    Valida se todas as variáveis de ambiente obrigatórias estão definidas.
-
+    Valida variáveis de ambiente necessárias.
+    
     Args:
-        context: Contexto de execução ("cli", "github", "all")
-
-    Raises:
-        ValueError: Se alguma variável obrigatória não estiver definida.
+        component: Componente que está solicitando a validação
     """
-    status = get_env_status(context)
-    if not status["all_required_set"]:
-        missing = [var for var, set_ in status["required"].items() if not set_]
+    get_logger(__name__)
+    
+    # Carrega configurações
+    config = load_config('src/configs/kernel.yaml')
+    
+    # Obtém variáveis requeridas para o componente
+    required_vars = config['required_vars'].get(component, [])
+    
+    # Se estiver publicando, adiciona PYPI_TOKEN como requerido
+    if os.environ.get('PUBLISHING') == 'true':
+        required_vars.append('PYPI_TOKEN')
+    
+    # Verifica variáveis
+    missing_vars = []
+    for var in required_vars:
+        if not get_env_var(var):
+            missing_vars.append(var)
+            
+    if missing_vars:
         raise ValueError(
-            f"Variáveis de ambiente obrigatórias não definidas: {', '.join(missing)}\n"
+            f"Variáveis de ambiente obrigatórias não definidas: {', '.join(missing_vars)}\n"
             "IMPORTANTE: Não use arquivos .env. Configure as variáveis diretamente no ambiente ou via argumentos."
         )
 
@@ -329,190 +344,116 @@ class TokenValidator:
         return True 
 
 class VersionAnalyzer:
-    """
-    Analisador de versões para controle semântico.
-    """
-
+    """Analisador de versões do projeto."""
+    
     def __init__(self):
-        self.logger = get_logger(__name__)
-        self.commit_types = CONFIG["commit_types"]
-        self.breaking_patterns = CONFIG["patterns"]["breaking"]
-        self.feature_patterns = CONFIG["patterns"]["feature"]
-        self.fix_patterns = CONFIG["patterns"]["fix"]
-
-    @log_execution
-    def analyze_commit_message(self, message: str) -> str:
-        """
-        Analisa a mensagem do commit para determinar o tipo de versão a ser incrementada.
+        """Inicializa o analisador de versões."""
+        self.version_file = '.version.json'
+        self.load_version_data()
         
-        Args:
-            message: Mensagem do commit
+    def load_version_data(self) -> None:
+        """Carrega dados de versão do arquivo."""
+        try:
+            with open(self.version_file, 'r', encoding='utf-8') as f:
+                self.version_data = json.load(f)
+        except FileNotFoundError:
+            self.version_data = {
+                "current": "0.1.0",
+                "manifest": {
+                    "include": [
+                        "LICENSE",
+                        "README.md",
+                        "src/configs/*.yaml"
+                    ]
+                },
+                "history": {
+                    "0.1.0": {
+                        "date": datetime.now().strftime("%Y-%m-%d"),
+                        "commit": "initial",
+                        "increment_type": "minor",
+                        "previous_version": "0.0.0"
+                    }
+                }
+            }
+            self.save_version_data()
+    
+    def save_version_data(self) -> None:
+        """Salva dados de versão no arquivo."""
+        with open(self.version_file, 'w', encoding='utf-8') as f:
+            json.dump(self.version_data, f, indent=4)
             
-        Returns:
-            str: Tipo de versão ('major', 'minor' ou 'patch')
-        """
-        message = message.lower()
-        
-        # Verifica breaking changes
-        for pattern in self.breaking_patterns:
-            if re.search(pattern, message, re.IGNORECASE):
-                return 'major'
-        
-        # Verifica novas funcionalidades
-        for pattern in self.feature_patterns:
-            if re.search(pattern, message, re.IGNORECASE):
-                return 'minor'
-        
-        # Verifica correções
-        for pattern in self.fix_patterns:
-            if re.search(pattern, message, re.IGNORECASE):
-                return 'patch'
-        
-        # Se não identificou nenhum padrão específico, assume patch
-        return 'patch'
-
-    @log_execution
-    def get_current_version(self) -> Tuple[str, Dict]:
-        """
-        Obtém a versão atual do projeto.
-        
-        Returns:
-            Tuple[str, Dict]: Versão atual e dados do version_commits.json
-        """
-        try:
-            with open('version_commits.json', 'r') as f:
-                data = json.load(f)
-                versions = sorted(data.keys())
-                if versions:
-                    return versions[-1], data
-        except Exception as e:
-            self.logger.error(f"Erro ao ler version_commits.json: {str(e)}")
-        
-        return "0.1.0", {}
-
-    @log_execution
-    def get_last_commit_info(self) -> Optional[Tuple[str, str]]:
-        """
-        Obtém informações do último commit.
-        
-        Returns:
-        Optional[Tuple[str, str]]: (hash do commit, mensagem do commit) ou None se falhar
-        """
-        try:
-            commit_hash = os.popen('git rev-parse --short HEAD').read().strip()
-            commit_msg = os.popen('git log -1 --pretty=%B').read().strip()
-            return commit_hash, commit_msg
-        except Exception as e:
-            self.logger.error(f"Erro ao obter informações do último commit: {str(e)}")
-            return None
-
-    @log_execution
+    def get_current_version(self) -> str:
+        """Retorna a versão atual."""
+        return self.version_data['current']
+    
     def increment_version(self, current: str, increment_type: str) -> str:
         """
-        Incrementa a versão baseado no tipo de incremento.
+        Incrementa a versão seguindo semver.
         
         Args:
             current: Versão atual
-            increment_type: Tipo de incremento ('major', 'minor' ou 'patch')
+            increment_type: Tipo de incremento (major, minor, patch)
             
         Returns:
             str: Nova versão
         """
-        try:
-            # Se a versão atual usa o formato de data
-            if re.match(r'\d{4}\.\d{2}\.\d{2}', current):
-                import time
-                return f"{time.strftime('%Y.%m.%d')}.1"
-            
-            # Versão semântica padrão
-            parts = current.split('.')
-            if len(parts) < 3:
-                parts.extend(['0'] * (3 - len(parts)))
-            
-            major, minor, patch = map(lambda x: int(re.search(r'\d+', x).group()), parts[:3])
-            
-            if increment_type == 'major':
-                return f"{major + 1}.0.0"
-            elif increment_type == 'minor':
-                return f"{major}.{minor + 1}.0"
-            else:  # patch
-                return f"{major}.{minor}.{patch + 1}"
-        except Exception as e:
-            self.logger.error(f"Erro ao incrementar versão: {str(e)}")
-            return current
-
-    @log_execution
-    def update_version_files(self, new_version: str) -> bool:
-        """
-        Atualiza os arquivos que contêm a versão.
+        major, minor, patch = map(int, current.split('.'))
         
-        Args:
-            new_version: Nova versão a ser definida
+        if increment_type == 'major':
+            major += 1
+            minor = 0
+            patch = 0
+        elif increment_type == 'minor':
+            minor += 1
+            patch = 0
+        else:  # patch
+            patch += 1
             
-        Returns:
-            bool: True se a atualização foi bem sucedida
+        return f"{major}.{minor}.{patch}"
+    
+    def smart_bump(self) -> None:
+        """
+        Incrementa a versão automaticamente baseado no último commit.
         """
         try:
-            # Atualiza setup.py
-            with open('setup.py', 'r') as f:
-                content = f.read()
-            content = re.sub(r'version="[^"]*"', f'version="{new_version}"', content)
-            with open('setup.py', 'w') as f:
-                f.write(content)
-                
-            # Atualiza __init__.py
-            with open('src/__init__.py', 'r') as f:
-                content = f.read()
-            content = re.sub(r'__version__\s*=\s*"[^"]*"', f'__version__ = "{new_version}"', content)
-            with open('src/__init__.py', 'w') as f:
-                f.write(content)
-                
-            return True
+            # Carrega configurações do kernel
+            kernel_config = load_config('src/configs/kernel.yaml')
+            
+            # Obtém o último commit
+            result = os.popen('git log -1 --pretty=%B').read().strip().lower()
+            
+            # Determina o tipo de incremento
+            increment_type = 'patch'  # default
+            
+            for pattern_type, patterns in kernel_config['patterns'].items():
+                if any(p.lower() in result for p in patterns):
+                    if pattern_type == 'breaking':
+                        increment_type = 'major'
+                        break
+                    elif pattern_type == 'feature':
+                        increment_type = 'minor'
+                        break
+            
+            # Incrementa a versão
+            current = self.get_current_version()
+            new_version = self.increment_version(current, increment_type)
+            
+            # Atualiza o histórico
+            self.version_data['history'][new_version] = {
+                "date": datetime.now().strftime("%Y-%m-%d"),
+                "commit": result,
+                "increment_type": increment_type,
+                "previous_version": current
+            }
+            
+            # Atualiza a versão atual
+            self.version_data['current'] = new_version
+            
+            # Salva as alterações
+            self.save_version_data()
+            
+            logger.info(f"SUCESSO - Versão incrementada: {current} -> {new_version}")
+            
         except Exception as e:
-            self.logger.error(f"Erro ao atualizar arquivos de versão: {str(e)}")
-            return False
-
-    @log_execution
-    def smart_bump(self) -> Optional[str]:
-        """
-        Realiza o bump de versão de forma inteligente, analisando o último commit.
-        
-        Returns:
-            Optional[str]: Nova versão ou None se falhar
-        """
-        # Obtém informações do último commit
-        commit_info = self.get_last_commit_info()
-        if not commit_info:
-            return None
-        
-        commit_hash, commit_msg = commit_info
-        
-        # Analisa a mensagem do commit
-        increment_type = self.analyze_commit_message(commit_msg)
-        
-        # Obtém versão atual
-        current_version, version_data = self.get_current_version()
-        
-        # Incrementa a versão
-        new_version = self.increment_version(current_version, increment_type)
-        
-        # Atualiza os arquivos
-        if not self.update_version_files(new_version):
-            return None
-        
-        # Atualiza version_commits.json
-        version_data[new_version] = {
-            'commit_hash': commit_hash,
-            'timestamp': os.popen('date "+%Y-%m-%d %H:%M:%S"').read().strip(),
-            'increment_type': increment_type,
-            'previous_version': current_version
-        }
-        
-        try:
-            with open('version_commits.json', 'w') as f:
-                json.dump(version_data, f, indent=2)
-        except Exception as e:
-            self.logger.error(f"Erro ao atualizar version_commits.json: {str(e)}")
-            return None
-        
-        return new_version
+            logger.error(f"FALHA - Erro ao incrementar versão: {str(e)}", exc_info=True)
+            raise

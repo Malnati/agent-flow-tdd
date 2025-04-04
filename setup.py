@@ -2,6 +2,7 @@
 """
 Script de instalação do pacote.
 """
+import json
 import subprocess
 import sys
 from setuptools import find_packages, setup
@@ -74,14 +75,22 @@ dev_requires = [
     "twine>=4.0.2",
 ]
 
-# Lê a versão do arquivo VERSION
-with open('VERSION', 'r') as f:
-    version = f.read().strip()
+# Lê a versão do arquivo .version.json
+with open('.version.json', 'r', encoding='utf-8') as f:
+    version_data = json.load(f)
+    version = version_data['current']
 
 setup(
     name="agent-flow-tdd",
     version=version,
     packages=find_packages(),
+    package_data={
+        '': ['.version.json'],  # Inclui arquivo de versão na raiz
+        'src': ['configs/*.yaml'],  # Inclui arquivos YAML do diretório configs
+    },
+    data_files=[
+        ('', ['.version.json']),  # Copia arquivo de versão para a raiz do pacote instalado
+    ],
     install_requires=install_requires,
     extras_require={
         "dev": dev_requires
@@ -95,7 +104,7 @@ setup(
     author="Seu Nome",
     author_email="seu.email@exemplo.com",
     description="Framework para desenvolvimento orientado a testes com agentes de IA",
-    long_description=open("README.md").read(),
+    long_description=open("README.md", encoding='utf-8').read(),
     long_description_content_type="text/markdown",
     url="https://github.com/seu-usuario/agent-flow-tdd",
     cmdclass={

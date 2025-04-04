@@ -2,46 +2,74 @@
 
 required_vars:
   cli:
-    OPENAI_API_KEY: false
+    - OPENAI_API_KEY
   github:
-    GITHUB_TOKEN: false
-    GITHUB_OWNER: false
-    GITHUB_REPO: false
+    - GITHUB_TOKEN
+  publish:
+    - PYPI_TOKEN
 
 optional_vars:
   cli:
-    OPENROUTER_KEY: false
-    DEEPSEEK_KEY: false
-    GEMINI_KEY: false
-    DEFAULT_MODEL: false
-    ELEVATION_MODEL: false
-    FALLBACK_ENABLED: false
-    MODEL_TIMEOUT: false
-    MAX_RETRIES: false
-    CACHE_ENABLED: false
-    CACHE_TTL: false
-    CACHE_DIR: false
-    LOG_LEVEL: false
-    LOG_FILE: false
+    - OPENROUTER_KEY
+    - GEMINI_KEY
+    - ANTHROPIC_KEY
+    - LOG_LEVEL
+    - CACHE_DIR
+    - CACHE_TTL
+    - FALLBACK_ENABLED
+    - DEFAULT_MODEL
+    - ELEVATION_MODEL
+    - MODEL_TIMEOUT
+    - MAX_RETRIES
   github: {}
 
+# Validação de tokens
 token_validation:
   min_length: 10
   openai_prefix: sk-
+  github_prefix: gh
+  openrouter_prefix: sk-or-v1-
+  gemini_prefix: AI
+  anthropic_prefix: sk-ant-
+  pypi_prefix: pypi-
 
+# Tipos de commit e seus impactos na versão
 commit_types:
-  feat: minor
-  fix: patch
-  docs: patch
-  style: patch
-  refactor: patch
-  test: patch
-  chore: patch
-  perf: patch
-  ci: patch
-  build: patch
-  breaking: major
+  breaking:
+    semver: major
+    description: Mudanças que quebram compatibilidade
+  feature:
+    semver: minor
+    description: Novas funcionalidades
+  fix:
+    semver: patch
+    description: Correções de bugs
+  docs:
+    semver: patch
+    description: Documentação
+  style:
+    semver: patch
+    description: Formatação e estilo
+  refactor:
+    semver: patch
+    description: Refatoração de código
+  test:
+    semver: patch
+    description: Testes
+  chore:
+    semver: patch
+    description: Tarefas de manutenção
+  perf:
+    semver: patch
+    description: Melhorias de performance
+  ci:
+    semver: patch
+    description: Configuração de CI
+  build:
+    semver: patch
+    description: Sistema de build
 
+# Padrões de regex para análise de commits
 patterns:
   breaking:
     - breaking change
@@ -65,6 +93,7 @@ patterns:
     - consertado
     - correcao
 
+# Padrões para substituição de dados sensíveis em logs
 sensitive_data_patterns:
   - pattern: '[a-zA-Z0-9-_]{20,}'
     replacement: '***API_KEY***'
@@ -75,4 +104,6 @@ sensitive_data_patterns:
   - pattern: 'ghp_[a-zA-Z0-9]+'
     replacement: '***GITHUB_TOKEN***'
   - pattern: 'sk-[a-zA-Z0-9]+'
-    replacement: '***OPENAI_API_KEY***' 
+    replacement: '***OPENAI_API_KEY***'
+  - pattern: 'pypi-[a-zA-Z0-9]{20,}'
+    replacement: '***PYPI_TOKEN***' 

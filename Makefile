@@ -139,11 +139,19 @@ logs:
 # Publicação no PyPI
 publish:
 	@echo "📦 Preparando pacote para publicação..."
+	@if [ -z "$(PYPI_TOKEN)" ]; then \
+		echo "❌ Erro: Variável PYPI_TOKEN não definida"; \
+		exit 1; \
+	fi
+	@echo "🔄 Incrementando versão..."
+	@PUBLISHING=true $(PYTHON) -c "from src.core.kernel import VersionAnalyzer; v = VersionAnalyzer(); v.smart_bump()"
 	@make clean
+	@echo "📥 Instalando dependências de build..."
+	@$(PIP) install --upgrade pip build twine
 	@echo "🔨 Construindo distribuição..."
-	python -m build
+	@$(PYTHON) -m build
 	@echo "🚀 Publicando no PyPI..."
-	python -m twine upload dist/* --username __token__ --password $(PYPI_TOKEN)
+	@PUBLISHING=true $(PYTHON) -m twine upload dist/* --username __token__ --password $(PYPI_TOKEN)
 	@echo "✅ Pacote publicado com sucesso!"
 
 # Permite argumentos extras para o comando run

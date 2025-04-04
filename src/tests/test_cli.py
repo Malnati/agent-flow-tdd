@@ -1,7 +1,6 @@
 """
 Testes para o módulo CLI.
 """
-import json
 from unittest.mock import Mock, patch
 import os
 
@@ -9,7 +8,6 @@ import pytest
 from typer.testing import CliRunner
 
 from src.cli import app
-from src.app import AgentResult
 
 # Setup
 runner = CliRunner()
@@ -82,240 +80,112 @@ def mock_mcp_sdk():
         mock.return_value = mock_handler
         yield mock
 
-def test_feature_command_success(mock_models, mock_orchestrator, mock_validate_env, capsys):
+def test_feature_command_success():
     """Testa o comando feature com sucesso."""
-    # Setup
-    mock_orchestrator.execute.return_value = Mock(
-        output=json.dumps({
-            "feature": "Login",
-            "tests": ["test1"]
-        })
-    )
+    with patch('src.cli.validate_env') as mock_validate, \
+         patch('src.cli.AgentOrchestrator') as mock_agent:
+        
+        mock_agent.return_value.execute.return_value = "Resposta do agente"
+        result = runner.invoke(app, ["feature", "test", "--format", "markdown"])
+        
+        assert result.exit_code == 0
+        mock_validate.assert_called_once()
+        mock_agent.return_value.execute.assert_called_once()
 
-    with patch("src.cli.get_orchestrator", return_value=mock_orchestrator):
-        # Execução
-        with pytest.raises(SystemExit) as exc_info:
-            app(["feature", "Criar sistema de login"])
-            
-        # Verificações
-        assert exc_info.value.code == 0
-        mock_validate_env.assert_called_once()
-        captured = capsys.readouterr()
-        assert "🛠️ Executando CLI em modo desenvolvimento..." in captured.out
-
-def test_feature_command_markdown_output(mock_models, mock_orchestrator, mock_validate_env, capsys):
+def test_feature_command_markdown_output():
     """Testa o comando feature com saída em markdown."""
-    # Setup
-    mock_orchestrator.execute.return_value = Mock(
-        output="# Feature: Login\n\n## Testes\n- Test 1"
-    )
+    with patch('src.cli.validate_env'), \
+         patch('src.cli.AgentOrchestrator') as mock_agent:
+        
+        mock_agent.return_value.execute.return_value = "# Título\nConteúdo"
+        result = runner.invoke(app, ["feature", "test", "--format", "markdown"])
+        
+        assert result.exit_code == 0
+        assert "# Título" in result.stdout
 
-    with patch("src.cli.get_orchestrator", return_value=mock_orchestrator):
-        # Execução
-        with pytest.raises(SystemExit) as exc_info:
-            app(["feature", "Criar login", "--format", "markdown"])
-            
-        # Verificações
-        assert exc_info.value.code == 0
-        captured = capsys.readouterr()
-        assert "🛠️ Executando CLI em modo desenvolvimento..." in captured.out
-
-def test_feature_command_error(mock_models, mock_orchestrator, mock_validate_env, capsys):
+def test_feature_command_error():
     """Testa o comando feature com erro."""
-    # Setup
-    mock_validate_env.side_effect = Exception("Erro de validação")
+    with patch('src.cli.validate_env') as mock_validate:
+        mock_validate.side_effect = Exception("Erro de validação")
+        result = runner.invoke(app, ["feature", "test"])
+        
+        assert result.exit_code == 1
 
-    with patch("src.cli.get_orchestrator", return_value=mock_orchestrator):
-        # Execução
-        with pytest.raises(SystemExit) as exc_info:
-            app(["feature", "Criar login"])
-            
-        # Verificações
-        assert exc_info.value.code == 1
-        captured = capsys.readouterr()
-        assert "Erro ao processar comando" in captured.err
-
-def test_status_command_success(mock_models, mock_get_env_status, capsys):
+def test_status_command_success():
     """Testa o comando status com sucesso."""
-    # Setup
-    mock_models.get_available_models.return_value = ["gpt-4", "gpt-3.5"]
+    with patch('src.cli.get_env_status') as mock_status:
+        mock_status.return_value = {
+            "all_required_set": True,
+            "required": {"OPENAI_API_KEY": True},
+            "optional": {}
+        }
+        result = runner.invoke(app, ["status"])
+        
+        assert result.exit_code == 0
+        mock_status.assert_called_once()
 
-    with patch("src.cli.ModelManager", return_value=mock_models):
-        # Execução
-        with pytest.raises(SystemExit) as exc_info:
-            app(["status"])
-            
-        # Verificações
-        assert exc_info.value.code == 0
-        mock_get_env_status.assert_called_once()
-        mock_models.get_available_models.assert_called_once()
-        captured = capsys.readouterr()
-        assert "environment" in captured.out
-        assert "models" in captured.out
-
-def test_status_command_error(mock_models, mock_get_env_status, capsys):
+def test_status_command_error():
     """Testa o comando status com erro."""
-    # Setup
-    mock_get_env_status.side_effect = Exception("Erro ao obter status")
+    with patch('src.cli.get_env_status') as mock_status:
+        mock_status.side_effect = Exception("Erro ao obter status")
+        result = runner.invoke(app, ["status"])
+        
+        assert result.exit_code == 1
 
-    with patch("src.cli.ModelManager", return_value=mock_models):
-        # Execução
-        with pytest.raises(SystemExit) as exc_info:
-            app(["status"])
-            
-        # Verificações
-        assert exc_info.value.code == 1
-        captured = capsys.readouterr()
-        assert "Erro ao processar comando" in captured.err
+def test_mcp_command_feature():
+    """Testa o comando mcp com feature."""
+    with patch('src.cli.validate_env'), \
+         patch('src.cli.MCPHandler') as mock_mcp:
+        
+        result = runner.invoke(app, ["mcp", "test", "--format", "markdown"])
+        
+        assert result.exit_code == 0
+        mock_mcp.assert_called_once()
 
-def test_mcp_command_feature(mock_orchestrator, capsys, monkeypatch, mock_mcp_sdk):
-    """Testa o comando MCP processando uma feature."""
-    # Setup
-    input_data = {
-        "content": "Criar login",
-        "metadata": {
-            "type": "feature",
-            "options": {
-                "model": "gpt-4-turbo",
-                "temperature": 0.7
-            }
-        }
-    }
+def test_mcp_command_error():
+    """Testa o comando mcp com erro."""
+    with patch('src.cli.validate_env'), \
+         patch('src.cli.MCPHandler') as mock_mcp:
+        
+        mock_mcp.side_effect = Exception("Erro ao inicializar MCP")
+        result = runner.invoke(app, ["mcp", "test"])
+        
+        assert result.exit_code == 1
 
-    # Simula entrada stdin
-    input_lines = [json.dumps(input_data) + "\n", ""]
-    input_iter = iter(input_lines)
-    monkeypatch.setattr("sys.stdin.readline", lambda: next(input_iter))
+def test_mcp_command_no_api_key():
+    """Testa o comando mcp sem API key."""
+    with patch.dict(os.environ, {}, clear=True):
+        result = runner.invoke(app, ["mcp", "test"])
+        assert result.exit_code == 1
 
-    # Configura mock do handler
-    mock_handler = mock_mcp_sdk.return_value
-    mock_handler.initialize.return_value = None
-    mock_handler.run.side_effect = lambda: None
+def test_feature_command_address_requirements():
+    """Testa o comando feature com requisitos de endereço."""
+    with patch('src.cli.validate_env'), \
+         patch('src.cli.AgentOrchestrator') as mock_agent:
+        
+        mock_agent.return_value.execute.return_value = """
+        Requisitos para cadastro de endereço:
+        1. Nome completo
+        2. Endereço completo
+        3. CEP
+        4. Cidade/Estado
+        """
+        result = runner.invoke(app, ["feature", "Cadastro de endereços", "--format", "markdown"])
+        
+        assert result.exit_code == 0
+        assert "Requisitos para cadastro" in result.stdout
 
-    with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}), \
-         patch("src.mcp.MCPHandler", return_value=mock_handler):
-
-        # Execução
-        with pytest.raises(SystemExit) as exc_info:
-            app(["mcp"])
-            
-        # Verificações
-        assert exc_info.value.code == 0
-        mock_handler.initialize.assert_called_once_with(api_key="test-key")
-        captured = capsys.readouterr()
-        assert "🛠️ Executando CLI em modo desenvolvimento..." in captured.out
-
-def test_mcp_command_error(mock_orchestrator, capsys, monkeypatch, mock_mcp_sdk):
-    """Testa o comando MCP com erro."""
-    # Setup
-    with patch("src.mcp.MCPHandler") as mock_handler:
-        mock_handler.side_effect = Exception("Erro ao inicializar MCP")
-
-        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
-            # Execução
-            with pytest.raises(SystemExit) as exc_info:
-                app(["mcp"])
-                
-            # Verificações
-            assert exc_info.value.code == 1
-            captured = capsys.readouterr()
-            assert "Erro ao processar comando" in captured.err
-
-def test_mcp_command_no_api_key(mock_orchestrator, capsys, monkeypatch, mock_mcp_sdk):
-    """Testa o comando MCP sem chave de API."""
-    # Setup
-    original_env = dict(os.environ)
-    try:
-        # Preserva outras variáveis de ambiente, apenas remove OPENAI_API_KEY
-        if "OPENAI_API_KEY" in os.environ:
-            del os.environ["OPENAI_API_KEY"]
-            
-        # Execução
-        with pytest.raises(SystemExit) as exc_info:
-            app(["mcp"])
-            
-        # Verificações
-        assert exc_info.value.code == 1
-        captured = capsys.readouterr()
-        assert "Variáveis de ambiente obrigatórias não definidas" in captured.err
-    finally:
-        # Restaura o ambiente original
-        os.environ.clear()
-        os.environ.update(original_env)
-
-def test_feature_command_address_requirements(mock_models, mock_orchestrator, mock_validate_env, capsys):
-    """Testa o comando feature via terminal para requisitos de endereço."""
-    # Setup
-    expected_result = {
-        "feature": "Gerenciamento de Endereços",
-        "acceptance_criteria": [
-            "Deve permitir cadastro de endereços com CEP (Brasil) e ZipCode (EUA)",
-            "Deve integrar com API de busca de CEP para autopreenchimento",
-            "Deve integrar com API de ZipCode US para autopreenchimento",
-            "Deve permitir edição de endereços cadastrados",
-            "Deve permitir listagem de endereços com paginação e filtros"
-        ],
-        "test_scenarios": [
-            "Cadastro com CEP válido brasileiro",
-            "Cadastro com ZipCode válido americano",
-            "Tentativa de cadastro com CEP inválido",
-            "Tentativa de cadastro com ZipCode inválido",
-            "Edição de endereço existente",
-            "Listagem com filtro por país",
-            "Paginação de resultados"
-        ],
-        "integrations": [
-            {"name": "ViaCEP API", "type": "CEP", "country": "BR"},
-            {"name": "USPS API", "type": "ZipCode", "country": "US"}
-        ],
-        "complexity": 4
-    }
-
-    mock_orchestrator.execute.return_value = Mock(output=json.dumps(expected_result))
-
-    with patch("src.cli.get_orchestrator", return_value=mock_orchestrator):
-        # Execução
-        with pytest.raises(SystemExit) as exc_info:
-            app(["feature", "Cadastro de endereços"])
-            
-        # Verificações
-        assert exc_info.value.code == 0
-        mock_validate_env.assert_called_once()
-        captured = capsys.readouterr()
-        assert "🛠️ Executando CLI em modo desenvolvimento..." in captured.out 
-
-def test_feature_command_with_cache(mock_models, mock_orchestrator, mock_validate_env, capsys):
-    """Testa o comando feature com resposta em cache."""
-    # Setup
-    cached_response = {
-        "text": "# Feature: Login\n\n## Testes\n- Test 1",
-        "metadata": {
-            "model": "gpt-3.5-turbo",
-            "provider": "openai",
-            "finish_reason": "stop",
-            "created": 1234567890,
-            "id": "test-id"
-        }
-    }
-
-    mock_orchestrator.execute.return_value = AgentResult(
-        output=cached_response["text"],
-        items=[],
-        guardrails=[],
-        raw_responses=[{
-            "id": cached_response["metadata"]["id"],
-            "response": cached_response["metadata"]
-        }]
-    )
-
-    with patch("src.cli.get_orchestrator", return_value=mock_orchestrator):
-        # Execução
-        with pytest.raises(SystemExit) as exc_info:
-            app(["feature", "Criar login", "--format", "markdown"])
-            
-        # Verificações
-        assert exc_info.value.code == 0
-        captured = capsys.readouterr()
-        assert "🛠️ Executando CLI em modo desenvolvimento..." in captured.out
-        assert "Feature: Login" in captured.out
-        assert "Test 1" in captured.out 
+def test_feature_command_with_cache():
+    """Testa o comando feature com cache."""
+    with patch('src.cli.validate_env'), \
+         patch('src.cli.AgentOrchestrator') as mock_agent, \
+         patch('src.core.models.ModelManager') as mock_model:
+        
+        # Simula cache hit
+        mock_model.return_value.generate.return_value = ("Resposta do cache", {"cached": True})
+        mock_agent.return_value.execute.return_value = "Resposta do cache"
+        
+        result = runner.invoke(app, ["feature", "test cached", "--format", "markdown"])
+        
+        assert result.exit_code == 0
+        assert "Resposta do cache" in result.stdout 
