@@ -1,0 +1,68 @@
+# Configurações do ModelManager
+
+# Configurações padrão
+defaults:
+  model: "gpt-4"
+  elevation_model: "gpt-4"
+  temperature: 0.7
+  max_tokens: null
+  max_retries: 3
+  timeout: 120
+
+# Configurações de Cache
+cache:
+  enabled: true
+  ttl: 3600  # 1 hora
+  directory: "cache"
+
+# Configurações de Fallback
+fallback:
+  enabled: true
+
+# Configurações de Provedores
+providers:
+  openai:
+    base_url: "https://api.openai.com/v1"
+    prefix_patterns:
+      - "gpt-"
+      - "text-"
+    default_max_tokens: 2048
+    default_model: "gpt-4"
+
+  openrouter:
+    base_url: "https://openrouter.ai/api/v1"
+    prefix_patterns:
+      - "deepseek-"
+      - "anthropic/"
+      - "meta-llama/"
+    default_max_tokens: 4096
+    default_model: "deepseek-coder-33b-instruct"
+
+  gemini:
+    base_url: "https://generativelanguage.googleapis.com"
+    prefix_patterns:
+      - "gemini-"
+    default_max_tokens: 2048
+    default_model: "gemini-pro"
+
+  anthropic:
+    base_url: "https://api.anthropic.com"
+    prefix_patterns:
+      - "claude-"
+    default_max_tokens: 4096
+    default_model: "claude-3-opus-20240229"
+
+# Variáveis de ambiente
+env_vars:
+  default_model: "DEFAULT_MODEL"
+  elevation_model: "ELEVATION_MODEL"
+  max_retries: "MAX_RETRIES"
+  model_timeout: "MODEL_TIMEOUT"
+  fallback_enabled: "FALLBACK_ENABLED"
+  cache_enabled: "CACHE_ENABLED"
+  cache_ttl: "CACHE_TTL"
+  cache_dir: "CACHE_DIR"
+  openai_key: "OPENAI_API_KEY"
+  openrouter_key: "OPENROUTER_KEY"
+  gemini_key: "GEMINI_KEY"
+  anthropic_key: "ANTHROPIC_KEY" 

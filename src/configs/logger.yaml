@@ -39,12 +39,12 @@ security:
     - signature
 
   token_patterns:
-    - "sk-[a-zA-Z0-9]{20,}"
-    - "sk-proj-[a-zA-Z0-9_-]{20,}"
-    - "gh[pous]_[a-zA-Z0-9]{20,}"
-    - "github_pat_[a-zA-Z0-9]{20,}"
-    - "eyJ[a-zA-Z0-9_-]{5,}\.eyJ[a-zA-Z0-9_-]{5,}\.[a-zA-Z0-9_-]{5,}"
-    - "[a-zA-Z0-9_-]{30,}"
+    - 'sk-[a-zA-Z0-9]{20,}'
+    - 'sk-proj-[a-zA-Z0-9_-]{20,}'
+    - 'gh[pous]_[a-zA-Z0-9]{20,}'
+    - 'github_pat_[a-zA-Z0-9]{20,}'
+    - 'eyJ[a-zA-Z0-9_-]{5,}\.eyJ[a-zA-Z0-9_-]{5,}\.[a-zA-Z0-9_-]{5,}'
+    - '[a-zA-Z0-9_-]{30,}'
 
   masking:
     default_mask: "***"
