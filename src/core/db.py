@@ -6,6 +6,7 @@ import logging
 import os
 import sqlite3
 from typing import Any, Dict, List, Optional
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +20,16 @@ class DatabaseManager:
         Args:
             db_path: Caminho para o banco de dados
         """
+        # Carrega configurações
+        config_path = os.path.join("src", "configs", "database_config.yaml")
+        with open(config_path, "r") as f:
+            self.config = yaml.safe_load(f)
+        
         # Cria diretório de logs se não existir
-        os.makedirs("logs", exist_ok=True)
+        os.makedirs(self.config["directories"]["logs"], exist_ok=True)
         
         # Define caminho do banco
-        self.db_path = db_path or "logs/agent_logs.db"
+        self.db_path = db_path or self.config["database"]["default_path"]
         
         # Conecta ao banco
         self.conn = sqlite3.connect(self.db_path)
@@ -36,55 +42,29 @@ class DatabaseManager:
         """Cria as tabelas do banco de dados."""
         cursor = self.conn.cursor()
         
-        # Tabela principal de execuções
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS agent_runs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            session_id TEXT NOT NULL,
-            input TEXT NOT NULL,
-            last_agent TEXT,
-            output_type TEXT,
-            final_output TEXT
-        )
-        """)
-        
-        # Tabela de itens gerados
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS run_items (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            run_id INTEGER NOT NULL,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            item_type TEXT NOT NULL,
-            raw_item TEXT NOT NULL,
-            source_agent TEXT,
-            target_agent TEXT,
-            FOREIGN KEY(run_id) REFERENCES agent_runs(id)
-        )
-        """)
-        
-        # Tabela de resultados de guardrails
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS guardrail_results (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            run_id INTEGER NOT NULL,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            guardrail_type TEXT CHECK(guardrail_type IN ('input', 'output')),
-            results TEXT NOT NULL,
-            FOREIGN KEY(run_id) REFERENCES agent_runs(id)
-        )
-        """)
-        
-        # Tabela de respostas brutas do LLM
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS raw_responses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            run_id INTEGER NOT NULL,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            response TEXT NOT NULL,
-            FOREIGN KEY(run_id) REFERENCES agent_runs(id)
-        )
-        """)
+        for table_name, table_config in self.config["tables"].items():
+            # Monta SQL para colunas
+            columns = []
+            for col in table_config["columns"]:
+                columns.append(f"{col['name']} {col['type']}")
+            
+            # Adiciona foreign keys
+            if "foreign_keys" in table_config:
+                for fk in table_config["foreign_keys"]:
+                    columns.append(f"FOREIGN KEY({fk['column']}) REFERENCES {fk['references']}")
+            
+            # Adiciona checks
+            if "checks" in table_config:
+                for check in table_config["checks"]:
+                    columns.append(f"CHECK({check['column']} {check['constraint']})")
+            
+            # Monta e executa SQL final
+            sql = f"""
+            CREATE TABLE IF NOT EXISTS {table_config['name']} (
+                {', '.join(columns)}
+            )
+            """
+            cursor.execute(sql)
         
         self.conn.commit()
     
@@ -169,17 +149,21 @@ class DatabaseManager:
         
         self.conn.commit()
     
-    def get_run_history(self, limit: int = 10) -> List[Dict[str, Any]]:
+    def get_run_history(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         Retorna o histórico das últimas execuções.
         
         Args:
-            limit: Número máximo de registros
+            limit: Número máximo de registros. Se None, usa o valor padrão da configuração.
             
         Returns:
             Lista de execuções com seus detalhes, ordenada por timestamp decrescente
         """
         cursor = self.conn.cursor()
+        
+        # Usa limite da configuração se não especificado
+        if limit is None:
+            limit = self.config["database"]["history_limit"]
         
         # Busca execuções
         cursor.execute("""

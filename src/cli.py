@@ -12,7 +12,7 @@ from rich.markdown import Markdown
 from src.app import AgentOrchestrator
 from src.core.model_manager import ModelManager
 from src.core.logger import setup_logger
-from src.core.utils import get_env_var
+from src.core.utils import get_env_var, get_env_status as get_utils_env_status
 
 app = typer.Typer()
 output_console = Console()  # Console para saída normal
@@ -25,16 +25,9 @@ def validate_env() -> None:
     Raises:
         typer.Exit: Se alguma variável obrigatória não estiver definida
     """
-    required_vars = {
-        'OPENAI_API_KEY': 'Chave de API do OpenAI',
-    }
-    
-    missing = []
-    for var, desc in required_vars.items():
-        if not get_env_var(var):
-            missing.append(f"{var} ({desc})")
-            
-    if missing:
+    status = get_utils_env_status()
+    if not status["all_required_set"]:
+        missing = [var for var, set_ in status["required"].items() if not set_]
         error_msg = f"Variáveis de ambiente obrigatórias não definidas: {', '.join(missing)}"
         logger.error(error_msg)
         print(error_msg, file=sys.stderr)
@@ -47,20 +40,7 @@ def get_env_status() -> dict:
     Returns:
         Dict com status das variáveis obrigatórias e opcionais
     """
-    required = {
-        'OPENAI_API_KEY': bool(get_env_var('OPENAI_API_KEY')),
-    }
-    
-    optional = {
-        'ELEVATION_MODEL': bool(get_env_var('ELEVATION_MODEL')),
-        'CACHE_ENABLED': bool(get_env_var('CACHE_ENABLED')),
-        'FALLBACK_ENABLED': bool(get_env_var('FALLBACK_ENABLED')),
-    }
-    
-    return {
-        'required': required,
-        'optional': optional
-    }
+    return get_utils_env_status()
 
 def get_orchestrator() -> AgentOrchestrator:
     """

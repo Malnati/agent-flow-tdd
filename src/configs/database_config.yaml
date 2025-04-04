@@ -1,0 +1,91 @@
+# Configurações do banco de dados
+
+# Diretórios e arquivos
+directories:
+  logs: "logs"
+  
+database:
+  default_path: "logs/agent_logs.db"
+  history_limit: 10
+
+# Configurações de schema
+schema:
+  guardrail_types:
+    - "input"
+    - "output"
+
+# Tabelas
+tables:
+  agent_runs:
+    name: "agent_runs"
+    columns:
+      - name: "id"
+        type: "INTEGER PRIMARY KEY AUTOINCREMENT"
+      - name: "timestamp"
+        type: "DATETIME DEFAULT CURRENT_TIMESTAMP"
+      - name: "session_id"
+        type: "TEXT NOT NULL"
+      - name: "input"
+        type: "TEXT NOT NULL"
+      - name: "last_agent"
+        type: "TEXT"
+      - name: "output_type"
+        type: "TEXT"
+      - name: "final_output"
+        type: "TEXT"
+
+  run_items:
+    name: "run_items"
+    columns:
+      - name: "id"
+        type: "INTEGER PRIMARY KEY AUTOINCREMENT"
+      - name: "run_id"
+        type: "INTEGER NOT NULL"
+      - name: "timestamp"
+        type: "DATETIME DEFAULT CURRENT_TIMESTAMP"
+      - name: "item_type"
+        type: "TEXT NOT NULL"
+      - name: "raw_item"
+        type: "TEXT NOT NULL"
+      - name: "source_agent"
+        type: "TEXT"
+      - name: "target_agent"
+        type: "TEXT"
+    foreign_keys:
+      - column: "run_id"
+        references: "agent_runs(id)"
+
+  guardrail_results:
+    name: "guardrail_results"
+    columns:
+      - name: "id"
+        type: "INTEGER PRIMARY KEY AUTOINCREMENT"
+      - name: "run_id"
+        type: "INTEGER NOT NULL"
+      - name: "timestamp"
+        type: "DATETIME DEFAULT CURRENT_TIMESTAMP"
+      - name: "guardrail_type"
+        type: "TEXT"
+      - name: "results"
+        type: "TEXT NOT NULL"
+    foreign_keys:
+      - column: "run_id"
+        references: "agent_runs(id)"
+    checks:
+      - column: "guardrail_type"
+        constraint: "IN ('input', 'output')"
+
+  raw_responses:
+    name: "raw_responses"
+    columns:
+      - name: "id"
+        type: "INTEGER PRIMARY KEY AUTOINCREMENT"
+      - name: "run_id"
+        type: "INTEGER NOT NULL"
+      - name: "timestamp"
+        type: "DATETIME DEFAULT CURRENT_TIMESTAMP"
+      - name: "response"
+        type: "TEXT NOT NULL"
+    foreign_keys:
+      - column: "run_id"
+        references: "agent_runs(id)" 
