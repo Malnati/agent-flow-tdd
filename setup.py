@@ -56,6 +56,8 @@ install_requires = [
     "requests>=2.31.0",
     "tenacity>=8.2.0",
     "cachetools>=5.3.0",
+    "anthropic>=0.18.0",
+    "PyYAML>=6.0.1",
 ]
 
 # Dependências de desenvolvimento
@@ -68,11 +70,17 @@ dev_requires = [
     "flake8>=6.1.0",
     "mypy>=1.5.0",
     "autoflake>=2.2.0",
+    "build>=1.0.3",
+    "twine>=4.0.2",
 ]
+
+# Lê a versão do arquivo VERSION
+with open('VERSION', 'r') as f:
+    version = f.read().strip()
 
 setup(
     name="agent-flow-tdd",
-    version="0.1.0",
+    version=version,
     packages=find_packages(),
     install_requires=install_requires,
     extras_require={

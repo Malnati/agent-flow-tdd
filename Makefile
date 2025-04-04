@@ -1,6 +1,6 @@
 # Makefile para o projeto prompt-tdd
 
-.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs test-e2e
+.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs test-e2e publish
 
 # Configuração do ambiente virtual
 VENV = .venv
@@ -34,6 +34,9 @@ help:
 	@echo "  make db-clean   - Remove banco de dados"
 	@echo "  make db-backup  - Faz backup do banco"
 	@echo "  make logs       - Visualiza logs do banco"
+	@echo ""
+	@echo "Publicação:"
+	@echo "  make publish    - Publica pacote no PyPI"
 	@echo ""
 	@echo "Exemplos:"
 	@echo "  make dev prompt-tdd=\"Cadastro de pessoas\" mode=mcp format=markdown"
@@ -132,6 +135,16 @@ db-backup:
 # Visualização de logs
 logs:
 	python src/scripts/kernel_view_logs.py $(ARGS)
+
+# Publicação no PyPI
+publish:
+	@echo "📦 Preparando pacote para publicação..."
+	@make clean
+	@echo "🔨 Construindo distribuição..."
+	python -m build
+	@echo "🚀 Publicando no PyPI..."
+	python -m twine upload dist/* --username __token__ --password $(PYPI_TOKEN)
+	@echo "✅ Pacote publicado com sucesso!"
 
 # Permite argumentos extras para o comando run
 %:
