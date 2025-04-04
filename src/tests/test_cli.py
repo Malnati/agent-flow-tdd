@@ -224,7 +224,12 @@ def test_mcp_command_error(mock_orchestrator, capsys, monkeypatch, mock_mcp_sdk)
 def test_mcp_command_no_api_key(mock_orchestrator, capsys, monkeypatch, mock_mcp_sdk):
     """Testa o comando MCP sem chave de API."""
     # Setup
-    with patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=True):
+    original_env = dict(os.environ)
+    try:
+        # Preserva outras variáveis de ambiente, apenas remove OPENAI_API_KEY
+        if "OPENAI_API_KEY" in os.environ:
+            del os.environ["OPENAI_API_KEY"]
+            
         # Execução
         with pytest.raises(SystemExit) as exc_info:
             app(["mcp"])
@@ -233,6 +238,10 @@ def test_mcp_command_no_api_key(mock_orchestrator, capsys, monkeypatch, mock_mcp
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "Variáveis de ambiente obrigatórias não definidas" in captured.err
+    finally:
+        # Restaura o ambiente original
+        os.environ.clear()
+        os.environ.update(original_env)
 
 def test_feature_command_address_requirements(mock_model_manager, mock_orchestrator, mock_validate_env, capsys):
     """Testa o comando feature via terminal para requisitos de endereço."""
