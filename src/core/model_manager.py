@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from openai import OpenAI
 from anthropic import Anthropic
 
-from src.core.utils import get_env_var
+from src.core.kernel import get_env_var
 from src.core.logger import get_logger
 
 logger = get_logger(__name__)

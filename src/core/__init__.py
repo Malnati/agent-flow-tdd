@@ -1,5 +1,5 @@
 """
-Utils package - Utilitários e ferramentas do framework
+kernel package - Utilitários e ferramentas do framework
 """
 
 import logging

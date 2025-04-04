@@ -14,7 +14,7 @@ from rich.markdown import Markdown
 from src.app import AgentOrchestrator
 from src.core.model_manager import ModelManager
 from src.core.logger import get_logger, log_execution
-from src.core.utils import get_env_var, get_env_status as get_utils_env_status, validate_env as validate_utils_env
+from src.core.kernel import get_env_var, get_env_status as get_kernel_env_status, validate_env as validate_kernel_env
 
 logger = get_logger(__name__)
 
@@ -28,7 +28,7 @@ def get_env_status() -> Dict[str, Dict[str, bool]]:
     Returns:
         Dict com o status das variáveis.
     """
-    return get_utils_env_status("cli")
+    return get_kernel_env_status("cli")
 
 @log_execution
 def validate_env() -> None:
@@ -39,7 +39,7 @@ def validate_env() -> None:
         ValueError: Se alguma variável obrigatória não estiver definida.
     """
     try:
-        validate_utils_env("cli")
+        validate_kernel_env("cli")
     except ValueError as e:
         logger.error(str(e))
         print(str(e), file=sys.stderr)

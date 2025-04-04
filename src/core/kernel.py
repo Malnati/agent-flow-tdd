@@ -50,7 +50,7 @@ def load_config() -> Dict[str, Any]:
         Dict[str, Any]: Configurações carregadas
     """
     try:
-        config_path = os.path.join(Path(__file__).resolve().parent.parent, 'configs', 'env_config.yaml')
+        config_path = os.path.join(Path(__file__).resolve().parent.parent, 'configs', 'kernel.yaml')
         with open(config_path, 'r') as f:
             return yaml.safe_load(f)
     except Exception as e:

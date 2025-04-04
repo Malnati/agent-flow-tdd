@@ -10,7 +10,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from src.core.db import DatabaseManager
-from src.core.utils import format_timestamp, format_json
+from src.core.kernel import format_timestamp, format_json
 
 console = Console()
 

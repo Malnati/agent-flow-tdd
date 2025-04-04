@@ -21,7 +21,7 @@ class DatabaseManager:
             db_path: Caminho para o banco de dados
         """
         # Carrega configurações
-        config_path = os.path.join("src", "configs", "database_config.yaml")
+        config_path = os.path.join("src", "configs", "database.yaml")
         with open(config_path, "r") as f:
             self.config = yaml.safe_load(f)
         

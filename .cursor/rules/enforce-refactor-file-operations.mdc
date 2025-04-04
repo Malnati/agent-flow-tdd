@@ -30,9 +30,9 @@ Garantir um gerenciamento adequado de arquivos e diretórios durante operações
    - Exemplo:
      ```
      # Ao mover todos os arquivos:
-     src/utils/*.js → src/helpers/*.js
+     src/kernel/*.js → src/helpers/*.js
      
-     # Se src/utils/ estiver vazio após a operação, removê-lo
+     # Se src/kernel/ estiver vazio após a operação, removê-lo
      ```
 
 ## Implementação
