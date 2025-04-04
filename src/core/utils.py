@@ -5,6 +5,7 @@ Módulo com funções comuns usadas em diferentes partes do sistema.
 import os
 import re
 import json
+import yaml
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Any, List, Dict, Tuple, Union
@@ -41,6 +42,24 @@ def setup_paths():
 # Executa a configuração de caminhos
 BASE_DIR, LOG_DIR, CONFIGS_DIR = setup_paths()
 
+def load_config() -> Dict[str, Any]:
+    """
+    Carrega as configurações do arquivo YAML.
+    
+    Returns:
+        Dict[str, Any]: Configurações carregadas
+    """
+    try:
+        config_path = os.path.join(Path(__file__).resolve().parent.parent, 'configs', 'env_config.yaml')
+        with open(config_path, 'r') as f:
+            return yaml.safe_load(f)
+    except Exception as e:
+        logger.error(f"Erro ao carregar configurações: {str(e)}")
+        raise
+
+# Carrega configurações
+CONFIG = load_config()
+
 def get_env_var(name: str, default: Optional[str] = None, args_value: Optional[str] = None) -> Optional[str]:
     """
     Obtém uma variável de ambiente, priorizando args sobre os.environ.
@@ -71,37 +90,9 @@ def get_env_status(context: str = "cli") -> Dict[str, Dict[str, bool]]:
     Returns:
         Dicionário com o status de cada variável.
     """
-    # Variáveis obrigatórias por contexto
-    required_vars = {
-        "cli": {
-            "OPENAI_API_KEY": False
-        },
-        "github": {
-            "GITHUB_TOKEN": False,
-            "GITHUB_OWNER": False,
-            "GITHUB_REPO": False
-        }
-    }
-
-    # Variáveis opcionais por contexto
-    optional_vars = {
-        "cli": {
-            "OPENROUTER_KEY": False,
-            "DEEPSEEK_KEY": False,
-            "GEMINI_KEY": False,
-            "DEFAULT_MODEL": False,
-            "ELEVATION_MODEL": False,
-            "FALLBACK_ENABLED": False,
-            "MODEL_TIMEOUT": False,
-            "MAX_RETRIES": False,
-            "CACHE_ENABLED": False,
-            "CACHE_TTL": False,
-            "CACHE_DIR": False,
-            "LOG_LEVEL": False,
-            "LOG_FILE": False
-        },
-        "github": {}
-    }
+    # Obtém variáveis das configurações
+    required_vars = CONFIG["required_vars"]
+    optional_vars = CONFIG["optional_vars"]
 
     # Seleciona as variáveis baseado no contexto
     if context == "all":
@@ -155,17 +146,11 @@ def mask_sensitive_data(data: Union[str, Dict[str, Any], List[Any]]) -> Union[st
         Dados com informações sensíveis mascaradas.
     """
     if isinstance(data, str):
-        # Mascara tokens e chaves de API
-        patterns = [
-            (r'["\']?[a-zA-Z0-9-_]{20,}["\']?', '***API_KEY***'),  # API keys
-            (r'Bearer\s+[a-zA-Z0-9-_.]+', 'Bearer ***TOKEN***'),  # Bearer tokens
-            (r'github_pat_[a-zA-Z0-9_]+', '***GITHUB_PAT***'),  # GitHub PATs
-            (r'ghp_[a-zA-Z0-9]+', '***GITHUB_TOKEN***'),  # GitHub tokens
-            (r'sk-[a-zA-Z0-9]+', '***OPENAI_API_KEY***'),  # OpenAI keys
-        ]
+        # Mascara tokens e chaves de API usando padrões do config
+        patterns = CONFIG["sensitive_data_patterns"]
         masked = data
-        for pattern, replacement in patterns:
-            masked = re.sub(pattern, replacement, masked)
+        for pattern_config in patterns:
+            masked = re.sub(pattern_config["pattern"], pattern_config["replacement"], masked)
         return masked
     elif isinstance(data, dict):
         return {k: mask_sensitive_data(v) for k, v in data.items()}
@@ -254,8 +239,9 @@ class TokenValidator:
                 raise ValueError(f"Token {token_name} é obrigatório mas não foi encontrado nas variáveis de ambiente")
             return False
             
-        # Verificação básica de estrutura mínima (pelo menos 10 caracteres, sem espaços)
-        if len(token) < 10 or " " in token:
+        # Verificação básica de estrutura mínima usando configuração
+        min_length = CONFIG["token_validation"]["min_length"]
+        if len(token) < min_length or " " in token:
             if required:
                 raise ValueError(f"Token {token_name} parece inválido (formato incorreto)")
             return False
@@ -281,10 +267,11 @@ class TokenValidator:
         if token is None:
             token = os.environ.get("OPENAI_API_KEY", "")
             
-        # Verificação específica para tokens da OpenAI (geralmente começam com "sk-")
-        if token and not token.startswith("sk-"):
+        # Verificação específica para tokens da OpenAI usando configuração
+        openai_prefix = CONFIG["token_validation"]["openai_prefix"]
+        if token and not token.startswith(openai_prefix):
             if required:
-                raise ValueError("Token da OpenAI inválido (deve começar com 'sk-')")
+                raise ValueError(f"Token da OpenAI inválido (deve começar com '{openai_prefix}')")
             return False
             
         return TokenValidator.validate_token(token, "OpenAI", required)
@@ -341,48 +328,6 @@ class TokenValidator:
             
         return True 
 
-
-COMMIT_TYPES = {
-    'feat': 'minor',  # Novas funcionalidades
-    'fix': 'patch',   # Correções de bugs
-    'docs': 'patch',  # Documentação
-    'style': 'patch', # Formatação
-    'refactor': 'patch', # Refatoração
-    'test': 'patch',  # Testes
-    'chore': 'patch', # Manutenção
-    'perf': 'patch',  # Performance
-    'ci': 'patch',    # CI/CD
-    'build': 'patch', # Build
-    'breaking': 'major' # Breaking changes
-}
-
-BREAKING_PATTERNS = [
-    r'breaking change',
-    r'breaking-change',
-    r'incompatible',
-    r'não compatível',
-    r'breaking',
-    r'major update'
-]
-
-FEATURE_PATTERNS = [
-    r'add(?:ed|ing)?\s+(?:new\s+)?(?:feature|functionality)',
-    r'implement(?:ed|ing)?',
-    r'criado?\s+(?:novo|nova)',
-    r'adiciona(?:do|ndo)?',
-    r'nova\s+funcionalidade',
-    r'novo\s+recurso'
-]
-
-FIX_PATTERNS = [
-    r'fix(?:ed|ing)?',
-    r'bug\s*fix',
-    r'resolve[sd]?',
-    r'corrig(?:e|ido|indo)',
-    r'conserta(?:do|ndo)?',
-    r'correc[aã]o'
-]
-
 class VersionAnalyzer:
     """
     Analisador de versões para controle semântico.
@@ -390,6 +335,10 @@ class VersionAnalyzer:
 
     def __init__(self):
         self.logger = get_logger(__name__)
+        self.commit_types = CONFIG["commit_types"]
+        self.breaking_patterns = CONFIG["patterns"]["breaking"]
+        self.feature_patterns = CONFIG["patterns"]["feature"]
+        self.fix_patterns = CONFIG["patterns"]["fix"]
 
     @log_execution
     def analyze_commit_message(self, message: str) -> str:
@@ -405,17 +354,17 @@ class VersionAnalyzer:
         message = message.lower()
         
         # Verifica breaking changes
-        for pattern in BREAKING_PATTERNS:
+        for pattern in self.breaking_patterns:
             if re.search(pattern, message, re.IGNORECASE):
                 return 'major'
         
         # Verifica novas funcionalidades
-        for pattern in FEATURE_PATTERNS:
+        for pattern in self.feature_patterns:
             if re.search(pattern, message, re.IGNORECASE):
                 return 'minor'
         
         # Verifica correções
-        for pattern in FIX_PATTERNS:
+        for pattern in self.fix_patterns:
             if re.search(pattern, message, re.IGNORECASE):
                 return 'patch'
         

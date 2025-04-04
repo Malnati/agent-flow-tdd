@@ -1,0 +1,78 @@
+# Configurações de variáveis de ambiente por contexto
+
+required_vars:
+  cli:
+    OPENAI_API_KEY: false
+  github:
+    GITHUB_TOKEN: false
+    GITHUB_OWNER: false
+    GITHUB_REPO: false
+
+optional_vars:
+  cli:
+    OPENROUTER_KEY: false
+    DEEPSEEK_KEY: false
+    GEMINI_KEY: false
+    DEFAULT_MODEL: false
+    ELEVATION_MODEL: false
+    FALLBACK_ENABLED: false
+    MODEL_TIMEOUT: false
+    MAX_RETRIES: false
+    CACHE_ENABLED: false
+    CACHE_TTL: false
+    CACHE_DIR: false
+    LOG_LEVEL: false
+    LOG_FILE: false
+  github: {}
+
+token_validation:
+  min_length: 10
+  openai_prefix: sk-
+
+commit_types:
+  feat: minor
+  fix: patch
+  docs: patch
+  style: patch
+  refactor: patch
+  test: patch
+  chore: patch
+  perf: patch
+  ci: patch
+  build: patch
+  breaking: major
+
+patterns:
+  breaking:
+    - breaking change
+    - breaking-change
+    - incompatible
+    - nao compativel
+    - breaking
+    - major update
+  feature:
+    - add feature
+    - implement
+    - criado novo
+    - adicionado
+    - nova funcionalidade
+    - novo recurso
+  fix:
+    - fix
+    - bug fix
+    - resolve
+    - corrigido
+    - consertado
+    - correcao
+
+sensitive_data_patterns:
+  - pattern: '[a-zA-Z0-9-_]{20,}'
+    replacement: '***API_KEY***'
+  - pattern: 'Bearer [a-zA-Z0-9-_.]+' 
+    replacement: 'Bearer ***TOKEN***'
+  - pattern: 'github_pat_[a-zA-Z0-9_]+'
+    replacement: '***GITHUB_PAT***'
+  - pattern: 'ghp_[a-zA-Z0-9]+'
+    replacement: '***GITHUB_TOKEN***'
+  - pattern: 'sk-[a-zA-Z0-9]+'
+    replacement: '***OPENAI_API_KEY***' 
