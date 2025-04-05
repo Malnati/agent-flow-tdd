@@ -4,6 +4,7 @@ Testes end-to-end para o Agent Flow TDD.
 import os
 import json
 import subprocess
+import shutil
 from typing import Dict, Any
 import pytest
 from unittest.mock import patch
@@ -13,7 +14,35 @@ from src.core.logger import setup_logger
 
 logger = setup_logger(__name__)
 
-def run_make_command(prompt: str, mode: str = "feature", format: str = "markdown") -> Dict[str, Any]:
+@pytest.fixture(scope="session")
+def test_env(tmp_path_factory):
+    """Configura o ambiente de teste."""
+    # Cria diretório temporário
+    test_dir = tmp_path_factory.mktemp("test_env")
+    
+    # Copia Makefile
+    shutil.copy("Makefile", test_dir / "Makefile")
+    
+    # Cria estrutura de diretórios
+    os.makedirs(test_dir / "src" / "configs", exist_ok=True)
+    os.makedirs(test_dir / "src" / "tests", exist_ok=True)
+    os.makedirs(test_dir / "logs", exist_ok=True)
+    
+    # Cria arquivo de configuração do banco
+    db_config = {
+        "directories": {"logs": "logs"},
+        "database": {
+            "default_path": "logs/agent_logs.db",
+            "history_limit": 10
+        }
+    }
+    with open(test_dir / "src" / "configs" / "database.yaml", "w") as f:
+        import yaml
+        yaml.dump(db_config, f)
+    
+    return test_dir
+
+def run_make_command(prompt: str, mode: str = "feature", format: str = "markdown", test_env = None) -> Dict[str, Any]:
     """
     Executa o comando make dev e retorna o resultado.
     
@@ -21,11 +50,15 @@ def run_make_command(prompt: str, mode: str = "feature", format: str = "markdown
         prompt: Prompt para o TDD
         mode: Modo de execução
         format: Formato de saída
+        test_env: Diretório de teste
         
     Returns:
         Dicionário com resultado da execução
     """
     try:
+        if test_env:
+            os.chdir(test_env)
+            
         # Executa o comando make
         cmd = f'PYTHONPATH=. make dev prompt-tdd="{prompt}" mode={mode} format={format}'
         result = subprocess.run(
@@ -174,11 +207,10 @@ def test_e2e_address_registration_logging():
         assert isinstance(raw_response["response"], str)  # Deve ser um JSON serializado
 
 @pytest.mark.e2e
-def test_e2e_install_command(tmp_path):
+def test_e2e_install_command(test_env):
     """Testa o comando make install."""
     # Configura ambiente de teste
-    os.chdir(tmp_path)
-    os.makedirs(".venv", exist_ok=True)
+    os.chdir(test_env)
     
     # Executa o comando
     result = subprocess.run(
@@ -186,7 +218,7 @@ def test_e2e_install_command(tmp_path):
         shell=True,
         capture_output=True,
         text=True,
-        env={**os.environ, "PYTHONPATH": "."}
+        env={**os.environ, "PYTHONPATH": str(test_env)}
     )
     
     # Verificações
@@ -195,10 +227,10 @@ def test_e2e_install_command(tmp_path):
     assert "✅ Instalação concluída!" in result.stdout
 
 @pytest.mark.e2e
-def test_e2e_clean_command(tmp_path):
+def test_e2e_clean_command(test_env):
     """Testa o comando make clean."""
     # Configura ambiente de teste
-    os.chdir(tmp_path)
+    os.chdir(test_env)
     
     # Cria alguns arquivos e diretórios para limpar
     os.makedirs("build", exist_ok=True)
@@ -222,13 +254,14 @@ def test_e2e_clean_command(tmp_path):
     assert not os.path.exists("__pycache__")
 
 @pytest.mark.e2e
-def test_e2e_dev_command():
+def test_e2e_dev_command(test_env):
     """Testa o comando make dev."""
     # Executa o comando
     result = run_make_command(
         prompt="Teste de desenvolvimento",
         mode="feature",
-        format="markdown"
+        format="markdown",
+        test_env=test_env
     )
     
     # Verificações
@@ -240,15 +273,18 @@ def test_e2e_dev_command():
         assert result["db_history"] is not None
 
 @pytest.mark.e2e
-def test_e2e_run_command():
+def test_e2e_run_command(test_env):
     """Testa o comando make run."""
+    # Configura ambiente de teste
+    os.chdir(test_env)
+    
     # Executa o comando
     result = subprocess.run(
         'make run prompt-tdd="Teste de execução" mode=feature format=markdown',
         shell=True,
         capture_output=True,
         text=True,
-        env={**os.environ, "PYTHONPATH": "."}
+        env={**os.environ, "PYTHONPATH": str(test_env)}
     )
     
     # Verificações
@@ -256,8 +292,11 @@ def test_e2e_run_command():
     assert "🖥️ Executando CLI..." in result.stdout
 
 @pytest.mark.e2e
-def test_e2e_publish_command():
+def test_e2e_publish_command(test_env):
     """Testa o comando make publish."""
+    # Configura ambiente de teste
+    os.chdir(test_env)
+    
     # Mock do token PyPI
     with patch.dict(os.environ, {"PYPI_TOKEN": "test-token"}):
         # Executa o comando
@@ -266,7 +305,7 @@ def test_e2e_publish_command():
             shell=True,
             capture_output=True,
             text=True,
-            env={**os.environ, "PYTHONPATH": "."}
+            env={**os.environ, "PYTHONPATH": str(test_env)}
         )
         
         # Verificações
@@ -278,8 +317,11 @@ def test_e2e_publish_command():
             assert "❌ Erro:" in result.stderr
 
 @pytest.mark.e2e
-def test_e2e_publish_command_no_token():
+def test_e2e_publish_command_no_token(test_env):
     """Testa o comando make publish sem token PyPI."""
+    # Configura ambiente de teste
+    os.chdir(test_env)
+    
     # Remove o token PyPI do ambiente
     with patch.dict(os.environ, {}, clear=True):
         # Executa o comando
@@ -295,15 +337,18 @@ def test_e2e_publish_command_no_token():
         assert "❌ Erro: Variável PYPI_TOKEN não definida" in result.stdout
 
 @pytest.mark.e2e
-def test_e2e_coverage_command():
+def test_e2e_coverage_command(test_env):
     """Testa o comando make coverage."""
+    # Configura ambiente de teste
+    os.chdir(test_env)
+    
     # Executa o comando
     result = subprocess.run(
         "pytest --cov=src tests/",
         shell=True,
         capture_output=True,
         text=True,
-        env={**os.environ, "PYTHONPATH": "."}
+        env={**os.environ, "PYTHONPATH": str(test_env)}
     )
     
     # Verificações
@@ -326,8 +371,11 @@ def test_e2e_lint_command():
     assert result.returncode in [0, 1]
 
 @pytest.mark.e2e
-def test_e2e_format_command():
+def test_e2e_format_command(test_env):
     """Testa o comando make format."""
+    # Configura ambiente de teste
+    os.chdir(test_env)
+    
     # Executa o comando
     result = subprocess.run(
         "black src/ --line-length 120",
@@ -356,8 +404,11 @@ def test_e2e_autoflake_command():
     assert result.returncode == 0 
 
 @pytest.mark.e2e
-def test_e2e_help_command():
+def test_e2e_help_command(test_env):
     """Testa o comando make help."""
+    # Configura ambiente de teste
+    os.chdir(test_env)
+    
     # Executa o comando
     result = subprocess.run(
         "make help",

@@ -2,10 +2,10 @@
 
 # Diretórios e arquivos
 directories:
-  logs: "logs"
+  logs: logs
   
 database:
-  default_path: "logs/agent_logs.db"
+  default_path: logs/agent_logs.db
   history_limit: 10
 
 # Configurações de schema
