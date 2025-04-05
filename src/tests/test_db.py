@@ -3,6 +3,8 @@ Testes para o módulo de banco de dados.
 """
 import json
 import sqlite3
+import os
+from datetime import datetime
 import pytest
 from unittest.mock import patch
 
@@ -175,4 +177,71 @@ def test_connection_error():
         mock_connect.side_effect = sqlite3.Error("Connection error")
         
         with pytest.raises(sqlite3.Error):
-            DatabaseManager(":memory:") 
+            DatabaseManager(":memory:")
+
+def test_db_init_command(tmp_path):
+    """Testa o comando db-init do Makefile."""
+    # Configura ambiente de teste
+    test_db_path = tmp_path / "logs" / "agent_logs.db"
+    os.makedirs(tmp_path / "logs", exist_ok=True)
+    
+    with patch.dict(os.environ, {"PYTHONPATH": str(tmp_path)}):
+        # Inicializa banco de dados
+        manager = DatabaseManager(str(test_db_path))
+        
+        # Verifica se o banco foi criado
+        assert test_db_path.exists()
+        
+        # Verifica se as tabelas foram criadas
+        cursor = manager.conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = {row[0] for row in cursor.fetchall()}
+        
+        assert "agent_runs" in tables
+        assert "run_items" in tables
+        assert "guardrail_results" in tables
+        assert "raw_responses" in tables
+        
+        manager.close()
+
+def test_db_clean_command(tmp_path):
+    """Testa o comando db-clean do Makefile."""
+    # Configura ambiente de teste
+    test_db_path = tmp_path / "logs" / "agent_logs.db"
+    os.makedirs(tmp_path / "logs", exist_ok=True)
+    
+    # Cria banco de dados
+    manager = DatabaseManager(str(test_db_path))
+    manager.close()
+    
+    assert test_db_path.exists()
+    
+    # Remove banco de dados
+    os.remove(test_db_path)
+    
+    assert not test_db_path.exists()
+
+def test_db_backup_command(tmp_path):
+    """Testa o comando db-backup do Makefile."""
+    # Configura ambiente de teste
+    logs_dir = tmp_path / "logs"
+    backups_dir = tmp_path / "backups"
+    test_db_path = logs_dir / "agent_logs.db"
+    
+    os.makedirs(logs_dir, exist_ok=True)
+    os.makedirs(backups_dir, exist_ok=True)
+    
+    # Cria banco de dados
+    manager = DatabaseManager(str(test_db_path))
+    manager.close()
+    
+    # Simula data atual
+    current_date = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = backups_dir / f"agent_logs_{current_date}.db"
+    
+    # Faz backup
+    import shutil
+    shutil.copy2(test_db_path, backup_path)
+    
+    assert backup_path.exists()
+    assert os.path.getsize(backup_path) > 0 

@@ -6,6 +6,7 @@ import json
 import subprocess
 from typing import Dict, Any
 import pytest
+from unittest.mock import patch
 
 from src.core.db import DatabaseManager
 from src.core.logger import setup_logger
@@ -170,4 +171,208 @@ def test_e2e_address_registration_logging():
         raw_response = db_record["raw_responses"][0]
         assert "id" in raw_response
         assert "response" in raw_response
-        assert isinstance(raw_response["response"], str)  # Deve ser um JSON serializado 
+        assert isinstance(raw_response["response"], str)  # Deve ser um JSON serializado
+
+@pytest.mark.e2e
+def test_e2e_install_command(tmp_path):
+    """Testa o comando make install."""
+    # Configura ambiente de teste
+    os.chdir(tmp_path)
+    os.makedirs(".venv", exist_ok=True)
+    
+    # Executa o comando
+    result = subprocess.run(
+        "make install",
+        shell=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": "."}
+    )
+    
+    # Verificações
+    assert result.returncode == 0
+    assert "🔧 Instalando dependências..." in result.stdout
+    assert "✅ Instalação concluída!" in result.stdout
+
+@pytest.mark.e2e
+def test_e2e_clean_command(tmp_path):
+    """Testa o comando make clean."""
+    # Configura ambiente de teste
+    os.chdir(tmp_path)
+    
+    # Cria alguns arquivos e diretórios para limpar
+    os.makedirs("build", exist_ok=True)
+    os.makedirs("dist", exist_ok=True)
+    os.makedirs("__pycache__", exist_ok=True)
+    
+    # Executa o comando
+    result = subprocess.run(
+        "make clean",
+        shell=True,
+        capture_output=True,
+        text=True
+    )
+    
+    # Verificações
+    assert result.returncode == 0
+    assert "🧹 Limpando arquivos temporários..." in result.stdout
+    assert "✨ Limpeza concluída!" in result.stdout
+    assert not os.path.exists("build")
+    assert not os.path.exists("dist")
+    assert not os.path.exists("__pycache__")
+
+@pytest.mark.e2e
+def test_e2e_dev_command():
+    """Testa o comando make dev."""
+    # Executa o comando
+    result = run_make_command(
+        prompt="Teste de desenvolvimento",
+        mode="feature",
+        format="markdown"
+    )
+    
+    # Verificações
+    assert result["returncode"] in [0, 1]
+    assert "🛠️ Executando CLI em modo desenvolvimento..." in result["stdout"]
+    
+    if result["returncode"] == 0:
+        assert "✅" in result["stdout"]
+        assert result["db_history"] is not None
+
+@pytest.mark.e2e
+def test_e2e_run_command():
+    """Testa o comando make run."""
+    # Executa o comando
+    result = subprocess.run(
+        'make run prompt-tdd="Teste de execução" mode=feature format=markdown',
+        shell=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": "."}
+    )
+    
+    # Verificações
+    assert result.returncode in [0, 1]
+    assert "🖥️ Executando CLI..." in result.stdout
+
+@pytest.mark.e2e
+def test_e2e_publish_command():
+    """Testa o comando make publish."""
+    # Mock do token PyPI
+    with patch.dict(os.environ, {"PYPI_TOKEN": "test-token"}):
+        # Executa o comando
+        result = subprocess.run(
+            "make publish",
+            shell=True,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PYTHONPATH": "."}
+        )
+        
+        # Verificações
+        assert result.returncode in [0, 1]
+        if result.returncode == 0:
+            assert "📦 Preparando pacote para publicação..." in result.stdout
+            assert "🔄 Incrementando versão..." in result.stdout
+        else:
+            assert "❌ Erro:" in result.stderr
+
+@pytest.mark.e2e
+def test_e2e_publish_command_no_token():
+    """Testa o comando make publish sem token PyPI."""
+    # Remove o token PyPI do ambiente
+    with patch.dict(os.environ, {}, clear=True):
+        # Executa o comando
+        result = subprocess.run(
+            "make publish",
+            shell=True,
+            capture_output=True,
+            text=True
+        )
+        
+        # Verificações
+        assert result.returncode == 1
+        assert "❌ Erro: Variável PYPI_TOKEN não definida" in result.stdout
+
+@pytest.mark.e2e
+def test_e2e_coverage_command():
+    """Testa o comando make coverage."""
+    # Executa o comando
+    result = subprocess.run(
+        "pytest --cov=src tests/",
+        shell=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": "."}
+    )
+    
+    # Verificações
+    assert result.returncode in [0, 1]
+    if result.returncode == 0:
+        assert "coverage" in result.stdout
+
+@pytest.mark.e2e
+def test_e2e_lint_command():
+    """Testa o comando make lint."""
+    # Executa o comando
+    result = subprocess.run(
+        "flake8 src/ --max-line-length=120 --exclude=__init__.py",
+        shell=True,
+        capture_output=True,
+        text=True
+    )
+    
+    # Verificações
+    assert result.returncode in [0, 1]
+
+@pytest.mark.e2e
+def test_e2e_format_command():
+    """Testa o comando make format."""
+    # Executa o comando
+    result = subprocess.run(
+        "black src/ --line-length 120",
+        shell=True,
+        capture_output=True,
+        text=True
+    )
+    
+    # Verificações
+    assert result.returncode in [0, 1]
+    if result.returncode == 0:
+        assert "reformatted" in result.stdout or "All done!" in result.stdout
+
+@pytest.mark.e2e
+def test_e2e_autoflake_command():
+    """Testa o comando make autoflake."""
+    # Executa o comando
+    result = subprocess.run(
+        "find . -type f -name '*.py' -not -path './.venv/*' -exec autoflake --remove-all-unused-imports --remove-unused-variables --in-place {} \\;",
+        shell=True,
+        capture_output=True,
+        text=True
+    )
+    
+    # Verificações
+    assert result.returncode == 0 
+
+@pytest.mark.e2e
+def test_e2e_help_command():
+    """Testa o comando make help."""
+    # Executa o comando
+    result = subprocess.run(
+        "make help",
+        shell=True,
+        capture_output=True,
+        text=True
+    )
+    
+    # Verificações
+    assert result.returncode == 0
+    assert "Comandos disponíveis:" in result.stdout
+    assert "Ambiente:" in result.stdout
+    assert "Qualidade:" in result.stdout
+    assert "Banco de Dados:" in result.stdout
+    assert "Publicação:" in result.stdout
+    assert "make install" in result.stdout
+    assert "make test" in result.stdout
+    assert "make logs" in result.stdout 

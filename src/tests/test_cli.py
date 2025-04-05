@@ -3,11 +3,13 @@ Testes para o módulo CLI.
 """
 import os
 from unittest.mock import patch, mock_open, Mock, MagicMock
+import sys
 
 import pytest
 
 from src.cli import app
 from src.app import AgentResult
+from src.scripts.utils_view_logs import main as view_logs_main
 
 @pytest.fixture
 def mock_env():
@@ -318,4 +320,41 @@ def test_feature_command_with_cache(mock_get_orchestrator, mock_validate_env, ca
     
     # Verifica saída
     captured = capsys.readouterr()
-    assert cache_content in captured.out 
+    assert cache_content in captured.out
+
+def test_view_logs_command(capsys, mock_db_manager):
+    """Testa o comando de visualização de logs."""
+    # Mock do sys.argv para simular argumentos da linha de comando
+    with patch.object(sys, 'argv', ['utils_view_logs.py', '--limit', '5']):
+        # Executa a função principal do visualizador de logs
+        view_logs_main()
+        
+    # Verifica se a saída contém elementos esperados
+    captured = capsys.readouterr()
+    assert "Histórico de Execuções" in captured.out
+    assert "Timestamp" in captured.out
+    assert "Session" in captured.out
+    assert "Agente" in captured.out
+
+def test_view_logs_with_session_filter(capsys, mock_db_manager):
+    """Testa o comando de logs com filtro de sessão."""
+    # Mock do sys.argv para simular argumentos da linha de comando
+    with patch.object(sys, 'argv', ['utils_view_logs.py', '--session', 'test123']):
+        # Executa a função principal do visualizador de logs
+        view_logs_main()
+        
+    # Verifica se a saída contém elementos esperados
+    captured = capsys.readouterr()
+    assert "Histórico de Execuções" in captured.out
+
+def test_view_logs_with_id_details(capsys, mock_db_manager):
+    """Testa o comando de logs mostrando detalhes de uma execução específica."""
+    # Mock do sys.argv para simular argumentos da linha de comando
+    with patch.object(sys, 'argv', ['utils_view_logs.py', '--id', '1']):
+        # Executa a função principal do visualizador de logs
+        view_logs_main()
+        
+    # Verifica se a saída contém elementos esperados
+    captured = capsys.readouterr()
+    assert "Execução" in captured.out
+    assert "Input:" in captured.out 

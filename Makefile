@@ -134,7 +134,7 @@ db-backup:
 
 # Visualização de logs
 logs:
-	python src/scripts/kernel_view_logs.py $(ARGS)
+	$(PYTHON) src/scripts/utils_view_logs.py $(ARGS)
 
 # Publicação no PyPI
 publish:
