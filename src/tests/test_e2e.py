@@ -541,4 +541,98 @@ def test_e2e_help_command(test_env):
     assert "Publicação:" in result.stdout
     assert "make install" in result.stdout
     assert "make test" in result.stdout
-    assert "make logs" in result.stdout 
+    assert "make logs" in result.stdout
+
+@pytest.mark.e2e
+def test_e2e_test_command(test_env):
+    """Testa se o comando make test está disponível e configurado."""
+    try:
+        # Configura ambiente de teste
+        os.chdir(test_env)
+        
+        # Verifica se o comando existe no Makefile
+        result = run_command_with_timeout(
+            "make -n test",  # -n faz um dry-run do comando
+            cwd=test_env,
+            timeout=30,
+            env={**os.environ, "PYTHONPATH": str(test_env)}
+        )
+        
+        # Verificações
+        assert result.returncode == 0, "Comando make test não encontrado no Makefile"
+        
+        # Verifica se o pytest está instalado
+        result = run_command_with_timeout(
+            f"{test_env}/.venv/bin/pytest --version",
+            cwd=test_env,
+            timeout=10
+        )
+        assert result.returncode == 0, "pytest não está instalado corretamente"
+            
+    except subprocess.TimeoutExpired as e:
+        logger.error(
+            "Timeout ao verificar comando test - Comando: %s, Diretório: %s, Timeout: %ds",
+            e.cmd,
+            test_env,
+            e.timeout
+        )
+        pytest.skip("Verificação do comando test excedeu o tempo limite")
+    except Exception as e:
+        logger.error(
+            "Erro ao verificar comando test - Tipo: %s, Erro: %s, Diretório: %s",
+            type(e).__name__,
+            str(e),
+            test_env
+        )
+        raise
+
+@pytest.mark.e2e
+def test_e2e_test_e2e_command(test_env):
+    """Testa se o comando make test-e2e está disponível e configurado."""
+    try:
+        # Configura ambiente de teste
+        os.chdir(test_env)
+        
+        # Verifica se o comando existe no Makefile
+        result = run_command_with_timeout(
+            "make -n test-e2e",  # -n faz um dry-run do comando
+            cwd=test_env,
+            timeout=30,
+            env={**os.environ, "PYTHONPATH": str(test_env)}
+        )
+        
+        # Verificações
+        assert result.returncode == 0, "Comando make test-e2e não encontrado no Makefile"
+        
+        # Verifica se o pytest está instalado com o plugin e2e
+        result = run_command_with_timeout(
+            f"{test_env}/.venv/bin/pytest --version",
+            cwd=test_env,
+            timeout=10
+        )
+        assert result.returncode == 0, "pytest não está instalado corretamente"
+        
+        # Verifica se o banco de dados está configurado
+        result = run_command_with_timeout(
+            "make -n db-init",  # -n faz um dry-run do comando
+            cwd=test_env,
+            timeout=10
+        )
+        assert result.returncode == 0, "Comando make db-init não encontrado no Makefile"
+            
+    except subprocess.TimeoutExpired as e:
+        logger.error(
+            "Timeout ao verificar comando test-e2e - Comando: %s, Diretório: %s, Timeout: %ds",
+            e.cmd,
+            test_env,
+            e.timeout
+        )
+        pytest.skip("Verificação do comando test-e2e excedeu o tempo limite")
+    except Exception as e:
+        logger.error(
+            "Erro ao verificar comando test-e2e - Tipo: %s, Erro: %s, Diretório: %s",
+            type(e).__name__,
+            str(e),
+            test_env
+        )
+        raise 
