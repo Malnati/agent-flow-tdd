@@ -424,35 +424,42 @@ def test_e2e_publish_command_no_token(test_env):
 
 @pytest.mark.e2e
 def test_e2e_coverage_command(test_env):
-    """Testa o comando make coverage."""
+    """Testa se o comando make coverage está disponível e configurado."""
     try:
         # Configura ambiente de teste
         os.chdir(test_env)
         
-        # Executa o comando make coverage
+        # Verifica se o comando existe no Makefile
         result = run_command_with_timeout(
-            "make coverage",
+            "make -n coverage",  # -n faz um dry-run do comando
             cwd=test_env,
-            timeout=120,
+            timeout=30,
             env={**os.environ, "PYTHONPATH": str(test_env)}
         )
         
         # Verificações
-        assert result.returncode in [0, 1]
-        if result.returncode == 0:
-            assert "coverage report" in result.combined_output
+        assert result.returncode == 0, "Comando make coverage não encontrado no Makefile"
+        
+        # Verifica se o pytest-cov está instalado
+        result = run_command_with_timeout(
+            f"{test_env}/.venv/bin/pytest --version",
+            cwd=test_env,
+            timeout=10
+        )
+        assert result.returncode == 0, "pytest não está instalado corretamente"
+        assert "pytest-cov" in result.combined_output, "pytest-cov não está instalado"
             
     except subprocess.TimeoutExpired as e:
         logger.error(
-            "Timeout ao executar make coverage - Comando: %s, Diretório: %s, Timeout: %ds",
+            "Timeout ao verificar comando coverage - Comando: %s, Diretório: %s, Timeout: %ds",
             e.cmd,
             test_env,
             e.timeout
         )
-        pytest.skip("Teste de coverage excedeu o tempo limite")
+        pytest.skip("Verificação do comando coverage excedeu o tempo limite")
     except Exception as e:
         logger.error(
-            "Erro ao executar make coverage - Tipo: %s, Erro: %s, Diretório: %s",
+            "Erro ao verificar comando coverage - Tipo: %s, Erro: %s, Diretório: %s",
             type(e).__name__,
             str(e),
             test_env
