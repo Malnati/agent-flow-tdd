@@ -429,23 +429,22 @@ def test_e2e_coverage_command(test_env):
         # Configura ambiente de teste
         os.chdir(test_env)
         
-        # Executa o comando
-        python_path = str(test_env / ".venv" / "bin" / "python")
+        # Executa o comando make coverage
         result = run_command_with_timeout(
-            f"{python_path} -m pytest --cov=src src/tests/",
+            "make coverage",
             cwd=test_env,
-            timeout=120,  # Aumenta o timeout para 120s
+            timeout=120,
             env={**os.environ, "PYTHONPATH": str(test_env)}
         )
         
         # Verificações
         assert result.returncode in [0, 1]
         if result.returncode == 0:
-            assert "coverage" in result.combined_output
+            assert "coverage report" in result.combined_output
             
     except subprocess.TimeoutExpired as e:
         logger.error(
-            "Timeout ao executar teste de coverage - Comando: %s, Diretório: %s, Timeout: %ds",
+            "Timeout ao executar make coverage - Comando: %s, Diretório: %s, Timeout: %ds",
             e.cmd,
             test_env,
             e.timeout
@@ -453,7 +452,7 @@ def test_e2e_coverage_command(test_env):
         pytest.skip("Teste de coverage excedeu o tempo limite")
     except Exception as e:
         logger.error(
-            "Erro ao executar teste de coverage - Tipo: %s, Erro: %s, Diretório: %s",
+            "Erro ao executar make coverage - Tipo: %s, Erro: %s, Diretório: %s",
             type(e).__name__,
             str(e),
             test_env
@@ -466,10 +465,9 @@ def test_e2e_lint_command(test_env):
     # Configura ambiente de teste
     os.chdir(test_env)
     
-    # Executa o comando
-    python_path = str(test_env / ".venv" / "bin" / "python")
+    # Executa o comando make lint
     result = run_command_with_timeout(
-        f"{python_path} -m flake8 src/ --max-line-length=120 --exclude=__init__.py,src/tests/*",
+        "make lint",
         cwd=test_env,
         timeout=30,
         env={**os.environ, "PYTHONPATH": str(test_env)}
@@ -484,10 +482,9 @@ def test_e2e_format_command(test_env):
     # Configura ambiente de teste
     os.chdir(test_env)
     
-    # Executa o comando
-    python_path = str(test_env / ".venv" / "bin" / "python")
+    # Executa o comando make format
     result = run_command_with_timeout(
-        f"{python_path} -m black src/ --line-length 120 --exclude src/tests/",
+        "make format",
         cwd=test_env,
         timeout=30,
         env={**os.environ, "PYTHONPATH": str(test_env)}
@@ -504,10 +501,9 @@ def test_e2e_autoflake_command(test_env):
     # Configura ambiente de teste
     os.chdir(test_env)
     
-    # Executa o comando
-    python_path = str(test_env / ".venv" / "bin" / "python")
+    # Executa o comando make autoflake
     result = run_command_with_timeout(
-        f"{python_path} -m autoflake --remove-all-unused-imports --remove-unused-variables --in-place --recursive src/ --exclude src/tests/",
+        "make autoflake",
         cwd=test_env,
         timeout=30,
         env={**os.environ, "PYTHONPATH": str(test_env)}
