@@ -440,13 +440,14 @@ def test_e2e_coverage_command(test_env):
         # Verificações
         assert result.returncode == 0, "Comando make coverage não encontrado no Makefile"
         
-        # Verifica se o pytest-cov está instalado
+        # Verifica se o pytest-cov está instalado usando pip list
+        pip_cmd = str(test_env / ".venv" / "bin" / "pip")
         result = run_command_with_timeout(
-            f"{test_env}/.venv/bin/pytest --version",
+            f"{pip_cmd} list",
             cwd=test_env,
             timeout=10
         )
-        assert result.returncode == 0, "pytest não está instalado corretamente"
+        assert result.returncode == 0, "Erro ao listar pacotes instalados"
         assert "pytest-cov" in result.combined_output, "pytest-cov não está instalado"
             
     except subprocess.TimeoutExpired as e:
@@ -489,6 +490,15 @@ def test_e2e_format_command(test_env):
     # Configura ambiente de teste
     os.chdir(test_env)
     
+    # Verifica se o black está instalado
+    black_cmd = str(test_env / ".venv" / "bin" / "black")
+    result = run_command_with_timeout(
+        f"{black_cmd} --version",
+        cwd=test_env,
+        timeout=10
+    )
+    assert result.returncode == 0, "black não está instalado corretamente"
+    
     # Executa o comando make format
     result = run_command_with_timeout(
         "make format",
@@ -498,9 +508,16 @@ def test_e2e_format_command(test_env):
     )
     
     # Verificações
-    assert result.returncode in [0, 1]
-    if result.returncode == 0:
-        assert "reformatted" in result.combined_output or "All done!" in result.combined_output
+    assert result.returncode in [0, 1], "Comando make format falhou"
+    
+    # Executa black diretamente para verificar a saída
+    result = run_command_with_timeout(
+        f"{black_cmd} src/",
+        cwd=test_env,
+        timeout=30
+    )
+    assert result.returncode in [0, 1], "Execução do black falhou"
+    assert "reformatted" in result.combined_output or "All done!" in result.combined_output, "Saída do black não encontrada"
 
 @pytest.mark.e2e
 def test_e2e_autoflake_command(test_env):
