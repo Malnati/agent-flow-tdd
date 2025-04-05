@@ -444,10 +444,20 @@ def test_e2e_coverage_command(test_env):
             assert "coverage" in result.combined_output
             
     except subprocess.TimeoutExpired as e:
-        logger.error(f"Timeout ao executar teste de coverage após {e.timeout} segundos")
+        logger.error(
+            "Timeout ao executar teste de coverage - Comando: %s, Diretório: %s, Timeout: %ds",
+            e.cmd,
+            test_env,
+            e.timeout
+        )
         pytest.skip("Teste de coverage excedeu o tempo limite")
     except Exception as e:
-        logger.error(f"Erro ao executar teste de coverage: {str(e)}")
+        logger.error(
+            "Erro ao executar teste de coverage - Tipo: %s, Erro: %s, Diretório: %s",
+            type(e).__name__,
+            str(e),
+            test_env
+        )
         raise
 
 @pytest.mark.e2e
