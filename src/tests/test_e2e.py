@@ -20,25 +20,48 @@ def test_env(tmp_path_factory):
     # Cria diretório temporário
     test_dir = tmp_path_factory.mktemp("test_env")
     
-    # Copia Makefile
+    # Copia arquivos essenciais
     shutil.copy("Makefile", test_dir / "Makefile")
+    shutil.copy("setup.py", test_dir / "setup.py")
     
     # Cria estrutura de diretórios
-    os.makedirs(test_dir / "src" / "configs", exist_ok=True)
     os.makedirs(test_dir / "src" / "tests", exist_ok=True)
+    os.makedirs(test_dir / "src" / "configs", exist_ok=True)
+    os.makedirs(test_dir / "src" / "core", exist_ok=True)
     os.makedirs(test_dir / "logs", exist_ok=True)
+    os.makedirs(test_dir / ".venv", exist_ok=True)
     
-    # Cria arquivo de configuração do banco
-    db_config = {
-        "directories": {"logs": "logs"},
-        "database": {
-            "default_path": "logs/agent_logs.db",
-            "history_limit": 10
-        }
-    }
-    with open(test_dir / "src" / "configs" / "database.yaml", "w") as f:
-        import yaml
-        yaml.dump(db_config, f)
+    # Copia arquivos de teste
+    test_files = [f for f in os.listdir("src/tests") if f.endswith(".py")]
+    for file in test_files:
+        shutil.copy2(f"src/tests/{file}", test_dir / "src" / "tests" / file)
+    
+    # Copia arquivos de configuração
+    config_files = [f for f in os.listdir("src/configs") if f.endswith(".yaml")]
+    for file in config_files:
+        shutil.copy2(f"src/configs/{file}", test_dir / "src" / "configs" / file)
+    
+    # Copia arquivos core
+    core_files = [f for f in os.listdir("src/core") if f.endswith(".py")]
+    for file in core_files:
+        shutil.copy2(f"src/core/{file}", test_dir / "src" / "core" / file)
+    
+    # Cria ambiente virtual
+    subprocess.run(
+        "python -m venv .venv",
+        shell=True,
+        cwd=test_dir,
+        check=True
+    )
+    
+    # Instala dependências no ambiente virtual
+    pip_cmd = str(test_dir / ".venv" / "bin" / "pip")
+    subprocess.run(
+        f"{pip_cmd} install -e .",
+        shell=True,
+        cwd=test_dir,
+        check=True
+    )
     
     return test_dir
 
@@ -60,13 +83,13 @@ def run_make_command(prompt: str, mode: str = "feature", format: str = "markdown
             os.chdir(test_env)
             
         # Executa o comando make
-        cmd = f'PYTHONPATH=. make dev prompt-tdd="{prompt}" mode={mode} format={format}'
+        cmd = f'PYTHONPATH={test_env} make dev prompt-tdd="{prompt}" mode={mode} format={format}'
         result = subprocess.run(
             cmd,
             shell=True,
             capture_output=True,
             text=True,
-            env={**os.environ, "PYTHONPATH": "."}
+            env={**os.environ, "PYTHONPATH": str(test_env)}
         )
         
         # Verifica logs no banco
@@ -89,6 +112,14 @@ def run_make_command(prompt: str, mode: str = "feature", format: str = "markdown
             "stdout": e.stdout if hasattr(e, 'stdout') else "",
             "stderr": e.stderr if hasattr(e, 'stderr') else "",
             "returncode": 1 if e.returncode == 2 else e.returncode,
+            "db_history": None
+        }
+    except Exception as e:
+        logger.error(f"Erro ao executar comando: {str(e)}", exc_info=True)
+        return {
+            "stdout": "",
+            "stderr": str(e),
+            "returncode": 1,
             "db_history": None
         }
 
@@ -343,8 +374,9 @@ def test_e2e_coverage_command(test_env):
     os.chdir(test_env)
     
     # Executa o comando
+    python_path = str(test_env / ".venv" / "bin" / "python")
     result = subprocess.run(
-        "pytest --cov=src tests/",
+        f"{python_path} -m pytest --cov=src src/tests/",
         shell=True,
         capture_output=True,
         text=True,
@@ -357,14 +389,19 @@ def test_e2e_coverage_command(test_env):
         assert "coverage" in result.stdout
 
 @pytest.mark.e2e
-def test_e2e_lint_command():
+def test_e2e_lint_command(test_env):
     """Testa o comando make lint."""
+    # Configura ambiente de teste
+    os.chdir(test_env)
+    
     # Executa o comando
+    python_path = str(test_env / ".venv" / "bin" / "python")
     result = subprocess.run(
-        "flake8 src/ --max-line-length=120 --exclude=__init__.py",
+        f"{python_path} -m flake8 src/ --max-line-length=120 --exclude=__init__.py,src/tests/*",
         shell=True,
         capture_output=True,
-        text=True
+        text=True,
+        env={**os.environ, "PYTHONPATH": str(test_env)}
     )
     
     # Verificações
@@ -377,11 +414,13 @@ def test_e2e_format_command(test_env):
     os.chdir(test_env)
     
     # Executa o comando
+    python_path = str(test_env / ".venv" / "bin" / "python")
     result = subprocess.run(
-        "black src/ --line-length 120",
+        f"{python_path} -m black src/ --line-length 120 --exclude src/tests/",
         shell=True,
         capture_output=True,
-        text=True
+        text=True,
+        env={**os.environ, "PYTHONPATH": str(test_env)}
     )
     
     # Verificações
@@ -390,18 +429,23 @@ def test_e2e_format_command(test_env):
         assert "reformatted" in result.stdout or "All done!" in result.stdout
 
 @pytest.mark.e2e
-def test_e2e_autoflake_command():
+def test_e2e_autoflake_command(test_env):
     """Testa o comando make autoflake."""
+    # Configura ambiente de teste
+    os.chdir(test_env)
+    
     # Executa o comando
+    python_path = str(test_env / ".venv" / "bin" / "python")
     result = subprocess.run(
-        "find . -type f -name '*.py' -not -path './.venv/*' -exec autoflake --remove-all-unused-imports --remove-unused-variables --in-place {} \\;",
+        f"{python_path} -m autoflake --remove-all-unused-imports --remove-unused-variables --in-place --recursive src/ --exclude src/tests/",
         shell=True,
         capture_output=True,
-        text=True
+        text=True,
+        env={**os.environ, "PYTHONPATH": str(test_env)}
     )
     
     # Verificações
-    assert result.returncode == 0 
+    assert result.returncode == 0
 
 @pytest.mark.e2e
 def test_e2e_help_command(test_env):
