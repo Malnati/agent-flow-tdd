@@ -172,5 +172,6 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
-models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
-cache/{"max_tokens": null, "model": "gpt-3.5-turbo", "prompt": "Cadastro de endere/u00e7os", "system": null, "temperature": 0.7}.json
+models/*
+cache/*
+logs/*
