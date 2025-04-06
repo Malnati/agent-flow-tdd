@@ -2,6 +2,8 @@
 Orquestrador de agentes do sistema.
 """
 from typing import Any, Dict, List
+import yaml
+import os
 from pydantic import BaseModel
 
 from src.core import ModelManager
@@ -10,6 +12,19 @@ from src.core.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Carrega configurações
+def load_config() -> Dict[str, Any]:
+    """Carrega configurações do arquivo YAML."""
+    config_path = os.path.join(os.path.dirname(__file__), "configs", "app.yaml")
+    try:
+        with open(config_path, "r") as f:
+            return yaml.safe_load(f)
+    except Exception as e:
+        logger.error(f"Erro ao carregar configurações: {str(e)}", exc_info=True)
+        raise
+
+# Configurações globais
+CONFIG = load_config()
 
 class AgentResult(BaseModel):
     """Resultado de uma execução do agente."""
@@ -40,12 +55,12 @@ class AgentOrchestrator:
             AgentResult com o resultado do processamento
         """
         try:
-            logger.info(f"INÍCIO - execute | Prompt: {prompt[:100]}...")
+            logger.info(f"INÍCIO - execute | Prompt: {prompt[:CONFIG['logging']['truncate_length']]}...")
             
             # Configura o modelo
             self.models.configure(
-                model=kwargs.get("model", "gpt-3.5-turbo"),
-                temperature=kwargs.get("temperature", 0.7)
+                model=kwargs.get("model", CONFIG["model"]["name"]),
+                temperature=kwargs.get("temperature", CONFIG["model"]["temperature"])
             )
             
             # Gera resposta
@@ -64,11 +79,11 @@ class AgentOrchestrator:
             
             # Registra no banco de dados
             run_id = self.db.log_run(
-                session_id=kwargs.get("session_id", "default"),
+                session_id=kwargs.get("session_id", CONFIG["database"]["default_session"]),
                 input=prompt,
                 final_output=result.output,
-                last_agent="OpenAI",
-                output_type=kwargs.get("format", "json")  # Usa o formato passado nos kwargs
+                last_agent=CONFIG["database"]["default_agent"],
+                output_type=kwargs.get("format", CONFIG["database"]["default_output_format"])
             )
             
             # Registra itens gerados
@@ -95,6 +110,6 @@ class AgentOrchestrator:
 # Uso
 if __name__ == "__main__":
     orchestrator = AgentOrchestrator()
-    user_prompt = "Preciso de um sistema de login com autenticação de dois fatores"
+    user_prompt = CONFIG["example"]["prompt"]
     result = orchestrator.execute(user_prompt)
     print("Resultado Final:", result.output)
