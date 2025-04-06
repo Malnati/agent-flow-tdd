@@ -1,5 +1,5 @@
 {
-    "current": "0.1.1",
+    "current": "0.1.2",
     "manifest": {
         "include": [
             "LICENSE",
@@ -19,6 +19,12 @@
             "commit": "atualiza o makefile para incluir a nova tarefa de publica\u00e7\u00e3o de pacotes no pypi, adicionando a op\u00e7\u00e3o \"make publish\" e suas instru\u00e7\u00f5es na ajuda. modifica o setup.py para ler a vers\u00e3o a partir de um arquivo version e adiciona novas depend\u00eancias necess\u00e1rias para a publica\u00e7\u00e3o, como build e twine.",
             "increment_type": "patch",
             "previous_version": "0.1.0"
+        },
+        "0.1.2": {
+            "date": "2025-04-06",
+            "commit": "remove arquivos de cache obsoletos relacionados ao cadastro de endere\u00e7os e ao banco de dados agent_logs.db, otimizando a estrutura do projeto e eliminando dados desnecess\u00e1rios.",
+            "increment_type": "patch",
+            "previous_version": "0.1.1"
         }
     }
 }

@@ -9,6 +9,7 @@ Um sistema para desenvolvimento orientado a testes usando prompts de IA.
 - Suporte a múltiplos modelos de IA (GPT-3.5, GPT-4)
 - Interface CLI com modo interativo e MCP (Multi-Command Protocol)
 - Saída em formatos JSON e Markdown
+- Configuração unificada e centralizada
 
 ## 📋 Pré-requisitos
 
@@ -24,16 +25,39 @@ git clone https://github.com/seu-usuario/prompt-tdd.git
 cd prompt-tdd
 ```
 
-2. Crie um arquivo `.env` com sua chave da API do OpenAI:
+2. Configure as variáveis de ambiente necessárias:
 ```bash
-cp .env.example .env
-# Edite o arquivo .env e adicione sua chave da API
+# Não use arquivos .env, configure diretamente no ambiente
+export OPENAI_API_KEY="sua-chave-aqui"
 ```
 
 3. Instale as dependências:
 ```bash
 make install
 ```
+
+## ⚙️ Configuração
+
+O projeto usa um arquivo de configuração unificado em `src/configs/cli.yaml` com três seções principais:
+
+### 1. CLI (`cli`)
+- Configurações de saída (formatos, indentação)
+- Configurações do modelo (nome, temperatura)
+- Mensagens do sistema
+- Formatação JSON
+
+### 2. MCP (`mcp`)
+- Configurações de logging do MCP
+- Configurações do LLM
+- Configurações do handler MCP
+- Formatos de metadados
+
+### 3. Aplicação (`app`)
+- Configurações do modelo
+- Configurações do banco de dados
+- Configurações de logging
+- Configurações de exemplo
+- Configurações de resultado
 
 ## 🎮 Comandos Disponíveis
 
@@ -185,11 +209,27 @@ Os logs são gerados automaticamente com:
 - Nível INFO para entrada/saída de funções
 - Nível DEBUG para estados intermediários
 - Nível ERROR para exceções (com stacktrace)
+- Configuração centralizada em `cli.yaml`
 
 ## 🔒 Variáveis de Ambiente
 
-- `OPENAI_API_KEY`: Chave da API OpenAI (obrigatória)
-- `ELEVATION_MODEL`: Modelo para fallback (opcional)
+Variáveis obrigatórias:
+- `OPENAI_API_KEY`: Chave da API OpenAI
+
+Variáveis opcionais:
+- `OPENROUTER_KEY`: Chave da API OpenRouter
+- `GEMINI_KEY`: Chave da API Gemini
+- `ANTHROPIC_KEY`: Chave da API Anthropic
+- `LOG_LEVEL`: Nível de log (default: INFO)
+- `CACHE_DIR`: Diretório de cache
+- `CACHE_TTL`: Tempo de vida do cache
+- `FALLBACK_ENABLED`: Habilita fallback de modelos
+- `DEFAULT_MODEL`: Modelo padrão
+- `ELEVATION_MODEL`: Modelo para fallback
+- `MODEL_TIMEOUT`: Timeout para chamadas de modelo
+- `MAX_RETRIES`: Máximo de tentativas
+
+**IMPORTANTE**: Não use arquivos .env. Configure as variáveis diretamente no ambiente ou via argumentos.
 
 ## 🤝 Contribuindo
 
