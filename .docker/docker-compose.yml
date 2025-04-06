@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile
+    volumes:
+      - ../:/app
+      - app_logs:/app/logs
+      - app_data:/app/data
+    environment:
+      - PYTHONPATH=/app
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENROUTER_KEY=${OPENROUTER_KEY}
+    command: python -m src.cli
+    networks:
+      - agent_network
+
+  # Serviço para desenvolvimento com hot-reload
+  dev:
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile
+    volumes:
+      - ../:/app
+      - app_logs:/app/logs
+      - app_data:/app/data
+    environment:
+      - PYTHONPATH=/app
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENROUTER_KEY=${OPENROUTER_KEY}
+    command: python -m src.cli dev
+    networks:
+      - agent_network
+    ports:
+      - "8000:8000"
+
+volumes:
+  app_logs:
+  app_data:
+
+networks:
+  agent_network:
+    driver: bridge 

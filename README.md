@@ -582,3 +582,44 @@ make logs ARGS="--limit 20 --session abc123"
 # Visualiza detalhes de uma execução específica
 make logs ARGS="--id 42"
 ```
+
+## 🐳 Usando com Docker
+
+### Pré-requisitos
+- Docker
+- Docker Compose
+
+### Configuração
+1. Copie o arquivo de exemplo de variáveis de ambiente:
+```bash
+cp .docker/.env.example .docker/.env
+```
+
+2. Configure suas chaves de API no arquivo `.docker/.env`
+
+### Executando
+Para desenvolvimento:
+```bash
+docker-compose -f .docker/docker-compose.yml run dev
+```
+
+Para produção:
+```bash
+docker-compose -f .docker/docker-compose.yml run app
+```
+
+### Comandos Úteis
+- Construir as imagens:
+```bash
+docker-compose -f .docker/docker-compose.yml build
+```
+
+- Visualizar logs:
+```bash
+docker-compose -f .docker/docker-compose.yml logs -f
+```
+
+- Limpar volumes:
+```bash
+docker-compose -f .docker/docker-compose.yml down -v
+```
