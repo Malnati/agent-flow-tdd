@@ -61,7 +61,7 @@ logging:
 
 # Configurações do Banco de Dados
 database:
-  default_path: logs/agent_logs.db
+  default_path: data/agent_flow.db
   history_limit: 10
   schema:
     guardrail_types:
