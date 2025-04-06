@@ -222,26 +222,35 @@ def test_e2e_address_registration_cli_json():
     if result["returncode"] == 0:
         # Verifica se a saída é um JSON válido
         try:
-            # Pega a última linha não vazia que não seja uma mensagem de log
+            # Pega todas as linhas não vazias que não sejam mensagens de log
             lines = [
                 line.strip() 
                 for line in result["stdout"].split("\n") 
                 if line.strip() 
-                and not line.startswith("🧹") 
-                and not line.startswith("✨")
-                and not line.startswith("🛠️")
+                and not line.startswith(("🧹", "✨", "🛠️", "📝"))
             ]
             
-            # Tenta encontrar e parsear o JSON na saída
-            json_line = None
-            for line in reversed(lines):
-                try:
-                    json_line = json.loads(line)
-                    break
-                except json.JSONDecodeError:
-                    continue
-                    
-            assert json_line is not None, "Nenhum JSON válido encontrado na saída"
+            # Tenta encontrar o bloco JSON completo
+            json_block = ""
+            in_json_block = False
+            
+            for line in lines:
+                if line.startswith("{"):
+                    in_json_block = True
+                    json_block = line
+                elif in_json_block:
+                    json_block += line
+                    if line.strip().endswith("}"):
+                        try:
+                            json_line = json.loads(json_block)
+                            break
+                        except json.JSONDecodeError:
+                            json_block = ""
+                            in_json_block = False
+            
+            assert json_block, "Nenhum bloco JSON encontrado na saída"
+            json_line = json.loads(json_block)
+            
             assert "content" in json_line
             assert "metadata" in json_line
             assert json_line["metadata"]["type"] == "feature"

@@ -149,28 +149,36 @@ class DatabaseManager:
         
         self.conn.commit()
     
-    def get_run_history(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    def get_run_history(self, limit: Optional[int] = None, run_id: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         Retorna o histórico das últimas execuções.
         
         Args:
             limit: Número máximo de registros. Se None, usa o valor padrão da configuração.
+            run_id: ID específico para buscar. Se fornecido, ignora o limit.
             
         Returns:
             Lista de execuções com seus detalhes, ordenada por timestamp decrescente
         """
         cursor = self.conn.cursor()
         
-        # Usa limite da configuração se não especificado
-        if limit is None:
-            limit = self.config["database"]["history_limit"]
-        
-        # Busca execuções
-        cursor.execute("""
-        SELECT * FROM agent_runs
-        ORDER BY id DESC
-        LIMIT ?
-        """, (limit,))
+        # Se tiver ID específico, busca apenas ele
+        if run_id is not None:
+            cursor.execute("""
+            SELECT * FROM agent_runs
+            WHERE id = ?
+            """, (run_id,))
+        else:
+            # Usa limite da configuração se não especificado
+            if limit is None:
+                limit = self.config["database"]["history_limit"]
+            
+            # Busca execuções
+            cursor.execute("""
+            SELECT * FROM agent_runs
+            ORDER BY id DESC
+            LIMIT ?
+            """, (limit,))
         
         runs = []
         for run in cursor.fetchall():
