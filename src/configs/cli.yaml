@@ -1,0 +1,26 @@
+# Configurações do CLI
+cli:
+  # Configurações de saída
+  output:
+    default_format: "json"
+    available_formats: ["json", "markdown"]
+  
+  # Configurações do modelo
+  model:
+    default_name: "gpt-3.5-turbo"
+    default_temperature: 0.7
+  
+  # Mensagens do sistema
+  messages:
+    start_dev: "🛠️ Executando CLI em modo desenvolvimento..."
+    error_prefix: "Erro ao processar comando: "
+  
+  # Configurações de saída JSON
+  json:
+    metadata_type: "feature"
+    ensure_ascii: false
+    indent: 2
+
+# Configurações de logging
+logging:
+  error_show_traceback: true  # Se deve mostrar traceback nos logs de erro 

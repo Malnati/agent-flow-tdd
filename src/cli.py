@@ -5,9 +5,11 @@ Módulo principal que define os comandos disponíveis na interface de linha de c
 import json
 import sys
 import time
+import os
 from typing import Dict
 
 import typer
+import yaml
 from rich.console import Console
 from rich.markdown import Markdown
 
@@ -16,8 +18,28 @@ from src.core.models import ModelManager
 from src.core.logger import get_logger, log_execution
 from src.core.kernel import get_env_var, get_env_status as get_kernel_env_status, validate_env as validate_kernel_env
 
-logger = get_logger(__name__)
+# Carrega configurações
+def load_config() -> Dict:
+    """Carrega configurações do arquivo YAML."""
+    config_path = os.path.join(os.path.dirname(__file__), "configs", "cli.yaml")
+    try:
+        with open(config_path, "r") as f:
+            return yaml.safe_load(f)
+    except Exception as e:
+        logger.error(f"Erro ao carregar configurações: {str(e)}", exc_info=True)
+        raise
 
+# Configurações globais
+CONFIG = load_config()
+
+# Constantes do sistema
+EXIT_CODE_SUCCESS = 0
+EXIT_CODE_ERROR = 1
+EMPTY_PROMPT = ""
+SESSION_ID_GENERATOR = str(time.time)  # Função para gerar session_id
+
+# Logger e Console
+logger = get_logger(__name__)
 app = typer.Typer()
 output_console = Console()  # Console para saída normal
 
@@ -43,7 +65,7 @@ def validate_env() -> None:
     except ValueError as e:
         logger.error(str(e))
         print(str(e), file=sys.stderr)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=EXIT_CODE_ERROR)
 
 def get_orchestrator() -> AgentOrchestrator:
     """
@@ -73,27 +95,36 @@ def status():
             "models": available_models
         }
         
-        output_console.print(json.dumps(status, indent=2))
-        return 0
+        output_console.print(json.dumps(status, indent=CONFIG["cli"]["json"]["indent"]))
+        return EXIT_CODE_SUCCESS
         
     except Exception as e:
-        error_msg = f"Erro ao processar comando: {str(e)}"
-        logger.error(error_msg, exc_info=True)
+        error_msg = f"{CONFIG['cli']['messages']['error_prefix']}{str(e)}"
+        logger.error(error_msg, exc_info=CONFIG["logging"]["error_show_traceback"])
         print(error_msg, file=sys.stderr)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=EXIT_CODE_ERROR)
 
 @app.command()
 def mcp(
-    prompt_tdd: str = typer.Argument(""),
-    format: str = typer.Option("json", help="Formato de saída (json, markdown)"),
-    model: str = typer.Option("gpt-3.5-turbo", help="Modelo a ser usado"),
-    temperature: float = typer.Option(0.7, help="Temperatura para geração")
+    prompt_tdd: str = typer.Argument(EMPTY_PROMPT),
+    format: str = typer.Option(
+        CONFIG["cli"]["output"]["default_format"],
+        help=f"Formato de saída ({', '.join(CONFIG['cli']['output']['available_formats'])})"
+    ),
+    model: str = typer.Option(
+        CONFIG["cli"]["model"]["default_name"],
+        help="Modelo a ser usado"
+    ),
+    temperature: float = typer.Option(
+        CONFIG["cli"]["model"]["default_temperature"],
+        help="Temperatura para geração"
+    )
 ):
     """
     Executa o Agent Flow TDD em modo MCP.
     """
     try:
-        print("🛠️ Executando CLI em modo desenvolvimento...")
+        print(CONFIG["cli"]["messages"]["start_dev"])
         
         # Valida ambiente
         validate_env()
@@ -106,26 +137,35 @@ def mcp(
         
         # Executa loop MCP
         handler.run()
-        return 0
+        return EXIT_CODE_SUCCESS
         
     except Exception as e:
-        error_msg = f"Erro ao processar comando: {str(e)}"
-        logger.error(error_msg, exc_info=True)
+        error_msg = f"{CONFIG['cli']['messages']['error_prefix']}{str(e)}"
+        logger.error(error_msg, exc_info=CONFIG["logging"]["error_show_traceback"])
         print(error_msg, file=sys.stderr)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=EXIT_CODE_ERROR)
 
 @app.command()
 def feature(
     prompt_tdd: str = typer.Argument(..., help="Prompt para o TDD"),
-    format: str = typer.Option("json", help="Formato de saída (json, markdown)"),
-    model: str = typer.Option("gpt-3.5-turbo", help="Modelo a ser usado"),
-    temperature: float = typer.Option(0.7, help="Temperatura para geração")
+    format: str = typer.Option(
+        CONFIG["cli"]["output"]["default_format"],
+        help=f"Formato de saída ({', '.join(CONFIG['cli']['output']['available_formats'])})"
+    ),
+    model: str = typer.Option(
+        CONFIG["cli"]["model"]["default_name"],
+        help="Modelo a ser usado"
+    ),
+    temperature: float = typer.Option(
+        CONFIG["cli"]["model"]["default_temperature"],
+        help="Temperatura para geração"
+    )
 ):
     """
     Executa o Agent Flow TDD para gerar uma feature.
     """
     try:
-        print("🛠️ Executando CLI em modo desenvolvimento...")
+        print(CONFIG["cli"]["messages"]["start_dev"])
         
         # Valida ambiente
         validate_env()
@@ -138,7 +178,7 @@ def feature(
             prompt=prompt_tdd,
             model=model,
             temperature=temperature,
-            session_id=str(time.time()),
+            session_id=SESSION_ID_GENERATOR(),
             format=format
         )
         
@@ -156,7 +196,7 @@ def feature(
             output = {
                 "content": content,
                 "metadata": {
-                    "type": "feature",
+                    "type": CONFIG["cli"]["json"]["metadata_type"],
                     "options": {
                         "format": format,
                         "model": model,
@@ -164,15 +204,19 @@ def feature(
                     }
                 }
             }
-            print(json.dumps(output, ensure_ascii=False))
+            print(json.dumps(
+                output,
+                ensure_ascii=CONFIG["cli"]["json"]["ensure_ascii"],
+                indent=CONFIG["cli"]["json"]["indent"]
+            ))
             
-        return 0
+        return EXIT_CODE_SUCCESS
         
     except Exception as e:
-        error_msg = f"Erro ao processar comando: {str(e)}"
-        logger.error(error_msg, exc_info=True)
+        error_msg = f"{CONFIG['cli']['messages']['error_prefix']}{str(e)}"
+        logger.error(error_msg, exc_info=CONFIG["logging"]["error_show_traceback"])
         print(error_msg, file=sys.stderr)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=EXIT_CODE_ERROR)
 
 if __name__ == "__main__":
     app()
