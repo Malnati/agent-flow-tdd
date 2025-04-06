@@ -15,10 +15,11 @@ logger = get_logger(__name__)
 # Carrega configurações
 def load_config() -> Dict[str, Any]:
     """Carrega configurações do arquivo YAML."""
-    config_path = os.path.join(os.path.dirname(__file__), "configs", "app.yaml")
+    config_path = os.path.join(os.path.dirname(__file__), "configs", "cli.yaml")
     try:
         with open(config_path, "r") as f:
-            return yaml.safe_load(f)
+            config = yaml.safe_load(f)
+            return config["app"]  # Retorna apenas a seção 'app' do arquivo
     except Exception as e:
         logger.error(f"Erro ao carregar configurações: {str(e)}", exc_info=True)
         raise

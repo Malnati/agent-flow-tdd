@@ -18,9 +18,10 @@ from src.core.db import DatabaseManager
 from openai import OpenAI
 
 # Carrega configurações do MCP
-CONFIG_PATH = os.path.join("src", "configs", "mcp.yaml")
+CONFIG_PATH = os.path.join("src", "configs", "cli.yaml")
 with open(CONFIG_PATH, "r") as f:
-    CONFIG = yaml.safe_load(f)
+    config = yaml.safe_load(f)
+    CONFIG = config["mcp"]  # Usa apenas a seção 'mcp' do arquivo
 
 # Constantes do sistema
 REQUIRED_ENV_VARS = ["OPENAI_API_KEY"]

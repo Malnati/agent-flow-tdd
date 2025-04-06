@@ -33,7 +33,10 @@ def load_config() -> Dict:
     config_path = os.path.join(os.path.dirname(__file__), "configs", "cli.yaml")
     try:
         with open(config_path, "r") as f:
-            return yaml.safe_load(f)
+            config = yaml.safe_load(f)
+            # Mescla configurações de logging do app com o config principal
+            config["logging"] = config["app"]["logging"]
+            return config
     except Exception as e:
         logger.error(f"Erro ao carregar configurações: {str(e)}", exc_info=True)
         raise
