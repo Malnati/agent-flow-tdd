@@ -48,7 +48,10 @@ def mock_db_manager():
                     "final_output": "Test output",
                     "last_agent": "OpenAI",
                     "output_type": "json",
-                    "timestamp": "2024-04-04 12:00:00"
+                    "timestamp": "2024-04-04 12:00:00",
+                    "items": [],
+                    "guardrails": [],
+                    "raw_responses": [{"id": "test", "response": "Test response"}]
                 }]
             return []
             

@@ -231,25 +231,29 @@ def test_e2e_address_registration_cli_json():
             ]
             
             # Tenta encontrar o bloco JSON completo
-            json_block = ""
-            in_json_block = False
+            json_text = ""
+            brace_count = 0
+            in_json = False
             
             for line in lines:
-                if line.startswith("{"):
-                    in_json_block = True
-                    json_block = line
-                elif in_json_block:
-                    json_block += line
-                    if line.strip().endswith("}"):
+                if not in_json and line.lstrip().startswith("{"):
+                    in_json = True
+                
+                if in_json:
+                    json_text += line
+                    brace_count += line.count("{") - line.count("}")
+                    
+                    if brace_count == 0:
                         try:
-                            json_line = json.loads(json_block)
+                            json_line = json.loads(json_text)
                             break
                         except json.JSONDecodeError:
-                            json_block = ""
-                            in_json_block = False
+                            json_text = ""
+                            in_json = False
+                            brace_count = 0
             
-            assert json_block, "Nenhum bloco JSON encontrado na saída"
-            json_line = json.loads(json_block)
+            assert json_text, "Nenhum bloco JSON encontrado na saída"
+            json_line = json.loads(json_text)
             
             assert "content" in json_line
             assert "metadata" in json_line
