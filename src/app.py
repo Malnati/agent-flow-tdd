@@ -29,8 +29,8 @@ CONFIG = load_config()
 class AgentResult(BaseModel):
     """Resultado de uma execução do agente."""
     output: Any
-    items: List[Dict[str, Any]] = []
-    guardrails: List[Dict[str, Any]] = []
+    items: List[Dict[str, Any]] = CONFIG["result"]["default_items"]
+    guardrails: List[Dict[str, Any]] = CONFIG["result"]["default_guardrails"]
     raw_responses: List[Dict[str, Any]] = []
 
 
@@ -72,7 +72,7 @@ class AgentOrchestrator:
                 items=[],  # Implementar geração de itens
                 guardrails=[],  # Implementar verificação de guardrails
                 raw_responses=[{
-                    "id": metadata.get("id"),
+                    CONFIG["database"]["metadata_id_field"]: metadata.get(CONFIG["database"]["metadata_id_field"]),
                     "response": metadata
                 }]
             )
@@ -88,11 +88,11 @@ class AgentOrchestrator:
             
             # Registra itens gerados
             for item in result.items:
-                self.db.log_run_item(run_id, "item", item)
+                self.db.log_run_item(run_id, CONFIG["database"]["item_type"], item)
                 
             # Registra guardrails
             for guardrail in result.guardrails:
-                self.db.log_guardrail_results(run_id, "output", guardrail)
+                self.db.log_guardrail_results(run_id, CONFIG["database"]["guardrail_type"], guardrail)
                 
             # Registra respostas brutas
             for response in result.raw_responses:
