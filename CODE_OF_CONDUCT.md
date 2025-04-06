@@ -1,37 +1,111 @@
-# Código de Conduta do AgentFlowTDD
+# Código de Conduta do Projeto
 
-## 📜 Compromisso
+## 📋 Regras Gerais
 
-Como participantes, colaboradores e mantenedores deste projeto, nós nos comprometemos a tornar a participação uma experiência respeitosa, acolhedora e livre de assédio para todos, independentemente de idade, tamanho corporal, deficiência, etnia, identidade e expressão de gênero, nível de experiência, nacionalidade, aparência pessoal, raça, religião ou identidade sexual.
+### 1. Estrutura de Código Python
+- Todo código Python deve estar dentro do diretório `src/` ou seus subdiretórios existentes
+- Respeitar a estrutura de diretórios:
+  - `src/core/` - funcionalidades centrais
+  - `src/tests/` - testes
+  - `src/configs/` - configurações
+  - `src/scripts/` - scripts de utilitários
+- É proibido criar novos diretórios na raiz de `src/` sem autorização expressa
+- Seguir padrões de nomenclatura:
+  - Arquivos: snake_case
+  - Classes: PascalCase
+  - Funções/métodos: snake_case
+  - Constantes: MAIÚSCULAS_COM_UNDERSCORES
 
-## 🤝 Nossos padrões
+### 2. Gestão de Configurações
+- Todas as configurações devem estar centralizadas em `src/configs/cli.yaml`
+- Não usar arquivos `.env` - configurar variáveis diretamente no ambiente ou via argumentos
+- Manter a estrutura hierárquica das configurações:
+  - Seção `cli` para configurações do CLI
+  - Seção `mcp` para configurações do MCP
+  - Seção `app` para configurações da aplicação
 
-Exemplos de comportamento que contribuem para criar um ambiente positivo incluem:
+### 3. Logging e Monitoramento
+- Incluir logs em todas as funções Python seguindo o padrão:
+  ```python
+  def minha_funcao():
+      logger = logging.getLogger(__name__)
+      logger.info("INÍCIO - minha_funcao")
+      try:
+          # Implementação
+          logger.debug("Detalhe intermediário")
+          return resultado
+      except Exception as e:
+          logger.error("FALHA - minha_funcao", exc_info=True)
+          raise
+      finally:
+          logger.info("FIM - minha_funcao")
+  ```
+- Usar níveis apropriados:
+  - INFO: entrada/saída de funções
+  - DEBUG: valores intermediários
+  - ERROR: exceções com stacktrace
+- Nunca logar dados sensíveis
 
-- Uso de linguagem acolhedora e inclusiva.
-- Respeito a diferentes pontos de vista e experiências.
-- Aceitação construtiva de críticas.
-- Foco no que é melhor para a comunidade.
-- Demonstração de empatia com outros membros.
+### 4. Operações com Arquivos
+- Durante refatorações:
+  - Verificar diretórios vazios após movimentação de arquivos
+  - Remover diretórios vazios automaticamente
+  - Remover recursivamente diretórios pais vazios
+- Usar a biblioteca Rope para refatorações de código
 
-Comportamentos inaceitáveis incluem:
+### 5. Comandos e Automação
+- Todo novo comando deve ser:
+  - Incluído como target no Makefile
+  - Documentado no README.md
+  - Seguir o protocolo MDC do projeto
+- Padronizar comandos com exemplos de uso
+- Manter compatibilidade com comandos existentes
 
-- Uso de linguagem ou imagens sexualizadas e avanços sexuais indesejados.
-- Comentários ofensivos ou depreciativos, ataques pessoais ou políticos.
-- Assédio público ou privado.
-- Divulgação de informações privadas de outras pessoas sem permissão explícita.
-- Qualquer outro comportamento considerado inadequado em um ambiente profissional.
+### 6. Testes
+- Priorizar modificação dos testes ao invés do código-fonte
+- Ao modificar código-fonte:
+  - Manter estrutura existente
+  - Preservar interfaces públicas
+  - Não criar/renomear arquivos sem autorização
+  - Não modificar estrutura de diretórios
+- Executar testes e2e após qualquer alteração em:
+  - Arquivos Python
+  - Scripts de automação
+  - Configurações
+  - Dependências
 
-## 👮‍♀️ Responsabilidades dos mantenedores
+### 7. Limpeza de Código
+- Executar autoflake após alterações em arquivos Python:
+  ```bash
+  autoflake --remove-all-unused-imports --remove-unused-variables --in-place --recursive .
+  ```
+- Manter o código limpo e livre de imports não utilizados
 
-Os mantenedores do projeto são responsáveis por esclarecer os padrões de comportamento aceitáveis e têm o direito de remover, editar ou rejeitar comentários, commits, código, edições de wiki, issues e outras contribuições que não estejam alinhadas com este Código de Conduta, bem como banir temporariamente ou permanentemente qualquer colaborador por comportamentos que julguem inadequados, ameaçadores, ofensivos ou prejudiciais.
+### 8. Operações Git
+- Não automatizar operações git (commit, pull, push)
+- Usuário deve revisar e submeter mudanças manualmente
+- Mostrar resumo das alterações para revisão
+- Permitir que usuário decida quais arquivos adicionar
 
-## 🚨 Aplicação
+### 9. Parâmetros de Modelos
+- Não usar valores fixos para parâmetros de modelos
+- Permitir configuração via argumentos ou variáveis de ambiente
+- Manter flexibilidade para diferentes modelos e configurações
 
-Casos de comportamento abusivo, de assédio ou inaceitável podem ser reportados diretamente aos mantenedores do projeto. Todas as denúncias serão investigadas com responsabilidade e confidencialidade.
+### 10. Nomenclatura de Arquivos
+- Não usar termos test/tests exceto para testes reais
+- Usar nomes descritivos do papel real do arquivo
+- Manter organização e padrões existentes:
+  - Estrutura de pacotes
+  - Arquivos `__init__.py`
+  - Comentários de módulo
 
-## 📬 Contato
+## 🤝 Contribuindo
 
-Para dúvidas ou denúncias, envie um e-mail para **contato@agentflowtdd.dev** (endereço a ser confirmado).
+Ao contribuir com este projeto, você concorda em seguir estas regras e manter a qualidade e organização do código. Em caso de dúvidas ou necessidade de exceções, discuta com a equipe antes de fazer alterações.
 
-## 🙌 Obrigado por ajudar a manter este ambiente acolhedor, colaborativo e respeitoso!
+## 📝 Notas
+
+- Este código de conduta é um documento vivo e pode ser atualizado conforme necessário
+- Sugestões de melhorias são bem-vindas através de issues ou pull requests
+- Em caso de conflito entre regras, priorize a manutenção da qualidade e organização do código
