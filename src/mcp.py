@@ -7,6 +7,7 @@ import logging
 import os
 import sys
 import uuid
+import yaml
 from typing import Optional, Dict, Any
 
 from src.app import AgentOrchestrator
@@ -16,13 +17,28 @@ from src.core.db import DatabaseManager
 
 from openai import OpenAI
 
+# Carrega configurações do MCP
+CONFIG_PATH = os.path.join("src", "configs", "mcp.yaml")
+with open(CONFIG_PATH, "r") as f:
+    CONFIG = yaml.safe_load(f)
+
+# Constantes do sistema
+REQUIRED_ENV_VARS = ["OPENAI_API_KEY"]
+ERROR_MESSAGES = {
+    "NO_CONTENT": "Mensagem recebida sem conteúdo",
+    "NO_API_KEY": "OPENAI_API_KEY não encontrada nas variáveis de ambiente",
+    "TEMPLATE_NOT_FOUND": "Template '{}' não encontrado",
+    "FORMAT_ERROR": "Erro ao formatar prompt: {}",
+    "GENERATION_ERROR": "Erro ao gerar resposta: {}"
+}
+
 # Configuração básica de logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=getattr(logging, CONFIG["logging"]["level"]),
+    format=CONFIG["logging"]["format"],
     handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler("logs/mcp_server.log")
+        logging.StreamHandler(sys.stdout) if CONFIG["logging"]["handlers"]["stdout"] else None,
+        logging.FileHandler(CONFIG["logging"]["handlers"]["file"]["path"]) if CONFIG["logging"]["handlers"]["file"]["enabled"] else None
     ]
 )
 
@@ -48,7 +64,7 @@ except ImportError:
         """Mock da classe BaseMCPHandler do SDK MCP."""
         def __init__(self):
             self.initialized = False
-            self.hook = "/prompt-tdd"
+            self.hook = CONFIG["handler"]["hook"]
 
         def initialize(self, api_key: str) -> None:
             """Inicializa o handler com a chave da API."""
@@ -92,7 +108,7 @@ class PromptManager:
         """Recupera um template de prompt pelo nome."""
         template = self.templates.get(name)
         if not template:
-            logger.warning(f"Template '{name}' não encontrado")
+            logger.warning(ERROR_MESSAGES["TEMPLATE_NOT_FOUND"].format(name))
         return template
         
     def format_prompt(self, template_name: str, **kwargs) -> Optional[str]:
@@ -104,30 +120,30 @@ class PromptManager:
         try:
             return template.format(**kwargs)
         except KeyError as e:
-            logger.error(f"Erro ao formatar prompt: variável {e} não fornecida")
+            logger.error(ERROR_MESSAGES["FORMAT_ERROR"].format(f"variável {e} não fornecida"))
             return None
         except Exception as e:
-            logger.error(f"Erro ao formatar prompt: {str(e)}")
+            logger.error(ERROR_MESSAGES["FORMAT_ERROR"].format(str(e)))
             return None 
 
 class LLMProvider:
     def __init__(self):
         self.api_key = os.getenv("OPENAI_API_KEY")
         if not self.api_key:
-            logger.warning("OPENAI_API_KEY não encontrada nas variáveis de ambiente")
+            logger.warning(ERROR_MESSAGES["NO_API_KEY"])
         self.client = OpenAI(api_key=self.api_key)
         
     def generate(self, prompt: str, options: Dict[str, Any]) -> Optional[str]:
         try:
-            model = options.get("model", "gpt-3.5-turbo")
-            temperature = options.get("temperature", 0.7)
-            format = options.get("format", "json")
+            model = options.get("model", CONFIG["llm"]["default_model"])
+            temperature = options.get("temperature", CONFIG["llm"]["default_temperature"])
+            format = options.get("format", CONFIG["llm"]["default_format"])
             
             logger.info(f"Gerando resposta com modelo {model} (temperatura: {temperature})")
             
             # Ajusta o prompt para gerar resposta no formato correto
-            if format == "markdown":
-                prompt = f"Por favor, formate sua resposta em Markdown com:\n- Títulos e subtítulos\n- Listas\n- Destaques\n- Tabelas quando relevante\n\nPrompt: {prompt}"
+            if format == CONFIG["handler"]["metadata"]["format"]["markdown"]:
+                prompt = f"{CONFIG['llm']['markdown_prompt_prefix']} {prompt}"
             
             response = self.client.chat.completions.create(
                 model=model,
@@ -141,13 +157,13 @@ class LLMProvider:
             return {
                 "content": content,
                 "metadata": {
-                    "status": "success",
+                    "status": CONFIG["handler"]["metadata"]["status"]["success"],
                     "format": format
                 }
             }
                 
         except Exception as e:
-            logger.error(f"Erro ao gerar resposta: {str(e)}")
+            logger.error(ERROR_MESSAGES["GENERATION_ERROR"].format(str(e)))
             return None
 
 class MCPHandler:
@@ -168,8 +184,8 @@ class MCPHandler:
         logger.info("Inicializando MCPHandler...")
         self.orchestrator = AgentOrchestrator(api_key=api_key)
         self.models.configure(
-            model="gpt-3.5-turbo",
-            temperature=0.7
+            model=CONFIG["llm"]["default_model"],
+            temperature=CONFIG["llm"]["default_temperature"]
         )
         logger.info("MCPHandler inicializado com sucesso")
 
@@ -190,7 +206,7 @@ class MCPHandler:
             metadata = message.get("metadata", {})
             
             if not content:
-                logger.warning("Mensagem recebida sem conteúdo")
+                logger.warning(ERROR_MESSAGES["NO_CONTENT"])
                 return None
                 
             logger.info(f"Processando mensagem: {content}")
