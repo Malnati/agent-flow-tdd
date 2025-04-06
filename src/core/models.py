@@ -27,9 +27,10 @@ def load_config() -> Dict[str, Any]:
         Dict com as configurações
     """
     base_dir = Path(__file__).resolve().parent.parent.parent
-    config_path = os.path.join(base_dir, 'src', 'configs', 'models.yaml')
+    config_path = os.path.join(base_dir, 'src', 'configs', 'kernel.yaml')
     with open(config_path, 'r') as f:
-        return yaml.safe_load(f)
+        config = yaml.safe_load(f)
+        return config["models"]
 
 # Carrega configurações
 CONFIG = load_config()

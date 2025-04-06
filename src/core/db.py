@@ -21,9 +21,13 @@ class DatabaseManager:
             db_path: Caminho para o banco de dados
         """
         # Carrega configurações
-        config_path = os.path.join("src", "configs", "database.yaml")
+        config_path = os.path.join("src", "configs", "kernel.yaml")
         with open(config_path, "r") as f:
-            self.config = yaml.safe_load(f)
+            config = yaml.safe_load(f)
+            self.config = {
+                "directories": config["directories"],
+                "database": config["database"]
+            }
         
         # Cria diretório de logs se não existir
         os.makedirs(self.config["directories"]["logs"], exist_ok=True)
@@ -42,7 +46,7 @@ class DatabaseManager:
         """Cria as tabelas do banco de dados."""
         cursor = self.conn.cursor()
         
-        for table_name, table_config in self.config["tables"].items():
+        for table_name, table_config in self.config["database"]["tables"].items():
             # Monta SQL para colunas
             columns = []
             for col in table_config["columns"]:

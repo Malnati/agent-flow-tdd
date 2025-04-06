@@ -25,9 +25,13 @@ def load_config() -> Dict[str, Any]:
     Returns:
         Dict com as configurações
     """
-    config_path = os.path.join(BASE_DIR, 'src', 'configs', 'logger.yaml')
+    config_path = os.path.join(BASE_DIR, 'src', 'configs', 'kernel.yaml')
     with open(config_path, 'r') as f:
-        return yaml.safe_load(f)
+        config = yaml.safe_load(f)
+        return {
+            "directories": config["directories"],
+            "logging": config["logging"]
+        }
 
 # Carrega configurações
 CONFIG = load_config()
@@ -37,23 +41,23 @@ LOG_DIR = os.path.join(BASE_DIR, CONFIG['directories']['logs'])
 os.makedirs(LOG_DIR, exist_ok=True)
 
 # Configuração de níveis de log
-LOG_LEVEL_MAP = CONFIG['log_levels']['map']
-DEFAULT_LOG_LEVEL = CONFIG['log_levels']['default']
+LOG_LEVEL_MAP = CONFIG['logging']['levels']['map']
+DEFAULT_LOG_LEVEL = CONFIG['logging']['levels']['default']
 LOG_LEVEL = os.environ.get('LOG_LEVEL', DEFAULT_LOG_LEVEL).upper()
 NUMERIC_LOG_LEVEL = LOG_LEVEL_MAP.get(LOG_LEVEL, LOG_LEVEL_MAP['INFO'])
 
 # Lista de palavras-chave para identificar dados sensíveis
-SENSITIVE_KEYWORDS = CONFIG['security']['sensitive_keywords']
+SENSITIVE_KEYWORDS = CONFIG['logging']['security']['sensitive_keywords']
 
 # Padrões de tokens a serem mascarados
-TOKEN_PATTERNS = CONFIG['security']['token_patterns']
+TOKEN_PATTERNS = CONFIG['logging']['security']['token_patterns']
 
 class SecureLogFilter(logging.Filter):
     """Filtro para mascarar dados sensíveis nos registros de log"""
     
     def __init__(self):
         super().__init__()
-        self.mask_config = CONFIG['security']['masking']
+        self.mask_config = CONFIG['logging']['security']['masking']
     
     def filter(self, record: logging.LogRecord) -> bool:
         """Processa e mascara dados sensíveis no registro de log"""
@@ -114,7 +118,7 @@ def setup_logger(name: str, level: Optional[str] = None) -> logging.Logger:
     logger = logging.getLogger(name)
     
     # Define nível
-    log_level = level or os.getenv("LOG_LEVEL", CONFIG['log_levels']['default'])
+    log_level = level or os.getenv("LOG_LEVEL", CONFIG['logging']['levels']['default'])
     logger.setLevel(getattr(logging, log_level))
     
     # Remove handlers existentes
@@ -126,7 +130,7 @@ def setup_logger(name: str, level: Optional[str] = None) -> logging.Logger:
     console_handler.setLevel(logging.DEBUG)
     
     # Define formato
-    formatter = logging.Formatter(CONFIG['format']['default'])
+    formatter = logging.Formatter(CONFIG['logging']['format']['default'])
     console_handler.setFormatter(formatter)
     
     # Adiciona filtro de segurança
@@ -230,9 +234,9 @@ current_span: ContextVar[Optional['Span']] = ContextVar('current_span', default=
 class Span:
     """Representa uma operação temporal dentro de um trace"""
     trace_id: str
-    span_id: str = field(default_factory=lambda: f"{CONFIG['trace']['prefixes']['span']}{uuid.uuid4().hex}")
+    span_id: str = field(default_factory=lambda: f"{CONFIG['logging']['trace']['prefixes']['span']}{uuid.uuid4().hex}")
     parent_id: Optional[str] = None
-    span_type: str = CONFIG['trace']['default_span_type']
+    span_type: str = CONFIG['logging']['trace']['default_span_type']
     name: Optional[str] = None
     start_time: float = field(default_factory=time.time)
     end_time: Optional[float] = None
@@ -242,8 +246,8 @@ class Span:
 @dataclass
 class Trace:
     """Representa um fluxo completo de execução"""
-    trace_id: str = field(default_factory=lambda: f"{CONFIG['trace']['prefixes']['trace']}{uuid.uuid4().hex}")
-    workflow_name: str = CONFIG['trace']['default_workflow_name']
+    trace_id: str = field(default_factory=lambda: f"{CONFIG['logging']['trace']['prefixes']['trace']}{uuid.uuid4().hex}")
+    workflow_name: str = CONFIG['logging']['trace']['default_workflow_name']
     group_id: Optional[str] = None
     start_time: float = field(default_factory=time.time)
     end_time: Optional[float] = None
@@ -255,8 +259,8 @@ class Trace:
 @dataclass
 class TraceConfig:
     """Configuração para controle do tracing"""
-    tracing_disabled: bool = CONFIG['trace']['tracing_disabled']
-    trace_include_sensitive_data: bool = CONFIG['trace']['trace_include_sensitive_data']
+    tracing_disabled: bool = CONFIG['logging']['trace']['tracing_disabled']
+    trace_include_sensitive_data: bool = CONFIG['logging']['trace']['trace_include_sensitive_data']
     trace_processors: List['TraceProcessor'] = field(default_factory=list)
 
 class TraceProcessor:
@@ -268,10 +272,10 @@ class FileTraceProcessor(TraceProcessor):
     """Processador que salva traces em arquivo"""
     
     def __init__(self, file_path: Optional[str] = None):
-        self.file_path = file_path or CONFIG['trace']['file_processor']['default_file']
+        self.file_path = file_path or CONFIG['logging']['trace']['file_processor']['default_file']
 
 def trace(
-    workflow_name: str = CONFIG['trace']['default_workflow_name'],
+    workflow_name: str = CONFIG['logging']['trace']['default_workflow_name'],
     group_id: Optional[str] = None,
     disabled: Optional[bool] = None,
     metadata: Optional[Dict] = None
@@ -313,7 +317,7 @@ def trace(
     return decorator
 
 def span(
-    span_type: str = CONFIG['trace']['default_span_type'],
+    span_type: str = CONFIG['logging']['trace']['default_span_type'],
     name: Optional[str] = None,
     capture_args: bool = False
 ):
