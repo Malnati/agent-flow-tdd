@@ -1,187 +1,116 @@
-import time
-from typing import List, Dict, Any
-import json
+"""
+Orquestrador de agentes do sistema.
+"""
+from typing import Any, Dict, List
+import yaml
+import os
+from pydantic import BaseModel
 
-from src.core.utils import ModelManager
-from src.core.logger import trace, agent_span, generation_span
+from src.core import ModelManager
+from src.core.db import DatabaseManager
+from src.core.logger import get_logger
 
-class Message:
-    def __init__(self, content: str, source: str, timestamp: float):
-        self.content = content
-        self.source = source
-        self.timestamp = timestamp
+logger = get_logger(__name__)
 
-class ConversationHistory:
-    def __init__(self):
-        self.messages = []
-    
-    def add_message(self, message: Message):
-        self.messages.append(message)
-    
-    def get_context(self, window_size=5) -> str:
-        return "\n".join([f"{msg.source}: {msg.content}" for msg in self.messages[-window_size:]])
+# Carrega configurações
+def load_config() -> Dict[str, Any]:
+    """Carrega configurações do arquivo YAML."""
+    config_path = os.path.join(os.path.dirname(__file__), "configs", "cli.yaml")
+    try:
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f)
+            return config["app"]  # Retorna apenas a seção 'app' do arquivo
+    except Exception as e:
+        logger.error(f"Erro ao carregar configurações: {str(e)}", exc_info=True)
+        raise
 
-class TriageAgent:
-    def __init__(self, model_manager: ModelManager):
-        self.model_manager = model_manager
-        self.system_prompt = """
-        Você é um roteador especializado em desenvolvimento de software. Sua tarefa é analisar a conversa e decidir quais agentes devem ser acionados:
-        - Pré-processamento: Quando precisar clarificar requisitos ou processar dados
-        - Análise: Quando detectar necessidade de validação técnica ou métricas
-        - Visualização: Quando precisar apresentar resultados ou formatar saídas
+# Configurações globais
+CONFIG = load_config()
 
-        Responda apenas com JSON contendo lista de agentes relevantes.
-        """
-    
-    def route(self, context: str) -> List[str]:
-        response = self.model_manager.generate(
-            prompt=context,
-            system_prompt=self.system_prompt,
-            temperature=0
-        )
-        return json.loads(response)
+class AgentResult(BaseModel):
+    """Resultado de uma execução do agente."""
+    output: Any
+    items: List[Dict[str, Any]] = CONFIG["result"]["default_items"]
+    guardrails: List[Dict[str, Any]] = CONFIG["result"]["default_guardrails"]
+    raw_responses: List[Dict[str, Any]] = []
 
-class DeterministicPreprocessingAgent:
-    def __init__(self, model_manager: ModelManager):
-        self.model_manager = model_manager
-        self.system_prompt = """
-        Você é um especialista em engenharia de requisitos. Suas tarefas:
-        1. Limpeza: Remover ambiguidades e subjetividades
-        2. Transformação: Estruturar em formato Feature -> Critérios de Aceite
-        3. Agregação: Combinar com histórico mantendo consistência
-
-        Mantenha neutralidade técnica e foco em testabilidade.
-        """
-    
-    def process(self, input_text: str, context: str) -> str:
-        prompt = f"Contexto:\n{context}\n\nInput:\n{input_text}"
-        return self.model_manager.generate(
-            prompt=prompt,
-            system_prompt=self.system_prompt,
-            temperature=0.3
-        )
-
-class AnalyticalAnalysisAgent:
-    def __init__(self, model_manager: ModelManager):
-        self.model_manager = model_manager
-        self.system_prompt = """
-        Você é um arquiteto de software experiente. Realize:
-        1. Análise Estatística: Quantidade/Complexidade de requisitos
-        2. Correlação: Identificar dependências entre requisitos
-        3. Regressão: Prever gaps de implementação
-
-        Use métricas técnicas e padrões de mercado.
-        """
-    
-    def analyze(self, processed_data: str, context: str) -> str:
-        prompt = f"Dados Processados:\n{processed_data}\n\nContexto:\n{context}"
-        return self.model_manager.generate(
-            prompt=prompt,
-            system_prompt=self.system_prompt,
-            temperature=0.5
-        )
-
-class ToolVisualizationAgent:
-    def __init__(self, model_manager: ModelManager):
-        self.model_manager = model_manager
-        self.markdown_prompt = """
-        Transforme a análise em markdown com:
-        - Seções hierárquicas
-        - Tabelas comparativas
-        - Destaques para pontos críticos
-        """
-        
-        self.json_prompt = """
-        Estruture em JSON com:
-        - feature (string)
-        - acceptance_criteria (array)
-        - test_scenarios (array)
-        - complexity (int 1-5)
-        - dependencies (array)
-        """
-    
-    def visualize(self, analysis: str, format_type: str) -> str:
-        prompt = f"Análise:\n{analysis}"
-        system_prompt = self.markdown_prompt if format_type == "markdown" else self.json_prompt
-        return self.model_manager.generate(
-            prompt=prompt,
-            system_prompt=system_prompt,
-            temperature=0
-        )
 
 class AgentOrchestrator:
-    def __init__(self, api_key: str = None):
-        self.history = ConversationHistory()
-        self.model_manager = ModelManager()
+    """Orquestrador de agentes do sistema."""
+
+    def __init__(self):
+        """Inicializa o orquestrador."""
+        self.models = ModelManager()
+        self.db = DatabaseManager()
+        logger.info("AgentOrchestrator inicializado")
+
+    def execute(self, prompt: str, **kwargs) -> AgentResult:
+        """
+        Executa o processamento do prompt.
         
-        if api_key:
-            self.model_manager.configure(
-                model="gpt-3.5-turbo",
-                temperature=0.7
+        Args:
+            prompt: Texto de entrada
+            **kwargs: Argumentos adicionais
+            
+        Returns:
+            AgentResult com o resultado do processamento
+        """
+        try:
+            logger.info(f"INÍCIO - execute | Prompt: {prompt[:CONFIG['logging']['truncate_length']]}...")
+            
+            # Configura o modelo
+            self.models.configure(
+                model=kwargs.get("model", CONFIG["model"]["name"]),
+                temperature=kwargs.get("temperature", CONFIG["model"]["temperature"])
             )
             
-        self.triage = TriageAgent(self.model_manager)
-        self.preprocessor = DeterministicPreprocessingAgent(self.model_manager)
-        self.analyst = AnalyticalAnalysisAgent(self.model_manager)
-        self.visualizer = ToolVisualizationAgent(self.model_manager)
-    
-    @trace(workflow_name="Agent Workflow")
-    @agent_span()
-    def handle_input(self, user_input: str) -> Dict[str, Any]:
-        # Registrar entrada do usuário
-        self.history.add_message(Message(user_input, "User", time.time()))
-        
-        # Loop de processamento iterativo
-        final_output = None
-        processed = None
-        analysis = None
-        
-        context = self.history.get_context()
-        
-        # Etapa 1: Triagem
-        agents = self.triage.route(context)
-        
-        # Etapa 2: Pré-processamento
-        if "preprocessor" in agents:
-            with generation_span(name="Preprocessing"):
-                processed = self.preprocessor.process(user_input, context)
-                self.history.add_message(Message(processed, "Preprocessor", time.time()))
-        
-        # Etapa 3: Análise
-        if "analyst" in agents:
-            with generation_span(name="Analysis"):
-                analysis = self.analyst.analyze(processed or user_input, context)
-                self.history.add_message(Message(analysis, "Analyst", time.time()))
+            # Gera resposta
+            text, metadata = self.models.generate(prompt)
+            
+            # Processa o resultado
+            result = AgentResult(
+                output=text,
+                items=[],  # Implementar geração de itens
+                guardrails=[],  # Implementar verificação de guardrails
+                raw_responses=[{
+                    CONFIG["database"]["metadata_id_field"]: metadata.get(CONFIG["database"]["metadata_id_field"]),
+                    "response": metadata
+                }]
+            )
+            
+            # Registra no banco de dados
+            run_id = self.db.log_run(
+                session_id=kwargs.get("session_id", CONFIG["database"]["default_session"]),
+                input=prompt,
+                final_output=result.output,
+                last_agent=CONFIG["database"]["default_agent"],
+                output_type=kwargs.get("format", CONFIG["database"]["default_output_format"])
+            )
+            
+            # Registra itens gerados
+            for item in result.items:
+                self.db.log_run_item(run_id, CONFIG["database"]["item_type"], item)
                 
-                # Visualização intermediária
-                markdown_output = self.visualizer.visualize(analysis, "markdown")
-                print(f"Análise Parcial:\n{markdown_output}")
-        
-        # Etapa 4: Visualização Final
-        if "visualizer" in agents:
-            with generation_span(name="Visualization"):
-                final_output = self.visualizer.visualize(analysis or processed or user_input, "json")
-                self.history.add_message(Message(final_output, "Visualizer", time.time()))
-                return json.loads(final_output)
-        
-        # Se não houver visualizador, retorna o último resultado disponível
-        last_output = analysis or processed or user_input
-        if isinstance(last_output, str):
-            try:
-                return json.loads(last_output)
-            except:
-                return {"result": last_output}
-        return last_output
+            # Registra guardrails
+            for guardrail in result.guardrails:
+                self.db.log_guardrail_results(run_id, CONFIG["database"]["guardrail_type"], guardrail)
+                
+            # Registra respostas brutas
+            for response in result.raw_responses:
+                self.db.log_raw_response(run_id, response)
+            
+            logger.info(f"SUCESSO - execute | Tamanho da resposta: {len(result.output)}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"FALHA - execute | Erro: {str(e)}", exc_info=True)
+            raise
+        finally:
+            self.db.close()
 
 # Uso
 if __name__ == "__main__":
-    import os
-    api_key = os.getenv("OPENAI_KEY")
-    if not api_key:
-        print("ERRO: A variável de ambiente OPENAI_KEY não está definida")
-        exit(1)
-        
-    orchestrator = AgentOrchestrator(api_key=api_key)
-    user_prompt = "Preciso de um sistema de login com autenticação de dois fatores"
-    result = orchestrator.handle_input(user_prompt)
-    print("Resultado Final:", json.dumps(result, indent=2))
+    orchestrator = AgentOrchestrator()
+    user_prompt = CONFIG["example"]["prompt"]
+    result = orchestrator.execute(user_prompt)
+    print("Resultado Final:", result.output)

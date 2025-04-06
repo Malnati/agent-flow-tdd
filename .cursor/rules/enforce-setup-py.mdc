@@ -4,7 +4,7 @@ globs:
 alwaysApply: true
 ---
 
-# Regra para dependências Python
+# Regra: **Dependências Python**
 
 - **Não usar** pyproject.toml, apenas o setup.py é permitido.
 - **Não usar** ou setup.cfg neste projeto, apenas o setup.py é permitido.

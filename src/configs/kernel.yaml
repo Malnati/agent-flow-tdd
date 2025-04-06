@@ -1,0 +1,307 @@
+# Configurações Unificadas do Kernel
+
+# Diretórios Globais
+directories:
+  logs: logs  # Relativo ao BASE_DIR
+  cache: cache
+
+# Configurações de Logging
+logging:
+  levels:
+    default: INFO
+    map:
+      DEBUG: 10
+      INFO: 20
+      WARNING: 30
+      ERROR: 40
+      CRITICAL: 50
+  format:
+    default: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  security:
+    sensitive_keywords:
+      - pass
+      - senha
+      - password
+      - token
+      - access_token
+      - refresh_token
+      - jwt
+      - secret
+      - api_key
+      - apikey
+      - key
+      - auth
+      - credential
+      - oauth
+      - private
+      - signature
+    token_patterns:
+      - 'sk-[a-zA-Z0-9]{20,}'
+      - 'sk-proj-[a-zA-Z0-9_-]{20,}'
+      - 'gh[pous]_[a-zA-Z0-9]{20,}'
+      - 'github_pat_[a-zA-Z0-9]{20,}'
+      - 'eyJ[a-zA-Z0-9_-]{5,}\.eyJ[a-zA-Z0-9_-]{5,}\.[a-zA-Z0-9_-]{5,}'
+      - '[a-zA-Z0-9_-]{30,}'
+    masking:
+      default_mask: "***"
+      min_length_for_masking: 20
+      prefix_length: 4
+      suffix_length: 4
+      min_length_for_partial: 10
+  trace:
+    default_workflow_name: "Agent Workflow"
+    default_span_type: "custom"
+    file_processor:
+      default_file: "traces.json"
+    tracing_disabled: false
+    trace_include_sensitive_data: false
+    prefixes:
+      span: "span_"
+      trace: "trace_"
+
+# Configurações do Banco de Dados
+database:
+  default_path: logs/agent_logs.db
+  history_limit: 10
+  schema:
+    guardrail_types:
+      - "input"
+      - "output"
+  tables:
+    agent_runs:
+      name: "agent_runs"
+      columns:
+        - name: "id"
+          type: "INTEGER PRIMARY KEY AUTOINCREMENT"
+        - name: "timestamp"
+          type: "DATETIME DEFAULT CURRENT_TIMESTAMP"
+        - name: "session_id"
+          type: "TEXT NOT NULL"
+        - name: "input"
+          type: "TEXT NOT NULL"
+        - name: "last_agent"
+          type: "TEXT"
+        - name: "output_type"
+          type: "TEXT"
+        - name: "final_output"
+          type: "TEXT"
+    run_items:
+      name: "run_items"
+      columns:
+        - name: "id"
+          type: "INTEGER PRIMARY KEY AUTOINCREMENT"
+        - name: "run_id"
+          type: "INTEGER NOT NULL"
+        - name: "timestamp"
+          type: "DATETIME DEFAULT CURRENT_TIMESTAMP"
+        - name: "item_type"
+          type: "TEXT NOT NULL"
+        - name: "raw_item"
+          type: "TEXT NOT NULL"
+        - name: "source_agent"
+          type: "TEXT"
+        - name: "target_agent"
+          type: "TEXT"
+      foreign_keys:
+        - column: "run_id"
+          references: "agent_runs(id)"
+    guardrail_results:
+      name: "guardrail_results"
+      columns:
+        - name: "id"
+          type: "INTEGER PRIMARY KEY AUTOINCREMENT"
+        - name: "run_id"
+          type: "INTEGER NOT NULL"
+        - name: "timestamp"
+          type: "DATETIME DEFAULT CURRENT_TIMESTAMP"
+        - name: "guardrail_type"
+          type: "TEXT"
+        - name: "results"
+          type: "TEXT NOT NULL"
+      foreign_keys:
+        - column: "run_id"
+          references: "agent_runs(id)"
+      checks:
+        - column: "guardrail_type"
+          constraint: "IN ('input', 'output')"
+    raw_responses:
+      name: "raw_responses"
+      columns:
+        - name: "id"
+          type: "INTEGER PRIMARY KEY AUTOINCREMENT"
+        - name: "run_id"
+          type: "INTEGER NOT NULL"
+        - name: "timestamp"
+          type: "DATETIME DEFAULT CURRENT_TIMESTAMP"
+        - name: "response"
+          type: "TEXT NOT NULL"
+      foreign_keys:
+        - column: "run_id"
+          references: "agent_runs(id)"
+
+# Configurações dos Modelos
+models:
+  defaults:
+    model: "gpt-4"
+    elevation_model: "gpt-4"
+    temperature: 0.7
+    max_tokens: null
+    max_retries: 3
+    timeout: 120
+  cache:
+    enabled: true
+    ttl: 3600  # 1 hora
+    directory: "cache"
+  fallback:
+    enabled: true
+  providers:
+    openai:
+      base_url: "https://api.openai.com/v1"
+      prefix_patterns:
+        - "gpt-"
+        - "text-"
+      default_max_tokens: 2048
+      default_model: "gpt-4"
+    openrouter:
+      base_url: "https://openrouter.ai/api/v1"
+      prefix_patterns:
+        - "deepseek-"
+        - "anthropic/"
+        - "meta-llama/"
+      default_max_tokens: 4096
+      default_model: "deepseek-coder-33b-instruct"
+    gemini:
+      base_url: "https://generativelanguage.googleapis.com"
+      prefix_patterns:
+        - "gemini-"
+      default_max_tokens: 2048
+      default_model: "gemini-pro"
+    anthropic:
+      base_url: "https://api.anthropic.com"
+      prefix_patterns:
+        - "claude-"
+      default_max_tokens: 4096
+      default_model: "claude-3-opus-20240229"
+  env_vars:
+    default_model: "DEFAULT_MODEL"
+    elevation_model: "ELEVATION_MODEL"
+    max_retries: "MAX_RETRIES"
+    model_timeout: "MODEL_TIMEOUT"
+    fallback_enabled: "FALLBACK_ENABLED"
+    cache_enabled: "CACHE_ENABLED"
+    cache_ttl: "CACHE_TTL"
+    cache_dir: "CACHE_DIR"
+    openai_key: "OPENAI_API_KEY"
+    openrouter_key: "OPENROUTER_KEY"
+    gemini_key: "GEMINI_KEY"
+    anthropic_key: "ANTHROPIC_KEY"
+
+# Configurações de variáveis de ambiente por contexto
+
+required_vars:
+  cli:
+    - OPENAI_API_KEY
+  github:
+    - GITHUB_TOKEN
+  publish:
+    - PYPI_TOKEN
+
+optional_vars:
+  cli:
+    - OPENROUTER_KEY
+    - GEMINI_KEY
+    - ANTHROPIC_KEY
+    - LOG_LEVEL
+    - CACHE_DIR
+    - CACHE_TTL
+    - FALLBACK_ENABLED
+    - DEFAULT_MODEL
+    - ELEVATION_MODEL
+    - MODEL_TIMEOUT
+    - MAX_RETRIES
+  github: {}
+
+# Validação de tokens
+token_validation:
+  min_length: 10
+  openai_prefix: sk-
+  github_prefix: gh
+  openrouter_prefix: sk-or-v1-
+  gemini_prefix: AI
+  anthropic_prefix: sk-ant-
+  pypi_prefix: pypi-
+
+# Tipos de commit e seus impactos na versão
+commit_types:
+  breaking:
+    semver: major
+    description: Mudanças que quebram compatibilidade
+  feature:
+    semver: minor
+    description: Novas funcionalidades
+  fix:
+    semver: patch
+    description: Correções de bugs
+  docs:
+    semver: patch
+    description: Documentação
+  style:
+    semver: patch
+    description: Formatação e estilo
+  refactor:
+    semver: patch
+    description: Refatoração de código
+  test:
+    semver: patch
+    description: Testes
+  chore:
+    semver: patch
+    description: Tarefas de manutenção
+  perf:
+    semver: patch
+    description: Melhorias de performance
+  ci:
+    semver: patch
+    description: Configuração de CI
+  build:
+    semver: patch
+    description: Sistema de build
+
+# Padrões de regex para análise de commits
+patterns:
+  breaking:
+    - breaking change
+    - breaking-change
+    - incompatible
+    - nao compativel
+    - breaking
+    - major update
+  feature:
+    - add feature
+    - implement
+    - criado novo
+    - adicionado
+    - nova funcionalidade
+    - novo recurso
+  fix:
+    - fix
+    - bug fix
+    - resolve
+    - corrigido
+    - consertado
+    - correcao
+
+# Padrões para substituição de dados sensíveis em logs
+sensitive_data_patterns:
+  - pattern: '[a-zA-Z0-9-_]{20,}'
+    replacement: '***API_KEY***'
+  - pattern: 'Bearer [a-zA-Z0-9-_.]+' 
+    replacement: 'Bearer ***TOKEN***'
+  - pattern: 'github_pat_[a-zA-Z0-9_]+'
+    replacement: '***GITHUB_PAT***'
+  - pattern: 'ghp_[a-zA-Z0-9]+'
+    replacement: '***GITHUB_TOKEN***'
+  - pattern: 'sk-[a-zA-Z0-9]+'
+    replacement: '***OPENAI_API_KEY***'
+  - pattern: 'pypi-[a-zA-Z0-9]{20,}'
+    replacement: '***PYPI_TOKEN***' 

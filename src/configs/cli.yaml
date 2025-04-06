@@ -1,0 +1,91 @@
+# Configurações Unificadas do CLI
+
+# Configurações do CLI
+cli:
+  # Configurações de saída
+  output:
+    default_format: "json"
+    available_formats: ["json", "markdown"]
+  
+  # Configurações do modelo
+  model:
+    default_name: "gpt-3.5-turbo"
+    default_temperature: 0.7
+  
+  # Mensagens do sistema
+  messages:
+    start_dev: "🛠️ Executando CLI em modo desenvolvimento..."
+    error_prefix: "Erro ao processar comando: "
+  
+  # Configurações de saída JSON
+  json:
+    metadata_type: "feature"
+    ensure_ascii: false
+    indent: 2
+
+# Configurações do MCP
+mcp:
+  # Configurações de logging
+  logging:
+    level: "INFO"
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    handlers:
+      stdout: true
+      file:
+        enabled: true
+        path: "logs/mcp_server.log"
+
+  # Configurações do LLM
+  llm:
+    default_model: "gpt-3.5-turbo"
+    default_temperature: 0.7
+    default_format: "json"
+    markdown_prompt_prefix: |
+      Por favor, formate sua resposta em Markdown com:
+      - Títulos e subtítulos
+      - Listas
+      - Destaques
+      - Tabelas quando relevante
+
+      Prompt:
+
+  # Configurações do MCP Handler
+  handler:
+    hook: "/prompt-tdd"
+    metadata:
+      status:
+        success: "success"
+        error: "error"
+      format:
+        json: "json"
+        markdown: "markdown"
+
+# Configurações da Aplicação
+app:
+  # Configurações do modelo
+  model:
+    name: "gpt-3.5-turbo"
+    temperature: 0.7
+
+  # Configurações do banco de dados
+  database:
+    default_session: "default"
+    default_agent: "OpenAI"
+    default_output_format: "json"
+    item_type: "item"  # Tipo padrão para itens
+    guardrail_type: "output"  # Tipo padrão para guardrails
+    metadata_id_field: "id"  # Campo de ID nos metadados
+
+  # Configurações de logging
+  logging:
+    truncate_length: 100  # Comprimento máximo para truncar logs
+    error_show_traceback: true  # Se deve mostrar traceback nos logs de erro
+
+  # Configurações de exemplo para testes
+  example:
+    prompt: "Preciso de um sistema de login com autenticação de dois fatores"
+
+  # Configurações de resultado
+  result:
+    default_items: []  # Lista vazia padrão para itens
+    default_guardrails: []  # Lista vazia padrão para guardrails 

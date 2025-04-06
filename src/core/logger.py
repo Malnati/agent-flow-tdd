@@ -1,61 +1,63 @@
 # src/core/logger.py
 import os
-import sys
 import logging
 import logging.handlers
 import uuid
 import time
+import re
 from contextvars import ContextVar
 from pathlib import Path
 from functools import wraps
-from typing import Optional, Union, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, Callable
 from dataclasses import dataclass, field
 import json
-from rich.console import Console
-from rich.logging import RichHandler
+from datetime import datetime
+import functools
+import yaml
 
 # Diretório base do projeto
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-LOG_DIR = os.path.join(BASE_DIR, 'logs')
 
-# Garantir que o diretório de logs existe
+def load_config() -> Dict[str, Any]:
+    """
+    Carrega as configurações do logger do arquivo YAML.
+    
+    Returns:
+        Dict com as configurações
+    """
+    config_path = os.path.join(BASE_DIR, 'src', 'configs', 'kernel.yaml')
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+        return {
+            "directories": config["directories"],
+            "logging": config["logging"]
+        }
+
+# Carrega configurações
+CONFIG = load_config()
+
+# Configura diretório de logs
+LOG_DIR = os.path.join(BASE_DIR, CONFIG['directories']['logs'])
 os.makedirs(LOG_DIR, exist_ok=True)
 
 # Configuração de níveis de log
-LOG_LEVEL_MAP = {
-    'DEBUG': logging.DEBUG,
-    'INFO': logging.INFO,
-    'WARNING': logging.WARNING,
-    'ERROR': logging.ERROR,
-    'CRITICAL': logging.CRITICAL
-}
-
-# Nível de log padrão - pode ser sobrescrito via variável de ambiente
-DEFAULT_LOG_LEVEL = 'INFO'
+LOG_LEVEL_MAP = CONFIG['logging']['levels']['map']
+DEFAULT_LOG_LEVEL = CONFIG['logging']['levels']['default']
 LOG_LEVEL = os.environ.get('LOG_LEVEL', DEFAULT_LOG_LEVEL).upper()
-NUMERIC_LOG_LEVEL = LOG_LEVEL_MAP.get(LOG_LEVEL, logging.INFO)
+NUMERIC_LOG_LEVEL = LOG_LEVEL_MAP.get(LOG_LEVEL, LOG_LEVEL_MAP['INFO'])
 
 # Lista de palavras-chave para identificar dados sensíveis
-SENSITIVE_KEYWORDS = [
-    'pass', 'senha', 'password', 
-    'token', 'access_token', 'refresh_token', 'jwt', 
-    'secret', 'api_key', 'apikey', 'key', 
-    'auth', 'credential', 'oauth', 
-    'private', 'signature'
-]
+SENSITIVE_KEYWORDS = CONFIG['logging']['security']['sensitive_keywords']
 
 # Padrões de tokens a serem mascarados
-TOKEN_PATTERNS = [
-    r'sk-[a-zA-Z0-9]{20,}',
-    r'sk-proj-[a-zA-Z0-9_-]{20,}',
-    r'gh[pous]_[a-zA-Z0-9]{20,}',
-    r'github_pat_[a-zA-Z0-9]{20,}',
-    r'eyJ[a-zA-Z0-9_-]{5,}\.eyJ[a-zA-Z0-9_-]{5,}\.[a-zA-Z0-9_-]{5,}',
-    r'[a-zA-Z0-9_-]{30,}'
-]
+TOKEN_PATTERNS = CONFIG['logging']['security']['token_patterns']
 
 class SecureLogFilter(logging.Filter):
     """Filtro para mascarar dados sensíveis nos registros de log"""
+    
+    def __init__(self):
+        super().__init__()
+        self.mask_config = CONFIG['logging']['security']['masking']
     
     def filter(self, record: logging.LogRecord) -> bool:
         """Processa e mascara dados sensíveis no registro de log"""
@@ -66,8 +68,9 @@ class SecureLogFilter(logging.Filter):
             record.args = tuple(self.mask_sensitive_data(arg) for arg in record.args)
         return True
 
-    def mask_sensitive_data(self, data: Any, mask_str: str = '***') -> Any:
+    def mask_sensitive_data(self, data: Any, mask_str: Optional[str] = None) -> Any:
         """Mascara dados sensíveis em strings e estruturas de dados"""
+        mask_str = mask_str or self.mask_config['default_mask']
         if isinstance(data, dict):
             return {k: self.mask_value(k, v, mask_str) for k, v in data.items()}
         elif isinstance(data, list):
@@ -84,7 +87,7 @@ class SecureLogFilter(logging.Filter):
 
     def mask_string(self, text: str, mask_str: str) -> str:
         """Mascara padrões sensíveis em strings"""
-        if len(text) > 20:
+        if len(text) > self.mask_config['min_length_for_masking']:
             for pattern in TOKEN_PATTERNS:
                 if re.search(pattern, text):
                     return self.mask_partially(text, mask_str)
@@ -94,125 +97,113 @@ class SecureLogFilter(logging.Filter):
 
     def mask_partially(self, text: str, mask_str: str) -> str:
         """Mascara parcialmente mantendo parte do conteúdo"""
-        if len(text) <= 10:
+        if len(text) <= self.mask_config['min_length_for_partial']:
             return mask_str
-        prefix = text[:4]
-        suffix = text[-4:] if len(text) > 8 else ''
+        prefix = text[:self.mask_config['prefix_length']]
+        suffix = text[-self.mask_config['suffix_length']:] if len(text) > (self.mask_config['prefix_length'] + self.mask_config['suffix_length']) else ''
         return f"{prefix}{mask_str}{suffix}"
 
-def setup_logging(
-    name: str = 'agent_flow_tdd',
-    level: Union[str, int] = NUMERIC_LOG_LEVEL,
-    log_file: Optional[str] = None,
-    enable_rich: bool = True,
-    file_max_mb: int = 10,
-    backup_count: int = 7,
-    trace_config: Optional['TraceConfig'] = None
-) -> logging.Logger:
+def setup_logger(name: str, level: Optional[str] = None) -> logging.Logger:
     """
-    Configura o sistema de logging unificado com suporte a Rich e segurança
+    Configura um logger com o formato padrão.
     
     Args:
         name: Nome do logger
-        level: Nível de log (int ou string)
-        log_file: Caminho para arquivo de log
-        enable_rich: Habilita saída formatada com Rich
-        file_max_mb: Tamanho máximo do arquivo em MB
-        backup_count: Número de arquivos de backup
-        trace_config: Configuração do sistema de tracing
+        level: Nível de log (DEBUG, INFO, etc)
         
     Returns:
         Logger configurado
     """
-    # Converter nível de log se necessário
-    if isinstance(level, str):
-        level = LOG_LEVEL_MAP.get(level.upper(), logging.INFO)
-    
+    # Cria logger
     logger = logging.getLogger(name)
-    logger.setLevel(level)
     
-    # Remover handlers existentes
-    if logger.handlers:
-        logger.handlers.clear()
+    # Define nível
+    log_level = level or os.getenv("LOG_LEVEL", CONFIG['logging']['levels']['default'])
+    logger.setLevel(getattr(logging, log_level))
     
-    # Adicionar filtro de segurança
-    logger.addFilter(SecureLogFilter())
+    # Remove handlers existentes
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
     
-    # Configurar console handler com Rich
-    if enable_rich and sys.stdout.isatty():
-        console = Console(color_system="auto")
-        rich_handler = RichHandler(
-            console=console,
-            show_time=True,
-            show_path=True,
-            markup=True,
-            rich_tracebacks=True,
-            tracebacks_show_locals=False
-        )
-        rich_handler.setLevel(level)
-        logger.addHandler(rich_handler)
+    # Adiciona handler de console
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.DEBUG)
     
-    # Configurar file handler com rotação
-    if log_file:
-        log_path = Path(LOG_DIR) / log_file
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        file_handler = logging.handlers.RotatingFileHandler(
-            filename=log_path,
-            maxBytes=file_max_mb*1024*1024,
-            backupCount=backup_count,
-            encoding='utf-8'
-        )
-        file_formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        file_handler.setFormatter(file_formatter)
-        file_handler.setLevel(level)
-        logger.addHandler(file_handler)
+    # Define formato
+    formatter = logging.Formatter(CONFIG['logging']['format']['default'])
+    console_handler.setFormatter(formatter)
     
-    # Configuração padrão do tracing
-    if trace_config is None:
-        trace_config = TraceConfig(
-            tracing_disabled=os.environ.get("OPENAI_AGENTS_DISABLE_TRACING", "0") == "1",
-            trace_processors=[FileTraceProcessor()]
-        )
+    # Adiciona filtro de segurança
+    secure_filter = SecureLogFilter()
+    console_handler.addFilter(secure_filter)
     
-    logger.trace_config = trace_config
+    # Adiciona handler
+    logger.addHandler(console_handler)
+    
     return logger
 
-def log_execution(func=None, level=logging.INFO):
-    """Decorador para logar execução de funções com segurança"""
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            logger = logging.getLogger('agent_flow_tdd')
+def log_execution(func: Callable) -> Callable:
+    """
+    Decorador para logging de execução de funções.
+    
+    Args:
+        func: Função a ser decorada
+        
+    Returns:
+        Função decorada com logging
+    """
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        logger = get_logger(func.__module__)
+        
+        # Log de início
+        logger.info(f"INÍCIO - {func.__name__} | Args: {args}, Kwargs: {kwargs}")
+        
+        try:
+            # Executa função
+            result = func(*args, **kwargs)
             
-            safe_args = [logger.getEffectiveLevel() >= logging.DEBUG or SecureLogFilter().mask_sensitive_data(arg) 
-                        for arg in args]
-            safe_kwargs = {k: logger.getEffectiveLevel() >= logging.DEBUG or SecureLogFilter().mask_sensitive_data(v) 
-                          for k, v in kwargs.items()}
+            # Log de sucesso
+            logger.info(f"SUCESSO - {func.__name__}")
+            return result
             
-            logger.log(level, f"Iniciando {func.__qualname__} - Args: {safe_args}, Kwargs: {safe_kwargs}")
+        except Exception as e:
+            # Log de erro
+            logger.error(
+                f"FALHA - {func.__name__} | Erro: {str(e)}", 
+                exc_info=True
+            )
+            raise
             
-            start_time = time.time()
-            try:
-                result = func(*args, **kwargs)
-                elapsed = time.time() - start_time
-                logger.log(level, f"Concluído {func.__qualname__} em {elapsed:.3f}s")
-                return result
-            except Exception:
-                elapsed = time.time() - start_time
-                logger.error(f"Erro em {func.__qualname__} após {elapsed:.3f}s", exc_info=True)
-                raise
-        return wrapper
-    return decorator(func) if func else decorator
+    return wrapper
+
+def log_error(error: Exception, context: Optional[Dict[str, Any]] = None) -> None:
+    """
+    Loga um erro com contexto adicional.
+    
+    Args:
+        error: Exceção a ser logada
+        context: Dicionário com informações de contexto
+    """
+    logger = get_logger(__name__)
+    
+    error_data = {
+        'error_type': type(error).__name__,
+        'error_message': str(error),
+        'timestamp': datetime.now().isoformat(),
+        'context': context or {}
+    }
+    
+    logger.error(
+        f"Erro: {json.dumps(error_data, indent=2)}", 
+        exc_info=True
+    )
 
 # Alias para compatibilidade
-get_logger = setup_logging
+get_logger = setup_logger
 
 # Logger global padrão
-logger = setup_logging()
+logger = setup_logger('agent_flow_tdd')
 
 # Funções auxiliares de conveniência
 def log_error(message: str, exc_info=False) -> None:
@@ -242,10 +233,10 @@ current_span: ContextVar[Optional['Span']] = ContextVar('current_span', default=
 @dataclass
 class Span:
     """Representa uma operação temporal dentro de um trace"""
-    span_id: str = field(default_factory=lambda: f"span_{uuid.uuid4().hex}")
     trace_id: str
+    span_id: str = field(default_factory=lambda: f"{CONFIG['logging']['trace']['prefixes']['span']}{uuid.uuid4().hex}")
     parent_id: Optional[str] = None
-    span_type: str = "custom"
+    span_type: str = CONFIG['logging']['trace']['default_span_type']
     name: Optional[str] = None
     start_time: float = field(default_factory=time.time)
     end_time: Optional[float] = None
@@ -255,8 +246,8 @@ class Span:
 @dataclass
 class Trace:
     """Representa um fluxo completo de execução"""
-    trace_id: str = field(default_factory=lambda: f"trace_{uuid.uuid4().hex}")
-    workflow_name: str = "Agent Workflow"
+    trace_id: str = field(default_factory=lambda: f"{CONFIG['logging']['trace']['prefixes']['trace']}{uuid.uuid4().hex}")
+    workflow_name: str = CONFIG['logging']['trace']['default_workflow_name']
     group_id: Optional[str] = None
     start_time: float = field(default_factory=time.time)
     end_time: Optional[float] = None
@@ -268,8 +259,8 @@ class Trace:
 @dataclass
 class TraceConfig:
     """Configuração para controle do tracing"""
-    tracing_disabled: bool = False
-    trace_include_sensitive_data: bool = False
+    tracing_disabled: bool = CONFIG['logging']['trace']['tracing_disabled']
+    trace_include_sensitive_data: bool = CONFIG['logging']['trace']['trace_include_sensitive_data']
     trace_processors: List['TraceProcessor'] = field(default_factory=list)
 
 class TraceProcessor:
@@ -278,17 +269,13 @@ class TraceProcessor:
         raise NotImplementedError
 
 class FileTraceProcessor(TraceProcessor):
-    """Armazena traces em arquivo JSON"""
-    def __init__(self, file_path: str = "traces.json"):
-        self.file_path = Path(LOG_DIR) / file_path
-        self.file_path.parent.mkdir(parents=True, exist_ok=True)
-
-    def process_trace(self, trace: Trace):
-        with open(self.file_path, "a") as f:
-            f.write(json.dumps(trace.__dict__, default=str) + "\n")
+    """Processador que salva traces em arquivo"""
+    
+    def __init__(self, file_path: Optional[str] = None):
+        self.file_path = file_path or CONFIG['logging']['trace']['file_processor']['default_file']
 
 def trace(
-    workflow_name: str = "Agent Workflow",
+    workflow_name: str = CONFIG['logging']['trace']['default_workflow_name'],
     group_id: Optional[str] = None,
     disabled: Optional[bool] = None,
     metadata: Optional[Dict] = None
@@ -301,7 +288,7 @@ def trace(
             if logger.trace_config.tracing_disabled or disabled:
                 return func(*args, **kwargs)
 
-            parent_trace = current_trace.get()
+            current_trace.get()
             new_trace = Trace(
                 workflow_name=workflow_name,
                 group_id=group_id,
@@ -330,7 +317,7 @@ def trace(
     return decorator
 
 def span(
-    span_type: str = "custom",
+    span_type: str = CONFIG['logging']['trace']['default_span_type'],
     name: Optional[str] = None,
     capture_args: bool = False
 ):

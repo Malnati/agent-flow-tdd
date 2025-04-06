@@ -1,87 +1,228 @@
 """
-CLI para interação com o agente.
+CLI para o sistema.
+Módulo principal que define os comandos disponíveis na interface de linha de comando.
 """
 import json
-import logging
-import time
 import sys
-from typing import Optional
+import time
+import os
+from typing import Dict
 
 import typer
+import yaml
 from rich.console import Console
+from rich.markdown import Markdown
 
-from src.core.utils import validate_env
 from src.app import AgentOrchestrator
-from src.core.logger import trace, agent_span, generation_span
+from src.core.models import ModelManager
+from src.core.logger import get_logger, log_execution
+from src.core.kernel import get_env_var, get_env_status as get_kernel_env_status, validate_env as validate_kernel_env
 
-from src.mcp import MCPHandler, LLMProvider, PromptManager
+# Constantes do sistema
+EXIT_CODE_SUCCESS = 0
+EXIT_CODE_ERROR = 1
+EMPTY_PROMPT = ""
 
-# Configuração de logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+def generate_session_id() -> str:
+    """Gera um ID de sessão baseado no timestamp atual."""
+    return str(time.time())
 
+# Carrega configurações
+def load_config() -> Dict:
+    """Carrega configurações do arquivo YAML."""
+    config_path = os.path.join(os.path.dirname(__file__), "configs", "cli.yaml")
+    try:
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f)
+            # Mescla configurações de logging do app com o config principal
+            config["logging"] = config["app"]["logging"]
+            return config
+    except Exception as e:
+        logger.error(f"Erro ao carregar configurações: {str(e)}", exc_info=True)
+        raise
+
+# Configurações globais
+CONFIG = load_config()
+
+# Logger e Console
+logger = get_logger(__name__)
 app = typer.Typer()
-console = Console()
+output_console = Console()  # Console para saída normal
 
-def get_orchestrator(api_key: Optional[str] = None) -> AgentOrchestrator:
-    """Retorna uma instância do orquestrador."""
-    return AgentOrchestrator(api_key=api_key)
+def get_env_status() -> Dict[str, Dict[str, bool]]:
+    """
+    Obtém o status das variáveis de ambiente.
 
-def read_server_response(timeout: int = 10) -> Optional[str]:
-    """Lê a resposta do servidor do arquivo de log."""
-    start_time = time.time()
-    while time.time() - start_time < timeout:
-        try:
-            with open("logs/mcp_server.log", "r") as f:
-                lines = f.readlines()
-                for line in reversed(lines):
-                    try:
-                        data = json.loads(line.strip())
-                        if "content" in data:
-                            return line.strip()
-                    except json.JSONDecodeError:
-                        continue
-        except FileNotFoundError:
-            pass
-        time.sleep(0.1)
-    return None
+    Returns:
+        Dict com o status das variáveis.
+    """
+    return get_kernel_env_status("cli")
+
+@log_execution
+def validate_env() -> None:
+    """
+    Valida se todas as variáveis de ambiente obrigatórias estão definidas.
+
+    Raises:
+        ValueError: Se alguma variável obrigatória não estiver definida.
+    """
+    try:
+        validate_kernel_env("cli")
+    except ValueError as e:
+        logger.error(str(e))
+        print(str(e), file=sys.stderr)
+        raise typer.Exit(code=EXIT_CODE_ERROR)
+
+def get_orchestrator() -> AgentOrchestrator:
+    """
+    Retorna uma instância do AgentOrchestrator.
+    
+    Returns:
+        AgentOrchestrator: Nova instância do orquestrador
+    """
+    return AgentOrchestrator()
 
 @app.command()
-@trace(workflow_name="CLI Workflow")
-@agent_span()
-def main(
-    prompt: str,
-    mode: str = typer.Option("cli", help="Modo de execução (cli ou mcp)"),
-    format: str = typer.Option("json", help="Formato de saída (json ou markdown)")
-):
-    """CLI para o prompt-tdd."""
+def status():
+    """
+    Exibe o status do ambiente e configurações.
+    """
     try:
-        # Valida variáveis de ambiente
-        if not validate_env():
-            sys.exit(1)
-            
-        # Inicializa componentes
-        llm_provider = LLMProvider()
-        prompt_manager = PromptManager()
+        # Obtém status do ambiente
+        env_status = get_env_status()
         
-        if mode == "mcp":
-            # Modo MCP (Message Control Protocol)
-            handler = MCPHandler(llm_provider, prompt_manager)
-            handler.run()
-        else:
-            # Modo CLI padrão
-            with generation_span(name="LLM Generation"):
-                response = llm_provider.generate(prompt, {"format": format})
-            if response:
-                print(response)
-            else:
-                logger.error("Erro ao gerar resposta")
-                sys.exit(1)
-                
+        # Obtém modelos disponíveis
+        models = ModelManager()
+        available_models = models.get_available_models()
+        
+        # Formata saída
+        status = {
+            "environment": env_status,
+            "models": available_models
+        }
+        
+        output_console.print(json.dumps(status, indent=CONFIG["cli"]["json"]["indent"]))
+        return EXIT_CODE_SUCCESS
+        
     except Exception as e:
-        logger.error(f"Erro ao processar comando: {str(e)}")
-        print(f"Erro ao processar comando: {str(e)}")
-        sys.exit(1)
+        error_msg = f"{CONFIG['cli']['messages']['error_prefix']}{str(e)}"
+        logger.error(error_msg, exc_info=CONFIG["logging"]["error_show_traceback"])
+        print(error_msg, file=sys.stderr)
+        raise typer.Exit(code=EXIT_CODE_ERROR)
+
+@app.command()
+def mcp(
+    prompt_tdd: str = typer.Argument(EMPTY_PROMPT),
+    format: str = typer.Option(
+        CONFIG["cli"]["output"]["default_format"],
+        help=f"Formato de saída ({', '.join(CONFIG['cli']['output']['available_formats'])})"
+    ),
+    model: str = typer.Option(
+        CONFIG["cli"]["model"]["default_name"],
+        help="Modelo a ser usado"
+    ),
+    temperature: float = typer.Option(
+        CONFIG["cli"]["model"]["default_temperature"],
+        help="Temperatura para geração"
+    )
+):
+    """
+    Executa o Agent Flow TDD em modo MCP.
+    """
+    try:
+        print(CONFIG["cli"]["messages"]["start_dev"])
+        
+        # Valida ambiente
+        validate_env()
+        
+        from src.mcp import MCPHandler
+        
+        # Inicializa handler MCP
+        handler = MCPHandler()
+        handler.initialize(api_key=get_env_var("OPENAI_API_KEY"))
+        
+        # Executa loop MCP
+        handler.run()
+        return EXIT_CODE_SUCCESS
+        
+    except Exception as e:
+        error_msg = f"{CONFIG['cli']['messages']['error_prefix']}{str(e)}"
+        logger.error(error_msg, exc_info=CONFIG["logging"]["error_show_traceback"])
+        print(error_msg, file=sys.stderr)
+        raise typer.Exit(code=EXIT_CODE_ERROR)
+
+@app.command()
+def feature(
+    prompt_tdd: str = typer.Argument(..., help="Prompt para o TDD"),
+    format: str = typer.Option(
+        CONFIG["cli"]["output"]["default_format"],
+        help=f"Formato de saída ({', '.join(CONFIG['cli']['output']['available_formats'])})"
+    ),
+    model: str = typer.Option(
+        CONFIG["cli"]["model"]["default_name"],
+        help="Modelo a ser usado"
+    ),
+    temperature: float = typer.Option(
+        CONFIG["cli"]["model"]["default_temperature"],
+        help="Temperatura para geração"
+    )
+):
+    """
+    Executa o Agent Flow TDD para gerar uma feature.
+    """
+    try:
+        print(CONFIG["cli"]["messages"]["start_dev"])
+        
+        # Valida ambiente
+        validate_env()
+        
+        # Inicializa orquestrador
+        orchestrator = get_orchestrator()
+        
+        # Executa o prompt
+        result = orchestrator.execute(
+            prompt=prompt_tdd,
+            model=model,
+            temperature=temperature,
+            session_id=generate_session_id(),
+            format=format
+        )
+        
+        # Formata e exibe resultado
+        if format == "markdown":
+            output_console.print(Markdown(result.output))
+        else:
+            try:
+                # Tenta carregar como JSON
+                content = json.loads(result.output)
+            except json.JSONDecodeError:
+                # Se falhar, usa como string
+                content = result.output
+                
+            output = {
+                "content": content,
+                "metadata": {
+                    "type": CONFIG["cli"]["json"]["metadata_type"],
+                    "options": {
+                        "format": format,
+                        "model": model,
+                        "temperature": temperature
+                    }
+                }
+            }
+            print(json.dumps(
+                output,
+                ensure_ascii=CONFIG["cli"]["json"]["ensure_ascii"],
+                indent=CONFIG["cli"]["json"]["indent"]
+            ))
+            
+        return EXIT_CODE_SUCCESS
+        
+    except Exception as e:
+        error_msg = f"{CONFIG['cli']['messages']['error_prefix']}{str(e)}"
+        logger.error(error_msg, exc_info=CONFIG["logging"]["error_show_traceback"])
+        print(error_msg, file=sys.stderr)
+        raise typer.Exit(code=EXIT_CODE_ERROR)
 
 if __name__ == "__main__":
     app()

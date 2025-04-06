@@ -9,11 +9,12 @@ Um sistema para desenvolvimento orientado a testes usando prompts de IA.
 - Suporte a múltiplos modelos de IA (GPT-3.5, GPT-4)
 - Interface CLI com modo interativo e MCP (Multi-Command Protocol)
 - Saída em formatos JSON e Markdown
+- Configuração unificada e centralizada
 
 ## 📋 Pré-requisitos
 
 - Python 3.13+
-- Chave de API OpenAI (`OPENAI_KEY`)
+- Chave de API OpenAI (`OPENAI_API_KEY`)
 - Ambiente virtual Python (venv)
 
 ## 🛠️ Instalação
@@ -24,16 +25,39 @@ git clone https://github.com/seu-usuario/prompt-tdd.git
 cd prompt-tdd
 ```
 
-2. Crie um arquivo `.env` com sua chave da API do OpenAI:
+2. Configure as variáveis de ambiente necessárias:
 ```bash
-cp .env.example .env
-# Edite o arquivo .env e adicione sua chave da API
+# Não use arquivos .env, configure diretamente no ambiente
+export OPENAI_API_KEY="sua-chave-aqui"
 ```
 
 3. Instale as dependências:
 ```bash
 make install
 ```
+
+## ⚙️ Configuração
+
+O projeto usa um arquivo de configuração unificado em `src/configs/cli.yaml` com três seções principais:
+
+### 1. CLI (`cli`)
+- Configurações de saída (formatos, indentação)
+- Configurações do modelo (nome, temperatura)
+- Mensagens do sistema
+- Formatação JSON
+
+### 2. MCP (`mcp`)
+- Configurações de logging do MCP
+- Configurações do LLM
+- Configurações do handler MCP
+- Formatos de metadados
+
+### 3. Aplicação (`app`)
+- Configurações do modelo
+- Configurações do banco de dados
+- Configurações de logging
+- Configurações de exemplo
+- Configurações de resultado
 
 ## 🎮 Comandos Disponíveis
 
@@ -139,7 +163,7 @@ handler.run()
 
 ```bash
 # OpenAI GPT-4
-prompt-tdd feature "Criar API" --model gpt-4-turbo --api-key $OPENAI_KEY
+prompt-tdd feature "Criar API" --model gpt-4-turbo --api-key $OPENAI_API_KEY
 
 # Anthropic Claude
 prompt-tdd feature "Criar API" --model claude-3 --api-key $ANTHROPIC_KEY
@@ -185,11 +209,27 @@ Os logs são gerados automaticamente com:
 - Nível INFO para entrada/saída de funções
 - Nível DEBUG para estados intermediários
 - Nível ERROR para exceções (com stacktrace)
+- Configuração centralizada em `cli.yaml`
 
 ## 🔒 Variáveis de Ambiente
 
-- `OPENAI_KEY`: Chave da API OpenAI (obrigatória)
-- `ELEVATION_MODEL`: Modelo para fallback (opcional)
+Variáveis obrigatórias:
+- `OPENAI_API_KEY`: Chave da API OpenAI
+
+Variáveis opcionais:
+- `OPENROUTER_KEY`: Chave da API OpenRouter
+- `GEMINI_KEY`: Chave da API Gemini
+- `ANTHROPIC_KEY`: Chave da API Anthropic
+- `LOG_LEVEL`: Nível de log (default: INFO)
+- `CACHE_DIR`: Diretório de cache
+- `CACHE_TTL`: Tempo de vida do cache
+- `FALLBACK_ENABLED`: Habilita fallback de modelos
+- `DEFAULT_MODEL`: Modelo padrão
+- `ELEVATION_MODEL`: Modelo para fallback
+- `MODEL_TIMEOUT`: Timeout para chamadas de modelo
+- `MAX_RETRIES`: Máximo de tentativas
+
+**IMPORTANTE**: Não use arquivos .env. Configure as variáveis diretamente no ambiente ou via argumentos.
 
 ## 🤝 Contribuindo
 
@@ -260,4 +300,260 @@ make test
 
 ```bash
 make clean
+```
+
+# Agent Flow TDD
+
+Framework para desenvolvimento orientado a testes com agentes de IA.
+
+## Recursos
+
+- Desenvolvimento orientado a testes para agentes de IA
+- Integração com OpenAI Agent SDK
+- Logging estruturado em SQLite
+- Suporte a múltiplos provedores de LLM
+- Sistema de tracing e monitoramento
+- Interface MCP (Model Context Protocol)
+
+## Instalação
+
+```bash
+# Instalação básica
+pip install agent-flow-tdd
+
+# Instalação com dependências de desenvolvimento
+pip install agent-flow-tdd[dev]
+```
+
+## Uso Básico
+
+```python
+from src.app import AgentOrchestrator
+
+# Inicializa o orquestrador
+orchestrator = AgentOrchestrator(api_key="sua-chave-api")
+
+# Processa uma entrada
+result = orchestrator.handle_input("Criar sistema de login")
+print(result)
+```
+
+## Logging Estruturado
+
+O framework inclui um sistema de logging estruturado que armazena todas as interações em SQLite:
+
+### Dados Armazenados
+
+- **Execuções de Agentes**
+  - Session ID
+  - Input/Output
+  - Último agente executado
+  - Tipo de saída
+  - Timestamp
+
+- **Itens Gerados**
+  - MessageOutput
+  - HandoffCall/HandoffOutput
+  - ToolCall/ToolCallOutput
+  - ReasoningItem
+
+- **Guardrails**
+  - Resultados de input/output
+  - Mensagens de validação
+
+- **Respostas Brutas**
+  - Respostas do LLM
+  - Metadados de execução
+
+### Consulta de Logs
+
+```python
+from src.core.db import DatabaseManager
+
+# Inicializa o gerenciador
+db = DatabaseManager()
+
+# Busca histórico de execuções
+history = db.get_run_history(limit=10)
+
+# Exemplo de processamento
+for run in history:
+    print(f"Execução {run['id']}:")
+    print(f"- Input: {run['input']}")
+    print(f"- Agente: {run['last_agent']}")
+    print(f"- Items gerados: {len(run['items'])}")
+    print(f"- Guardrails: {len(run['guardrails'])}")
+    print(f"- Respostas: {len(run['raw_responses'])}")
+```
+
+### Schema SQL
+
+```sql
+-- Tabela principal de execuções
+CREATE TABLE agent_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    session_id TEXT NOT NULL,
+    input TEXT NOT NULL,
+    last_agent TEXT,
+    output_type TEXT,
+    final_output TEXT
+);
+
+-- Tabela de itens gerados
+CREATE TABLE run_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    item_type TEXT NOT NULL,
+    raw_item TEXT NOT NULL,
+    source_agent TEXT,
+    target_agent TEXT,
+    FOREIGN KEY(run_id) REFERENCES agent_runs(id)
+);
+
+-- Tabela de resultados de guardrails
+CREATE TABLE guardrail_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    guardrail_type TEXT CHECK(guardrail_type IN ('input', 'output')),
+    results TEXT NOT NULL,
+    FOREIGN KEY(run_id) REFERENCES agent_runs(id)
+);
+
+-- Tabela de respostas brutas do LLM
+CREATE TABLE raw_responses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    response TEXT NOT NULL,
+    FOREIGN KEY(run_id) REFERENCES agent_runs(id)
+);
+```
+
+## Desenvolvimento
+
+### Configuração do Ambiente
+
+```bash
+# Clone o repositório
+git clone https://github.com/seu-usuario/agent-flow-tdd.git
+cd agent-flow-tdd
+
+# Crie um ambiente virtual
+python -m venv .venv
+source .venv/bin/activate  # Linux/Mac
+.venv\Scripts\activate     # Windows
+
+# Instale em modo desenvolvimento
+pip install -e ".[dev]"
+```
+
+### Executando Testes
+
+```bash
+# Executa todos os testes
+make test
+
+# Executa testes com cobertura
+pytest --cov=src tests/
+
+# Executa testes específicos
+pytest tests/test_db.py -v
+```
+
+### Linting e Formatação
+
+```bash
+# Formata o código
+make format
+
+# Executa linters
+make lint
+
+# Limpa imports não utilizados
+make autoflake
+```
+
+## Contribuindo
+
+1. Fork o projeto
+2. Crie uma branch para sua feature (`git checkout -b feature/nova-feature`)
+3. Commit suas mudanças (`git commit -am 'Adiciona nova feature'`)
+4. Push para a branch (`git push origin feature/nova-feature`)
+5. Crie um Pull Request
+
+## Licença
+
+Este projeto está licenciado sob a licença MIT - veja o arquivo [LICENSE](LICENSE) para detalhes.
+
+## Visualização de Logs
+
+O framework inclui um visualizador de logs que permite consultar o histórico de execuções dos agentes. Para usar:
+
+```bash
+# Lista as últimas 10 execuções
+make logs
+
+# Lista as últimas N execuções
+make logs ARGS="--limit 20"
+
+# Filtra por session ID
+make logs ARGS="--session abc123"
+
+# Filtra por agente
+make logs ARGS="--agent CodeReviewer"
+
+# Mostra detalhes de uma execução específica
+make logs ARGS="--id 42"
+```
+
+O visualizador mostra:
+- Lista resumida de execuções com timestamp, session, agente e contadores
+- Detalhes completos de uma execução específica incluindo:
+  - Input/output
+  - Itens gerados entre agentes
+  - Resultados de guardrails
+  - Respostas brutas do LLM
+
+## Comandos Disponíveis
+
+Para ver todos os comandos disponíveis:
+
+```bash
+make help
+```
+
+### Ambiente
+
+- `make install` - Instala dependências do projeto
+- `make clean` - Remove arquivos temporários
+- `make dev` - Executa em modo desenvolvimento
+
+### Qualidade
+
+- `make test` - Executa testes
+- `make coverage` - Gera relatório de cobertura
+- `make lint` - Executa linters
+- `make format` - Formata código
+
+### Banco de Dados
+
+- `make db-init` - Inicializa banco de dados
+- `make db-clean` - Remove banco de dados
+- `make db-backup` - Faz backup do banco
+- `make logs` - Visualiza logs do banco
+
+### Exemplos
+
+```bash
+# Executa o agente com um prompt
+make dev prompt-tdd="Cadastro de pessoas" mode=mcp format=markdown
+
+# Visualiza os últimos 20 logs de uma sessão
+make logs ARGS="--limit 20 --session abc123"
+
+# Visualiza detalhes de uma execução específica
+make logs ARGS="--id 42"
 ```

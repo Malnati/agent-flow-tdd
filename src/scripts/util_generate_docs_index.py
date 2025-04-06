@@ -2,7 +2,7 @@ import os
 import tempfile
 import shutil
 import argparse
-from src.core.utils.logger import get_logger, log_execution
+from src.core.logger import get_logger, log_execution
 
 logger = get_logger(__name__)
 
