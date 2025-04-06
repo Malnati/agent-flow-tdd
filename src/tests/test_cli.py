@@ -37,7 +37,22 @@ def mock_db_manager():
     with patch('src.core.db.DatabaseManager') as mock:
         mock_instance = Mock()
         mock_instance.log_run = Mock(return_value=1)  # Retorna ID 1 para os registros
-        mock_instance.get_run_history = Mock(return_value=[])
+        
+        # Mock para get_run_history com diferentes comportamentos
+        def get_history_mock(*args, **kwargs):
+            if 'run_id' in kwargs and kwargs['run_id'] == 1:
+                return [{
+                    "id": 1,
+                    "session_id": "test-session",
+                    "input": "Test input",
+                    "final_output": "Test output",
+                    "last_agent": "OpenAI",
+                    "output_type": "json",
+                    "timestamp": "2024-04-04 12:00:00"
+                }]
+            return []
+            
+        mock_instance.get_run_history = Mock(side_effect=get_history_mock)
         
         # Mock para config com directories
         mock_instance.config = {

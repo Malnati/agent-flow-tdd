@@ -18,6 +18,15 @@ from src.core.models import ModelManager
 from src.core.logger import get_logger, log_execution
 from src.core.kernel import get_env_var, get_env_status as get_kernel_env_status, validate_env as validate_kernel_env
 
+# Constantes do sistema
+EXIT_CODE_SUCCESS = 0
+EXIT_CODE_ERROR = 1
+EMPTY_PROMPT = ""
+
+def generate_session_id() -> str:
+    """Gera um ID de sessão baseado no timestamp atual."""
+    return str(time.time())
+
 # Carrega configurações
 def load_config() -> Dict:
     """Carrega configurações do arquivo YAML."""
@@ -31,12 +40,6 @@ def load_config() -> Dict:
 
 # Configurações globais
 CONFIG = load_config()
-
-# Constantes do sistema
-EXIT_CODE_SUCCESS = 0
-EXIT_CODE_ERROR = 1
-EMPTY_PROMPT = ""
-SESSION_ID_GENERATOR = str(time.time)  # Função para gerar session_id
 
 # Logger e Console
 logger = get_logger(__name__)
@@ -178,7 +181,7 @@ def feature(
             prompt=prompt_tdd,
             model=model,
             temperature=temperature,
-            session_id=SESSION_ID_GENERATOR(),
+            session_id=generate_session_id(),
             format=format
         )
         
