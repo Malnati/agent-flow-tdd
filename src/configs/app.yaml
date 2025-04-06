@@ -1,0 +1,20 @@
+# Configurações do Agent Flow TDD
+
+# Configurações do modelo
+model:
+  name: "gpt-3.5-turbo"
+  temperature: 0.7
+
+# Configurações do banco de dados
+database:
+  default_session: "default"
+  default_agent: "OpenAI"
+  default_output_format: "json"
+
+# Configurações de logging
+logging:
+  truncate_length: 100  # Tamanho máximo para truncar logs
+
+# Configurações de exemplo
+example:
+  prompt: "Preciso de um sistema de login com autenticação de dois fatores" 
