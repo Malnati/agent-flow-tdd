@@ -193,7 +193,32 @@ Atualmente:
 - OpenAI GPT-3.5 Turbo
 - OpenAI GPT-4 Turbo
 - Anthropic Claude (via MCP)
+- TinyLLaMA 1.1B (local, via llama.cpp)
 - Outros modelos compatíveis com MCP
+
+### Configuração do TinyLLaMA
+
+Para usar o TinyLLaMA:
+
+1. Baixe o modelo quantizado (formato .gguf) e coloque em `models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf`
+2. Use o modelo via CLI:
+```bash
+prompt-tdd feature "Criar API" --model tinyllama-1.1b
+```
+
+3. Ou via MCP:
+```json
+{
+  "content": "Criar API REST",
+  "metadata": {
+    "type": "feature",
+    "options": {
+      "model": "tinyllama-1.1b",
+      "temperature": 0.7
+    }
+  }
+}
+```
 
 ## 🧪 Testes
 

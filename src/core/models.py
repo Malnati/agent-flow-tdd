@@ -40,6 +40,7 @@ class ModelProvider(str, Enum):
     OPENAI = "openai"
     OPENROUTER = "openrouter"
     GEMINI = "gemini"
+    TINYLLAMA = "tinyllama"
 
 
 class ModelConfig(BaseModel):
@@ -145,7 +146,20 @@ class ModelManager:
             self.anthropic_client = Anthropic(api_key=anthropic_key)
         else:
             self.anthropic_client = None
-            
+
+        # TinyLLaMA
+        try:
+            from llama_cpp import Llama
+            tinyllama_config = CONFIG['providers']['tinyllama']
+            self.tinyllama_model = Llama(
+                model_path=tinyllama_config['model_path'],
+                n_ctx=tinyllama_config['n_ctx'],
+                n_threads=tinyllama_config['n_threads']
+            )
+        except (ImportError, FileNotFoundError) as e:
+            logger.warning(f"TinyLLaMA não disponível: {str(e)}")
+            self.tinyllama_model = None
+        
     def _get_cache_key(self, prompt: str, system: Optional[str] = None, **kwargs) -> str:
         """
         Gera chave de cache para um prompt.
@@ -330,6 +344,26 @@ class ModelManager:
                     )
                 )
                 return response.text, {
+                    "model": provider_config['default_model'],
+                    "provider": provider,
+                    "status": "success"
+                }
+                
+            elif provider == 'tinyllama' and self.tinyllama_model:
+                # Prepara o prompt completo
+                full_prompt = prompt
+                if system:
+                    full_prompt = f"{system}\n\n{prompt}"
+                
+                # Gera resposta
+                response = self.tinyllama_model(
+                    full_prompt,
+                    max_tokens=self.max_tokens or provider_config.get('default_max_tokens', 256),
+                    temperature=self.temperature,
+                    stop=["</s>"]
+                )
+                
+                return response["choices"][0]["text"].strip(), {
                     "model": provider_config['default_model'],
                     "provider": provider,
                     "status": "success"

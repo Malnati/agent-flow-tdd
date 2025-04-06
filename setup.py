@@ -59,6 +59,7 @@ install_requires = [
     "cachetools>=5.3.0",
     "anthropic>=0.18.0",
     "PyYAML>=6.0.1",
+    "llama-cpp-python>=0.2.10",
 ]
 
 # Dependências de desenvolvimento
