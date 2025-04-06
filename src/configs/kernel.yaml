@@ -162,6 +162,11 @@ models:
         - "text-"
       default_max_tokens: 2048
       default_model: "gpt-4"
+      models:
+        - "gpt-4"
+        - "gpt-4-turbo-preview"
+        - "gpt-3.5-turbo"
+        - "gpt-3.5-turbo-16k"
     openrouter:
       base_url: "https://openrouter.ai/api/v1"
       prefix_patterns:
@@ -170,18 +175,29 @@ models:
         - "meta-llama/"
       default_max_tokens: 4096
       default_model: "deepseek-coder-33b-instruct"
+      models:
+        - "deepseek-coder-33b-instruct"
+        - "anthropic/claude-3-opus"
+        - "meta-llama/llama-2-70b-chat"
     gemini:
       base_url: "https://generativelanguage.googleapis.com"
       prefix_patterns:
         - "gemini-"
       default_max_tokens: 2048
       default_model: "gemini-pro"
+      models:
+        - "gemini-pro"
+        - "gemini-pro-vision"
     anthropic:
       base_url: "https://api.anthropic.com"
       prefix_patterns:
         - "claude-"
       default_max_tokens: 4096
       default_model: "claude-3-opus-20240229"
+      models:
+        - "claude-3-opus-20240229"
+        - "claude-3-sonnet-20240229"
+        - "claude-2.1"
     tinyllama:
       model_path: "models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
       prefix_patterns:
@@ -190,6 +206,8 @@ models:
       default_model: "tinyllama-1.1b"
       n_ctx: 256
       n_threads: 4
+      models:
+        - "tinyllama-1.1b"
   env_vars:
     default_model: "DEFAULT_MODEL"
     elevation_model: "ELEVATION_MODEL"

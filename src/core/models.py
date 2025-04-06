@@ -467,4 +467,31 @@ class ModelManager:
             "model": self.model_name,
             "provider": provider,
             "status": "error"
-        } 
+        }
+
+    def get_available_models(self) -> Dict[str, list]:
+        """
+        Retorna os modelos disponíveis para cada provedor.
+        
+        Returns:
+            Dict com os modelos disponíveis por provedor
+        """
+        available_models = {}
+        
+        # OpenAI
+        if hasattr(self, 'openai_client'):
+            available_models['openai'] = CONFIG['providers']['openai']['models']
+            
+        # OpenRouter
+        if self.openrouter_client:
+            available_models['openrouter'] = CONFIG['providers']['openrouter']['models']
+            
+        # Gemini
+        if self.gemini_model:
+            available_models['gemini'] = CONFIG['providers']['gemini']['models']
+            
+        # TinyLLaMA
+        if self.tinyllama_model:
+            available_models['tinyllama'] = CONFIG['providers']['tinyllama']['prefix_patterns']
+            
+        return available_models 
