@@ -114,6 +114,8 @@ def main():
     parser.add_argument("--id", type=int, help="Mostrar detalhes de uma execução específica")
     args = parser.parse_args()
     
+    db = None  # Inicializa db como None
+    
     try:
         db = DatabaseManager()
         
@@ -141,7 +143,8 @@ def main():
     except Exception as e:
         console.print(f"[red]Erro ao acessar logs: {str(e)}[/red]")
     finally:
-        db.close()
+        if db is not None:  # Fecha apenas se db foi inicializado
+            db.close()
 
 if __name__ == "__main__":
     main() 

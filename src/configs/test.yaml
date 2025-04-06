@@ -1,0 +1,73 @@
+# Configurações para Testes
+
+# Configurações de Ambiente de Teste
+environment:
+  timeout:
+    setup: 30  # Timeout para setup básico
+    install: 60  # Timeout para instalação de pacotes
+    pip_install: 120  # Timeout para instalação de dependências
+    dev_command: 120  # Timeout para comando dev
+    test_command: 30  # Timeout para comandos de teste
+    help_command: 10  # Timeout para comando help
+  directories:
+    required_files:
+      - "Makefile"
+      - "setup.py"
+      - "requirements.txt"
+      - ".version.json"
+      - "README.md"
+    temp_dirs:
+      - "build"
+      - "dist"
+      - "__pycache__"
+  version:
+    default:
+      current: "0.1.0"
+      previous: null
+  readme:
+    default_content: "# Agent Flow TDD\n\nFramework para desenvolvimento orientado a testes com agentes de IA."
+
+# Configurações de Banco de Dados
+database:
+  required_tables:
+    - "agent_runs"
+    - "run_items"
+    - "guardrail_results"
+    - "raw_responses"
+  test_data:
+    mock_run:
+      id: 1
+      session_id: "test-session"
+      input: "Test input"
+      final_output: "Test output"
+      last_agent: "OpenAI"
+      output_type: "json"
+      timestamp: "2024-04-04 12:00:00"
+      items: []
+      guardrails: []
+      raw_responses:
+        - id: "test"
+          response: "Test response"
+
+# Configurações de CLI
+cli:
+  messages:
+    dev_mode: "🛠️ Executando CLI em modo desenvolvimento..."
+    run_mode: "🖥️ Executando CLI..."
+    install: 
+      start: "🔧 Instalando dependências..."
+      success: "✅ Instalação concluída!"
+    clean:
+      start: "🧹 Limpando arquivos temporários..."
+      success: "✨ Limpeza concluída!"
+    help:
+      sections:
+        - "Comandos disponíveis:"
+        - "Ambiente:"
+        - "Qualidade:"
+        - "Banco de Dados:"
+        - "Publicação:"
+      commands:
+        - "make install"
+        - "make test"
+        - "make logs"

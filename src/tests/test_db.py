@@ -7,8 +7,19 @@ import os
 from datetime import datetime
 import pytest
 from unittest.mock import patch
+from pathlib import Path
+import yaml
 
 from src.core.db import DatabaseManager
+
+# Carrega configurações de teste
+def load_test_config() -> dict:
+    """Carrega configurações de teste do arquivo YAML."""
+    config_path = Path(__file__).resolve().parent.parent / 'configs' / 'test.yaml'
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return yaml.safe_load(f)
+
+TEST_CONFIG = load_test_config()
 
 @pytest.fixture
 def db_manager():
@@ -25,10 +36,9 @@ def test_create_tables(db_manager):
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
     tables = {row[0] for row in cursor.fetchall()}
     
-    assert "agent_runs" in tables
-    assert "run_items" in tables
-    assert "guardrail_results" in tables
-    assert "raw_responses" in tables
+    # Verifica se todas as tabelas requeridas foram criadas
+    for table in TEST_CONFIG['database']['required_tables']:
+        assert table in tables
 
 def test_log_run(db_manager):
     """Testa o registro de uma execução."""
@@ -197,10 +207,9 @@ def test_db_init_command(tmp_path):
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {row[0] for row in cursor.fetchall()}
         
-        assert "agent_runs" in tables
-        assert "run_items" in tables
-        assert "guardrail_results" in tables
-        assert "raw_responses" in tables
+        # Verifica se todas as tabelas requeridas foram criadas
+        for table in TEST_CONFIG['database']['required_tables']:
+            assert table in tables
         
         manager.close()
 

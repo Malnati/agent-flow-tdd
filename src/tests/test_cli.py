@@ -4,12 +4,23 @@ Testes para o módulo CLI.
 import os
 from unittest.mock import patch, mock_open, Mock, MagicMock
 import sys
+import yaml
+from pathlib import Path
 
 import pytest
 
 from src.cli import app
 from src.app import AgentResult
 from src.scripts.utils_view_logs import main as view_logs_main
+
+# Carrega configurações de teste
+def load_test_config() -> dict:
+    """Carrega configurações de teste do arquivo YAML."""
+    config_path = Path(__file__).resolve().parent.parent / 'configs' / 'test.yaml'
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return yaml.safe_load(f)
+
+TEST_CONFIG = load_test_config()
 
 @pytest.fixture
 def mock_env():
@@ -36,23 +47,26 @@ def mock_db_manager():
     """Mock do DatabaseManager."""
     with patch('src.core.db.DatabaseManager') as mock:
         mock_instance = Mock()
-        mock_instance.log_run = Mock(return_value=1)  # Retorna ID 1 para os registros
+        mock_instance.log_run = Mock(return_value=TEST_CONFIG['database']['test_data']['mock_run']['id'])
         
         # Mock para get_run_history com diferentes comportamentos
         def get_history_mock(*args, **kwargs):
-            if 'run_id' in kwargs and kwargs['run_id'] == 1:
-                return [{
-                    "id": 1,
-                    "session_id": "test-session",
-                    "input": "Test input",
-                    "final_output": "Test output",
-                    "last_agent": "OpenAI",
-                    "output_type": "json",
-                    "timestamp": "2024-04-04 12:00:00",
-                    "items": [],
-                    "guardrails": [],
-                    "raw_responses": [{"id": "test", "response": "Test response"}]
-                }]
+            if 'run_id' in kwargs:
+                if kwargs['run_id'] == 1:  # Para o teste test_view_logs_with_id_details
+                    return [{
+                        'id': 1,
+                        'session_id': 'test-session',
+                        'timestamp': '2024-04-06T20:00:00',
+                        'input': 'Test input',
+                        'final_output': 'Test output',
+                        'output_type': 'markdown',
+                        'last_agent': 'OpenAI',
+                        'items': [{'item_type': 'test', 'source_agent': 'test', 'target_agent': 'test', 'raw_item': 'test'}],
+                        'guardrails': [{'guardrail_type': 'test', 'results': 'test'}],
+                        'raw_responses': [{'id': 1, 'response': 'test'}]
+                    }]
+                elif kwargs['run_id'] == TEST_CONFIG['database']['test_data']['mock_run']['id']:
+                    return [TEST_CONFIG['database']['test_data']['mock_run']]
             return []
             
         mock_instance.get_run_history = Mock(side_effect=get_history_mock)
@@ -63,7 +77,6 @@ def mock_db_manager():
             "database": {"default_path": "logs/agent_logs.db", "history_limit": 10}
         }
         
-        mock.return_value = mock_instance
         yield mock_instance
 
 @pytest.fixture
@@ -369,8 +382,10 @@ def test_view_logs_with_id_details(capsys, mock_db_manager):
     """Testa o comando de logs mostrando detalhes de uma execução específica."""
     # Mock do sys.argv para simular argumentos da linha de comando
     with patch.object(sys, 'argv', ['utils_view_logs.py', '--id', '1']):
-        # Executa a função principal do visualizador de logs
-        view_logs_main()
+        # Mock do DatabaseManager para retornar dados de teste
+        with patch('src.scripts.utils_view_logs.DatabaseManager', return_value=mock_db_manager):
+            # Executa a função principal do visualizador de logs
+            view_logs_main()
         
     # Verifica se a saída contém elementos esperados
     captured = capsys.readouterr()

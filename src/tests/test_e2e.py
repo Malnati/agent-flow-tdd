@@ -8,11 +8,27 @@ import shutil
 from typing import Dict, Any
 import pytest
 from unittest.mock import patch
+import yaml
+from pathlib import Path
 
 from src.core.db import DatabaseManager
 from src.core.logger import setup_logger
 
 logger = setup_logger(__name__)
+
+# Carrega configurações de teste
+def load_test_config() -> dict:
+    """Carrega configurações de teste do arquivo YAML."""
+    config_path = Path(__file__).resolve().parent.parent / 'configs' / 'test.yaml'
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return yaml.safe_load(f)
+
+TEST_CONFIG = load_test_config()
+
+# Constantes para timeouts que não estão no config
+COMMAND_TIMEOUT = 30  # Timeout padrão para comandos
+PIP_LIST_TIMEOUT = 10  # Timeout para listar pacotes pip
+DB_COMMAND_TIMEOUT = 10  # Timeout para comandos de banco de dados
 
 @pytest.fixture(scope="session")
 def test_env(tmp_path_factory):
@@ -22,27 +38,27 @@ def test_env(tmp_path_factory):
     
     try:
         # Copia arquivos essenciais com timeout
-        for file in ["Makefile", "setup.py", "requirements.txt", ".version.json", "README.md"]:
+        for file in TEST_CONFIG['environment']['directories']['required_files']:
             if os.path.exists(file):
                 shutil.copy(file, test_dir / file)
         
         # Se .version.json não existe, cria
         if not os.path.exists(test_dir / ".version.json"):
-            version_data = {"current": "0.1.0", "previous": None}
+            version_data = TEST_CONFIG['environment']['version']['default']
             with open(test_dir / ".version.json", "w") as f:
                 json.dump(version_data, f)
         
         # Se README.md não existe, cria
         if not os.path.exists(test_dir / "README.md"):
             with open(test_dir / "README.md", "w") as f:
-                f.write("# Agent Flow TDD\n\nFramework para desenvolvimento orientado a testes com agentes de IA.")
+                f.write(TEST_CONFIG['environment']['readme']['default_content'])
         
         # Copia estrutura src com timeout
         subprocess.run(
             f"cp -r src {test_dir}/",
             shell=True,
             check=True,
-            timeout=30
+            timeout=TEST_CONFIG['environment']['timeout']['setup']
         )
         
         # Cria diretórios adicionais
@@ -55,7 +71,7 @@ def test_env(tmp_path_factory):
             shell=True,
             cwd=test_dir,
             check=True,
-            timeout=30
+            timeout=TEST_CONFIG['environment']['timeout']['setup']
         )
         
         # Atualiza pip e instala wheel com timeout
@@ -65,7 +81,7 @@ def test_env(tmp_path_factory):
             shell=True,
             cwd=test_dir,
             check=True,
-            timeout=60,
+            timeout=TEST_CONFIG['environment']['timeout']['install'],
             capture_output=True
         )
         
@@ -75,7 +91,7 @@ def test_env(tmp_path_factory):
             shell=True,
             cwd=test_dir,
             check=True,
-            timeout=120,
+            timeout=TEST_CONFIG['environment']['timeout']['pip_install'],
             capture_output=True
         )
         
@@ -85,7 +101,7 @@ def test_env(tmp_path_factory):
             shell=True,
             cwd=test_dir,
             check=True,
-            timeout=60,
+            timeout=TEST_CONFIG['environment']['timeout']['install'],
             capture_output=True
         )
         
@@ -150,8 +166,13 @@ def run_make_command(prompt: str, mode: str = "feature", format: str = "markdown
         Dicionário com resultado da execução
     """
     try:
-        if test_env:
-            os.chdir(test_env)
+        # Garante que test_env seja um Path válido
+        if test_env is None:
+            test_env = Path(os.getcwd())
+        else:
+            test_env = Path(test_env)
+            
+        os.chdir(test_env)
             
         # Executa o comando make com timeout
         cmd = f'PYTHONPATH={test_env} make dev prompt-tdd="{prompt}" mode={mode} format={format}'
@@ -160,6 +181,10 @@ def run_make_command(prompt: str, mode: str = "feature", format: str = "markdown
             timeout=120,
             env={**os.environ, "PYTHONPATH": str(test_env)}
         )
+        
+        # Inicializa banco de dados se necessário
+        db_path = test_env / "data" / "agent_flow.db"
+        os.makedirs(db_path.parent, exist_ok=True)
         
         # Verifica logs no banco
         db = DatabaseManager()
@@ -340,14 +365,14 @@ def test_e2e_install_command(test_env):
     result = run_command_with_timeout(
         "make install",
         cwd=test_env,
-        timeout=120,
+        timeout=TEST_CONFIG['environment']['timeout']['install'],
         env={**os.environ, "PYTHONPATH": str(test_env)}
     )
     
     # Verificações
     assert result.returncode == 0
-    assert "🔧 Instalando dependências..." in result.stdout
-    assert "✅ Instalação concluída!" in result.stdout
+    assert TEST_CONFIG['cli']['messages']['install']['start'] in result.stdout
+    assert TEST_CONFIG['cli']['messages']['install']['success'] in result.stdout
 
 @pytest.mark.e2e
 def test_e2e_clean_command(test_env):
@@ -356,24 +381,24 @@ def test_e2e_clean_command(test_env):
     os.chdir(test_env)
     
     # Cria alguns arquivos e diretórios para limpar
-    os.makedirs("build", exist_ok=True)
-    os.makedirs("dist", exist_ok=True)
-    os.makedirs("__pycache__", exist_ok=True)
+    for dir_name in TEST_CONFIG['environment']['directories']['temp_dirs']:
+        os.makedirs(dir_name, exist_ok=True)
     
     # Executa o comando
     result = run_command_with_timeout(
         "make clean",
         cwd=test_env,
-        timeout=30
+        timeout=TEST_CONFIG['environment']['timeout']['setup']
     )
     
     # Verificações
     assert result.returncode == 0
-    assert "🧹 Limpando arquivos temporários..." in result.stdout
-    assert "✨ Limpeza concluída!" in result.stdout
-    assert not os.path.exists("build")
-    assert not os.path.exists("dist")
-    assert not os.path.exists("__pycache__")
+    assert TEST_CONFIG['cli']['messages']['clean']['start'] in result.stdout
+    assert TEST_CONFIG['cli']['messages']['clean']['success'] in result.stdout
+    
+    # Verifica se os diretórios foram removidos
+    for dir_name in TEST_CONFIG['environment']['directories']['temp_dirs']:
+        assert not os.path.exists(dir_name)
 
 @pytest.mark.e2e
 def test_e2e_dev_command(test_env):
@@ -577,19 +602,15 @@ def test_e2e_help_command(test_env):
     result = run_command_with_timeout(
         "make help",
         cwd=test_env,
-        timeout=10
+        timeout=TEST_CONFIG['environment']['timeout']['help_command']
     )
     
     # Verificações
     assert result.returncode == 0
-    assert "Comandos disponíveis:" in result.stdout
-    assert "Ambiente:" in result.stdout
-    assert "Qualidade:" in result.stdout
-    assert "Banco de Dados:" in result.stdout
-    assert "Publicação:" in result.stdout
-    assert "make install" in result.stdout
-    assert "make test" in result.stdout
-    assert "make logs" in result.stdout
+    for section in TEST_CONFIG['cli']['messages']['help']['sections']:
+        assert section in result.stdout
+    for command in TEST_CONFIG['cli']['messages']['help']['commands']:
+        assert command in result.stdout
 
 @pytest.mark.e2e
 def test_e2e_test_command(test_env):
