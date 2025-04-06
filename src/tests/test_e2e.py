@@ -222,14 +222,32 @@ def test_e2e_address_registration_cli_json():
     if result["returncode"] == 0:
         # Verifica se a saída é um JSON válido
         try:
-            # Pega a última linha não vazia que não seja uma mensagem de autoflake
-            lines = [line for line in result["stdout"].split("\n") if line.strip() and not line.startswith("🧹") and not line.startswith("✨")]
-            output = json.loads(lines[-1])
-            assert "content" in output
-            assert "metadata" in output
-            assert output["metadata"]["type"] == "feature"
-        except json.JSONDecodeError:
-            pytest.fail("Saída não é um JSON válido")
+            # Pega a última linha não vazia que não seja uma mensagem de log
+            lines = [
+                line.strip() 
+                for line in result["stdout"].split("\n") 
+                if line.strip() 
+                and not line.startswith("🧹") 
+                and not line.startswith("✨")
+                and not line.startswith("🛠️")
+            ]
+            
+            # Tenta encontrar e parsear o JSON na saída
+            json_line = None
+            for line in reversed(lines):
+                try:
+                    json_line = json.loads(line)
+                    break
+                except json.JSONDecodeError:
+                    continue
+                    
+            assert json_line is not None, "Nenhum JSON válido encontrado na saída"
+            assert "content" in json_line
+            assert "metadata" in json_line
+            assert json_line["metadata"]["type"] == "feature"
+            
+        except (json.JSONDecodeError, AssertionError) as e:
+            pytest.fail(f"Erro ao processar saída JSON: {str(e)}\nSaída completa:\n{result['stdout']}")
         
         # Verifica registro no banco
         db_record = result["db_history"]

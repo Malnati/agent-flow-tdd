@@ -116,6 +116,17 @@ def main():
     
     try:
         db = DatabaseManager()
+        
+        # Se tiver ID, busca diretamente
+        if args.id:
+            runs = db.get_run_history(run_id=args.id)
+            if runs:
+                show_run_details(runs[0])
+            else:
+                console.print(f"[red]Execução {args.id} não encontrada![/red]")
+            return
+            
+        # Caso contrário, busca lista completa
         runs = db.get_run_history(limit=args.limit)
         
         # Filtra resultados se necessário
@@ -124,18 +135,8 @@ def main():
         if args.agent:
             runs = [r for r in runs if r['last_agent'] and args.agent in r['last_agent']]
         
-        # Mostra detalhes de uma execução específica
-        if args.id:
-            for run in runs:
-                if run['id'] == args.id:
-                    show_run_details(run)
-                    break
-            else:
-                console.print(f"[red]Execução {args.id} não encontrada![/red]")
-        
-        # Ou mostra lista resumida
-        else:
-            show_run_list(runs)
+        # Mostra lista resumida
+        show_run_list(runs)
         
     except Exception as e:
         console.print(f"[red]Erro ao acessar logs: {str(e)}[/red]")
