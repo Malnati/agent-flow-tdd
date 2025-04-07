@@ -369,13 +369,23 @@ guardrails:
   input:
     system_prompt: |
       Você é um assistente especializado em extrair informações estruturadas de prompts.
-      Analise o prompt fornecido e extraia as informações relevantes no formato YAML.
-      Inclua os seguintes campos obrigatórios:
-      - name: Nome da feature/tarefa
-      - description: Descrição detalhada
-      - objectives: Lista de objetivos
-      - requirements: Lista de requisitos
-      - constraints: Lista de restrições
+      Analise o prompt fornecido e extraia APENAS as informações relevantes no formato YAML.
+      
+      NÃO forneça explicações adicionais ou texto introdutório. Retorne APENAS o YAML.
+      
+      Inclua os seguintes campos obrigatórios no formato YAML:
+      
+      name: Nome da feature/tarefa
+      description: Descrição detalhada
+      objectives:
+        - Objetivo 1
+        - Objetivo 2
+      requirements:
+        - Requisito 1
+        - Requisito 2
+      constraints:
+        - Restrição 1
+        - Restrição 2
     requirements:
       name: true
       description: true

@@ -25,12 +25,11 @@ def setup_paths():
         logger.debug(f"Diretório base: {base_dir}")
 
         # Configurações de caminhos
-        log_dir = os.path.join(base_dir, 'run', 'logs')
-        configs_dir = os.path.join(base_dir, 'configs')
+        log_dir = os.path.join(base_dir, 'logs')
+        configs_dir = os.path.join(base_dir, 'src', 'configs')
 
         # Criar diretórios se não existirem
         os.makedirs(log_dir, exist_ok=True)
-        os.makedirs(configs_dir, exist_ok=True)
         
         logger.info("SUCESSO - Caminhos configurados e validados")
         return base_dir, log_dir, configs_dir
@@ -59,8 +58,9 @@ def load_config(config_file: str) -> dict:
         logger.error(f"FALHA - Erro ao carregar configuração: {str(e)}", exc_info=True)
         raise
 
-# Carrega configurações
-CONFIG = load_config('src/configs/kernel.yaml')
+# Carrega configurações usando caminho absoluto
+CONFIG_FILE = os.path.join(CONFIGS_DIR, 'kernel.yaml')
+CONFIG = load_config(CONFIG_FILE)
 
 def get_env_var(name: str, default: Optional[str] = None, args_value: Optional[str] = None) -> Optional[str]:
     """
@@ -92,8 +92,8 @@ def get_env_status(context: str = "cli") -> Dict[str, Dict[str, bool]]:
     Returns:
         Dict com o status das variáveis
     """
-    # Carrega configurações
-    config = load_config('src/configs/kernel.yaml')
+    # Usa a configuração já carregada
+    config = CONFIG
     required_vars = config['required_vars']
     optional_vars = config.get('optional_vars', {})
     
@@ -131,8 +131,8 @@ def validate_env(component: str) -> None:
     """
     get_logger(__name__)
     
-    # Carrega configurações
-    config = load_config('src/configs/kernel.yaml')
+    # Usa a configuração já carregada
+    config = CONFIG
     
     # Obtém variáveis requeridas para o componente
     required_vars = config['required_vars'].get(component, [])

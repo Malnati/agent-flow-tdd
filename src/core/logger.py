@@ -117,9 +117,8 @@ def setup_logger(name: str, level: Optional[str] = None) -> logging.Logger:
     # Cria logger
     logger = logging.getLogger(name)
     
-    # Define nível
-    log_level = level or os.getenv("LOG_LEVEL", CONFIG['logging']['levels']['default'])
-    logger.setLevel(getattr(logging, log_level))
+    # Define nível para DEBUG forçado para debug
+    logger.setLevel(logging.DEBUG)
     
     # Remove handlers existentes
     for handler in logger.handlers[:]:
@@ -132,18 +131,25 @@ def setup_logger(name: str, level: Optional[str] = None) -> logging.Logger:
     # Adiciona handler de arquivo
     log_file = os.path.join(log_dir, f"{name.replace('.', '_')}.log")
     file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(logging.DEBUG)
+    file_handler.setLevel(logging.DEBUG)  # Define nível do arquivo para DEBUG
+    
+    # Adiciona handler de console para DEBUG também
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.DEBUG)
     
     # Define formato
     formatter = logging.Formatter(CONFIG['logging']['format']['default'])
     file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
     
     # Adiciona filtro de segurança
     secure_filter = SecureLogFilter()
     file_handler.addFilter(secure_filter)
+    console_handler.addFilter(secure_filter)
     
-    # Adiciona handler
+    # Adiciona handlers
     logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
     
     return logger
 
@@ -383,3 +389,38 @@ def generation_span(name: str = "LLM Generation"):
 
 def tool_span(name: str = "Tool Execution"):
     return span(span_type="tool", name=name, capture_args=True)
+
+def get_logger(name: str) -> logging.Logger:
+    """
+    Obtém um logger configurado.
+    
+    Args:
+        name: Nome do logger
+        
+    Returns:
+        Logger configurado
+    """
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)  # Alterando de INFO para DEBUG
+    
+    if not logger.handlers:
+        # Configura handler de console
+        handler = logging.StreamHandler()
+        handler.setLevel(logging.DEBUG)  # Alterando de INFO para DEBUG
+        
+        # Cria formatador
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
+        
+        # Adiciona handler ao logger
+        logger.addHandler(handler)
+        
+        # Configura handler de arquivo se diretório logs existir
+        logs_dir = Path("logs")
+        if logs_dir.exists():
+            file_handler = logging.FileHandler(logs_dir / "debug.log")
+            file_handler.setLevel(logging.DEBUG)
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+            
+    return logger
