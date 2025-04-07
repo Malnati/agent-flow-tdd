@@ -45,53 +45,53 @@ class AgentResult(BaseModel):
 class AgentOrchestrator:
     """Orquestrador de agentes do sistema."""
 
-    def __init__(self):
-        """Inicializa o orquestrador."""
-        self.models = ModelManager()
+    def __init__(self, model_manager: Optional[ModelManager] = None):
+        """
+        Inicializa o orquestrador.
+        
+        Args:
+            model_manager: Gerenciador de modelos opcional
+        """
+        self.model_manager = model_manager or ModelManager()
+        self.input_guardrail = InputGuardrail(self.model_manager)
+        self.output_guardrail = OutputGuardrail(self.model_manager)
         self.db = DatabaseManager()
-        self.input_guardrail = InputGuardrail(self.models)
-        self.output_guardrail = OutputGuardrail(self.models)
         logger.info("AgentOrchestrator inicializado")
 
     def execute(self, prompt: str, **kwargs) -> AgentResult:
         """
-        Executa o processamento do prompt.
+        Executa o fluxo do agente.
         
         Args:
-            prompt: Texto de entrada
+            prompt: Prompt do usuário
             **kwargs: Argumentos adicionais
             
         Returns:
-            AgentResult com o resultado do processamento
+            Resultado da execução
         """
         try:
-            logger.info(f"INÍCIO - execute | Prompt: {prompt[:CONFIG['logging']['truncate_length']]}...")
-            
-            # Aplica guardrail de entrada
+            # Processa o prompt com o guardrail de entrada
             input_result = self.input_guardrail.process(prompt)
             
-            # Configura o modelo
-            self.models.configure(
-                model=kwargs.get("model", CONFIG["model"]["name"]),
-                temperature=kwargs.get("temperature", CONFIG["model"]["temperature"])
-            )
+            if input_result["status"] == "error":
+                logger.error(f"FALHA - input_guardrail | {input_result['error']}")
+                raise ValueError(input_result["error"])
+                
+            # Gera resposta com o modelo
+            messages = [
+                {"role": "system", "content": CONFIG["prompts"]["system"]},
+                {"role": "user", "content": input_result["prompt"]}
+            ]
             
-            # Usa o prompt estruturado se o guardrail foi bem sucedido
-            final_prompt = input_result.get("prompt", prompt) if input_result["status"] == "success" else prompt
+            text = self.model_manager.generate_response(messages)
             
-            # Gera resposta
-            text = self.models.generate_response([
-                {"role": "system", "content": "Você é um assistente especializado em análise de requisitos."},
-                {"role": "user", "content": final_prompt}
-            ])
+            # Processa a saída com o guardrail
+            output_result = self.output_guardrail.process(text, input_result["prompt"])
             
-            # Aplica guardrail de saída
-            output_result = self.output_guardrail.process(text, final_prompt)
-            
-            # Se o guardrail de saída encontrou campos ausentes, usa a saída melhorada
-            if output_result["status"] == "success":
-                text = output_result["output"]
-            
+            if output_result["status"] == "error":
+                logger.error(f"FALHA - output_guardrail | {output_result['error']}")
+                raise ValueError(output_result["error"])
+                
             # Processa o resultado
             result = AgentResult(
                 output=text,
@@ -107,6 +107,16 @@ class AgentOrchestrator:
                 final_output=result.output,
                 last_agent=CONFIG["database"]["default_agent"],
                 output_type=kwargs.get("format", CONFIG["database"]["default_output_format"])
+            )
+            
+            # Registra a resposta bruta
+            self.db.log_raw_response(
+                run_id=run_id,
+                response={
+                    "content": text,
+                    "model": self.model_manager.model_name,
+                    "provider": "tinyllama"
+                }
             )
             
             # Registra guardrails
