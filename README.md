@@ -151,12 +151,29 @@ O projeto usa o Model Context Protocol para integração com diferentes modelos:
 ### 1. Via SDK MCP
 
 ```python
-from mcp_sdk import MCPHandler
-from src.app import AgentOrchestrator
+from src.core.agents import AgentOrchestrator
+from src.core.models import ModelManager
+from src.core.db import DatabaseManager
 
-handler = MCPHandler()
-handler.initialize(api_key="sua-chave")
-handler.run()
+# Inicializa componentes
+model_manager = ModelManager()
+db = DatabaseManager()
+
+# Cria orquestrador
+orchestrator = AgentOrchestrator(model_manager, db)
+
+# Executa
+result = orchestrator.execute(
+    prompt="Criar sistema de login",
+    session_id="exemplo",
+    format="json"
+)
+
+# Processa resultado
+print(f"Saída: {result.output}")
+print(f"Items: {len(result.items)}")
+print(f"Guardrails: {len(result.guardrails)}")
+print(f"Respostas: {len(result.raw_responses)}")
 ```
 
 ### 2. Via CLI
@@ -358,14 +375,29 @@ pip install agent-flow-tdd[dev]
 ## Uso Básico
 
 ```python
-from src.app import AgentOrchestrator
+from src.core.agents import AgentOrchestrator
+from src.core.models import ModelManager
+from src.core.db import DatabaseManager
 
-# Inicializa o orquestrador
-orchestrator = AgentOrchestrator(api_key="sua-chave-api")
+# Inicializa componentes
+model_manager = ModelManager()
+db = DatabaseManager()
 
-# Processa uma entrada
-result = orchestrator.handle_input("Criar sistema de login")
-print(result)
+# Cria orquestrador
+orchestrator = AgentOrchestrator(model_manager, db)
+
+# Executa
+result = orchestrator.execute(
+    prompt="Criar sistema de login",
+    session_id="exemplo",
+    format="json"
+)
+
+# Processa resultado
+print(f"Saída: {result.output}")
+print(f"Items: {len(result.items)}")
+print(f"Guardrails: {len(result.guardrails)}")
+print(f"Respostas: {len(result.raw_responses)}")
 ```
 
 ## Logging Estruturado
@@ -600,7 +632,25 @@ make logs ARGS="--id 42"
 cp .docker/.env.example .docker/.env
 ```
 
-2. Configure suas chaves de API no arquivo `.docker/.env`
+2. Configure suas chaves de API no arquivo `.docker/.env`:
+```env
+# Chaves de API
+OPENAI_API_KEY=sua-chave-openai
+ANTHROPIC_KEY=sua-chave-anthropic
+GEMINI_KEY=sua-chave-gemini
+
+# Configurações do modelo
+DEFAULT_MODEL=gpt-3.5-turbo
+ELEVATION_MODEL=gpt-4-turbo
+
+# Configurações do banco
+DB_PATH=/app/data/database.db
+DB_HISTORY_LIMIT=100
+
+# Configurações de logging
+LOG_LEVEL=INFO
+LOG_FORMAT=json
+```
 
 ### Executando
 Para desenvolvimento:
@@ -611,6 +661,33 @@ docker-compose -f .docker/docker-compose.yml run dev
 Para produção:
 ```bash
 docker-compose -f .docker/docker-compose.yml run app
+```
+
+### Exemplo de uso com Docker
+```python
+from src.core.agents import AgentOrchestrator
+from src.core.models import ModelManager
+from src.core.db import DatabaseManager
+
+# Inicializa componentes
+model_manager = ModelManager()
+db = DatabaseManager()
+
+# Cria orquestrador
+orchestrator = AgentOrchestrator(model_manager, db)
+
+# Executa
+result = orchestrator.execute(
+    prompt="Criar sistema de login",
+    session_id="docker-exemplo",
+    format="json"
+)
+
+# Processa resultado
+print(f"Saída: {result.output}")
+print(f"Items: {len(result.items)}")
+print(f"Guardrails: {len(result.guardrails)}")
+print(f"Respostas: {len(result.raw_responses)}")
 ```
 
 ### Comandos Úteis

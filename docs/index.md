@@ -1,14 +1,22 @@
 # Agent Flow TDD
 
-Framework para desenvolvimento orientado a testes usando IA.
+Framework para desenvolvimento de agentes de IA usando Test-Driven Development.
 
-## Visão Geral
+## Sobre o Projeto
 
-O Agent Flow TDD é um framework que combina práticas de TDD com IA para acelerar o desenvolvimento de software.
+O Agent Flow TDD é um framework que facilita o desenvolvimento de agentes de IA
+seguindo práticas de TDD (Test-Driven Development). Ele fornece uma estrutura
+organizada e ferramentas para criar, testar e implantar agentes de IA de forma
+sistemática e confiável.
 
-## Características
+## Navegação
 
-- Desenvolvimento orientado a testes
-- Integração com modelos de IA
-- CLI intuitiva
-- Documentação automática
+- [Visão Geral](overview/): Arquitetura e conceitos do framework
+- [Instalação](installation/): Como instalar e configurar
+- [Uso](usage/): Como usar o framework
+- [Desenvolvimento](development/): Guia para desenvolvedores
+- [Testes](testing/): Estratégias de teste
+- [Banco de Dados](database/): Estrutura e operações
+- [Logs](logs/): Sistema de logging
+- [Deploy](deployment/): Implantação em produção
+- [Troubleshooting](troubleshooting/): Resolução de problemas

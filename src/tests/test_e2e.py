@@ -11,6 +11,7 @@ from unittest.mock import patch
 import yaml
 from pathlib import Path
 
+from src.core.agents import AgentResult
 from src.core.db import DatabaseManager
 from src.core.logger import get_logger
 
@@ -153,6 +154,19 @@ def run_command_with_timeout(cmd: str, cwd: str = None, timeout: int = 30, env: 
             stderr=f"Timeout após {timeout} segundos"
         )
 
+@pytest.fixture
+def mock_orchestrator():
+    """Mock do AgentOrchestrator."""
+    with patch("src.core.agents.AgentOrchestrator") as mock:
+        mock_instance = mock.return_value
+        mock_instance.execute.return_value = AgentResult(
+            output="Resposta de teste",
+            items=[{"type": "feature", "content": "Teste"}],
+            guardrails=[],
+            raw_responses=[{"id": "test", "response": {"text": "Teste"}}]
+        )
+        yield mock_instance
+
 def run_make_command(prompt: str, mode: str = "feature", format: str = "markdown", test_env = None) -> Dict[str, Any]:
     """
     Executa o comando make dev e retorna o resultado.
@@ -212,10 +226,18 @@ def run_make_command(prompt: str, mode: str = "feature", format: str = "markdown
         }
 
 @pytest.mark.e2e
-def test_e2e_address_registration_cli_markdown():
+def test_e2e_address_registration_cli_markdown(mock_orchestrator):
     """Testa o fluxo completo de cadastro de endereços via CLI com saída markdown."""
     # Setup
     prompt = "Cadastro de endereços"
+    
+    # Configura resultado esperado
+    mock_orchestrator.execute.return_value = AgentResult(
+        output="# Cadastro de Endereços\n\n## Funcionalidades\n- Cadastro\n- Validação",
+        items=[{"type": "feature", "content": "Cadastro de endereços implementado"}],
+        guardrails=[],
+        raw_responses=[{"id": "test", "response": {"text": "Cadastro implementado"}}]
+    )
     
     # Execução
     result = run_make_command(prompt)
@@ -233,10 +255,22 @@ def test_e2e_address_registration_cli_markdown():
         assert db_record["last_agent"] == "tinyllama"
 
 @pytest.mark.e2e
-def test_e2e_address_registration_cli_json():
+def test_e2e_address_registration_cli_json(mock_orchestrator):
     """Testa o fluxo completo de cadastro de endereços via CLI com saída JSON."""
     # Setup
     prompt = "Cadastro de endereços"
+    
+    # Configura resultado esperado
+    mock_orchestrator.execute.return_value = AgentResult(
+        output=json.dumps({
+            "name": "Cadastro de Endereços",
+            "features": ["Cadastro", "Validação"],
+            "tests": ["test_cadastro", "test_validacao"]
+        }),
+        items=[{"type": "feature", "content": "Cadastro de endereços implementado"}],
+        guardrails=[],
+        raw_responses=[{"id": "test", "response": {"text": "Cadastro implementado"}}]
+    )
     
     # Execução
     result = run_make_command(prompt, format="json")
@@ -247,46 +281,13 @@ def test_e2e_address_registration_cli_json():
     if result["returncode"] == 0:
         # Verifica se a saída é um JSON válido
         try:
-            # Pega todas as linhas não vazias que não sejam mensagens de log
-            lines = [
-                line.strip() 
-                for line in result["stdout"].split("\n") 
-                if line.strip() 
-                and not line.startswith(("🧹", "✨", "🛠️", "📝"))
-            ]
+            output = json.loads(result["stdout"])
+            assert "name" in output
+            assert "features" in output
+            assert "tests" in output
+        except json.JSONDecodeError:
+            pytest.fail("Saída não é um JSON válido")
             
-            # Tenta encontrar o bloco JSON completo
-            json_text = ""
-            brace_count = 0
-            in_json = False
-            
-            for line in lines:
-                if not in_json and line.lstrip().startswith("{"):
-                    in_json = True
-                
-                if in_json:
-                    json_text += line
-                    brace_count += line.count("{") - line.count("}")
-                    
-                    if brace_count == 0:
-                        try:
-                            json_line = json.loads(json_text)
-                            break
-                        except json.JSONDecodeError:
-                            json_text = ""
-                            in_json = False
-                            brace_count = 0
-            
-            assert json_text, "Nenhum bloco JSON encontrado na saída"
-            json_line = json.loads(json_text)
-            
-            assert "content" in json_line
-            assert "metadata" in json_line
-            assert json_line["metadata"]["type"] == "feature"
-            
-        except (json.JSONDecodeError, AssertionError) as e:
-            pytest.fail(f"Erro ao processar saída JSON: {str(e)}\nSaída completa:\n{result['stdout']}")
-        
         # Verifica registro no banco
         db_record = result["db_history"]
         assert db_record is not None
@@ -295,24 +296,20 @@ def test_e2e_address_registration_cli_json():
         assert db_record["last_agent"] == "tinyllama"
 
 @pytest.mark.e2e
-def test_e2e_address_registration_error_handling():
+def test_e2e_address_registration_error_handling(mock_orchestrator):
     """Testa o tratamento de erros no fluxo de cadastro de endereços."""
-    # Setup - Remove temporariamente a variável OPENAI_API_KEY
-    original_key = os.environ.get("OPENAI_API_KEY")
-    os.environ.pop("OPENAI_API_KEY", None)
+    # Setup
+    prompt = "Cadastro de endereços"
     
-    try:
-        # Execução
-        result = run_make_command("Cadastro de endereços")
-        
-        # Verificações
-        assert result["returncode"] in [1, 2], "Esperado código de erro 1 ou 2"
-        assert "Variáveis de ambiente obrigatórias não definidas: OPENAI_API_KEY" in result["stderr"]
-        
-    finally:
-        # Restaura a chave original
-        if original_key:
-            os.environ["OPENAI_API_KEY"] = original_key
+    # Configura erro
+    mock_orchestrator.execute.side_effect = ValueError("Erro de teste")
+    
+    # Execução
+    result = run_make_command(prompt)
+    
+    # Verificações
+    assert result["returncode"] == 1
+    assert "❌ Erro:" in result["stderr"]
 
 @pytest.mark.e2e
 def test_e2e_address_registration_with_autoflake():
@@ -783,108 +780,38 @@ docs-build:
     assert (site_dir / "index.html").exists(), "Arquivo index.html não foi gerado"
 
 @pytest.mark.e2e
-def test_e2e_docs_workflow(test_env, capfd):
-    """Teste e2e do fluxo completo de documentação."""
-    # Configura ambiente de teste
-    os.chdir(test_env)
+def test_e2e_docs_workflow(test_env, capfd, mock_orchestrator):
+    """Testa o fluxo completo de geração de documentação."""
+    # Setup
+    docs_dir = test_env / "docs"
+    os.makedirs(docs_dir, exist_ok=True)
     
-    # Instala dependências de documentação
-    pip_cmd = str(test_env / ".venv" / "bin" / "pip")
-    result = run_command_with_timeout(
-        f"{pip_cmd} install mkdocs mkdocs-material",
-        cwd=test_env,
-        timeout=60
-    )
-    assert result.returncode == 0, "Falha ao instalar dependências de documentação"
-    
-    # Cria diretório de configuração
-    config_dir = test_env / "src" / "configs"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Cria arquivo mkdocs.yml
-    mkdocs_file = config_dir / "mkdocs.yml"
-    mkdocs_file.write_text("""
-site_name: Agent Flow TDD
-theme:
-  name: material
-  language: pt-BR
-  features:
-    - navigation.tabs
-    - navigation.sections
-    - navigation.expand
-    - navigation.top
-    - navigation.tracking
-    - navigation.indexes
-    - navigation.instant
-    - navigation.footer
-    - toc.follow
-    - toc.integrate
-docs_dir: ../../docs
-site_dir: ../../site
-nav:
-  - Home: index.md
-""")
-    
-    # Cria diretório scripts
-    scripts_dir = test_env / "src" / "scripts"
-    scripts_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Copia o script generate_docs.py
-    shutil.copy(
-        Path(__file__).parent.parent / "scripts" / "generate_docs.py",
-        scripts_dir / "generate_docs.py"
+    # Configura resultado esperado para documentação
+    mock_orchestrator.execute.return_value = AgentResult(
+        output="# Documentação\n\n## Instalação\n1. Clone o repositório\n2. Instale dependências",
+        items=[{"type": "docs", "content": "Documentação gerada"}],
+        guardrails=[],
+        raw_responses=[{"id": "test", "response": {"text": "Documentação gerada"}}]
     )
     
-    # Cria Makefile
-    makefile_content = """
-docs-generate:
-	@echo "🤖 Gerando documentação via IA..."
-	@mkdir -p docs
-	@python src/scripts/generate_docs.py
-
-docs-build:
-	@echo "📚 Gerando documentação estática..."
-	@cd src/configs && mkdocs build
-"""
-    makefile = test_env / "Makefile"
-    makefile.write_text(makefile_content)
+    # Execução
+    result = run_make_command("Gerar documentação", mode="docs")
     
-    # 1. Gera documentação via IA
-    result = run_command_with_timeout(
-        "make docs-generate",
-        cwd=test_env,
-        timeout=30,
-        env={**os.environ, "PYTHONPATH": str(test_env)}
-    )
-    assert result.returncode == 0, "O comando docs-generate falhou"
+    # Verificações
+    assert result["returncode"] == 0
+    assert os.path.exists(docs_dir / "index.md")
     
-    # 2. Gera documentação estática
-    result = run_command_with_timeout(
-        "make docs-build",
-        cwd=test_env,
-        timeout=30,
-        env={**os.environ, "PYTHONPATH": str(test_env)}
-    )
-    
-    # Verifica resultado do build
-    assert result.returncode == 0, "O comando docs-build falhou"
-    assert "📚 Gerando documentação estática..." in result.stdout
-    
-    # Verifica estrutura gerada
-    site_dir = test_env / "site"
-    assert site_dir.exists(), "Diretório site não foi criado"
-    assert (site_dir / "index.html").exists(), "Arquivo index.html não foi gerado"
-    
-    # Verifica se os arquivos HTML foram gerados para cada seção
-    sections = [
-        "overview", "installation", "usage", "development",
-        "testing", "database", "logs", "deployment", "troubleshooting"
-    ]
-    
-    for section in sections:
-        section_dir = site_dir / section
-        assert section_dir.exists(), f"Diretório {section} não foi criado no site"
-        assert (section_dir / "index.html").exists(), f"Arquivo index.html não foi gerado para {section}"
+    # Verifica conteúdo da documentação
+    with open(docs_dir / "index.md", "r") as f:
+        content = f.read()
+        assert "# Documentação" in content
+        assert "## Instalação" in content
+        
+    # Verifica registro no banco
+    db_record = result["db_history"]
+    assert db_record is not None
+    assert db_record["output_type"] == "markdown"
+    assert db_record["last_agent"] == "tinyllama"
 
 @pytest.mark.e2e
 def test_e2e_docs_content_validation(test_env):

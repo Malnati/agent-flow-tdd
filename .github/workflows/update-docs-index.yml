@@ -14,7 +14,7 @@ on:
     types: [opened, synchronize, reopened, closed]
   push:
     branches:
-      - 'nenhuma'  # Executa em qualquer branch
+      - 'nenhuma'  # Não executa em branch nenhuma
 
 jobs:
   update-docs-index:

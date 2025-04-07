@@ -1,3 +1,1 @@
-# Development/Index
-
-Documentação em construção.
+{"name": "Gerar Documentação", "description": "Gerar documentação para a seção 'development'", "objectives": ["Implementar Gerar documentação para a seção 'development'"], "requirements": ["Definir requisitos específicos"], "constraints": ["Definir restrições do sistema"]}

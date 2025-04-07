@@ -1,11 +1,12 @@
 # Makefile para o projeto prompt-tdd
 
-.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs test-e2e publish download-model docs-serve docs-build docs-deploy docs-generate
+.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs test-e2e publish download-model docs-serve docs-build docs-deploy docs-generate status
 
 # Configuração do ambiente virtual
 VENV = .venv
 PYTHON = $(VENV)/bin/python
 PIP = $(VENV)/bin/pip
+PYTEST = $(VENV)/bin/pytest
 
 # URL e nome do modelo TinyLLaMA
 MODEL_URL = https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
@@ -85,19 +86,7 @@ run:
 # Execução do CLI em modo desenvolvimento
 dev:
 	@echo "🛠️ Executando CLI em modo desenvolvimento..."
-	@if [ "$(mode)" = "mcp" ]; then \
-		rm -f logs/mcp_pipe.log && \
-		echo '{"content": "$(prompt-tdd)", "metadata": {"type": "feature", "options": {"format": "$(format)", "model": "gpt-3.5-turbo", "temperature": 0.7}}}' > logs/mcp_pipe.log && \
-		OPENAI_AGENTS_DISABLE_TRACING=0 $(PYTHON) -m src.cli mcp "$(prompt-tdd)" --format $(format) > logs/mcp_server.log 2>&1 & \
-		echo "✅ Servidor MCP iniciado em background (PID: $$!)"; \
-	else \
-		OPENAI_AGENTS_DISABLE_TRACING=0 $(PYTHON) -m src.cli feature "$(prompt-tdd)" --format $(format); \
-		RC=$$?; \
-		if [ $$RC -ne 0 ]; then \
-			exit $$RC; \
-		fi \
-	fi
-	@make autoflake || true
+	@$(PYTHON) src/cli.py dev --prompt-tdd="$(prompt-tdd)" --format="$(format)"
 
 # Limpeza de código com autoflake
 autoflake:
@@ -197,19 +186,23 @@ download-model:
 
 # Comandos de documentação
 docs-serve:
-	@echo "📚 Iniciando servidor de documentação..."
-	@cd src/configs && mkdocs serve
+	@echo "🚀 Iniciando servidor de documentação..."
+	@$(PYTHON) -m mkdocs serve
 
 docs-build:
-	@echo "📚 Gerando documentação estática..."
-	@cd src/configs && mkdocs build
+	@echo "🏗️ Gerando documentação estática..."
+	@$(PYTHON) -m mkdocs build
 
 docs-deploy:
-	@echo "📚 Publicando documentação no GitHub Pages..."
-	@cd src/configs && mkdocs gh-deploy
+	@echo "🚀 Publicando documentação..."
+	@$(PYTHON) -m mkdocs gh-deploy
 
 docs-generate:
 	@echo "🤖 Gerando documentação via IA..."
-	@mkdir -p docs
-	@python src/scripts/generate_docs.py
-	@echo "✅ Documentação gerada!" 
+	@$(PYTHON) src/scripts/generate_docs.py
+	@echo "✅ Documentação gerada!"
+
+# Novo comando status
+status:
+	@echo "📊 Verificando status do ambiente..."
+	@$(PYTHON) src/cli.py status 
