@@ -60,7 +60,7 @@ class DocsGenerator:
             if subsection:
                 output_file = section_dir / f"{subsection}.md"
             else:
-                output_file = section_dir / "index.md"
+                output_file = section_dir / "README.md"
                 
             # Salva conteúdo
             output_file.write_text(result.output)
@@ -96,7 +96,7 @@ class DocsGenerator:
             for section in sections:
                 self.generate_section(section)
                 
-            # Gera index.md
+            # Gera README.md
             index_content = """# Agent Flow TDD
 
 Framework para desenvolvimento de agentes de IA usando Test-Driven Development.
@@ -121,7 +121,7 @@ sistemática e confiável.
 - [Troubleshooting](troubleshooting/): Resolução de problemas
 """
             
-            index_file = self.docs_dir / "index.md"
+            index_file = self.docs_dir / "README.md"
             index_file.write_text(index_content)
             
             print("✅ Documentação gerada com sucesso!")

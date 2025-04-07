@@ -4,10 +4,8 @@ Inclui testes de CLI, banco de dados e download de modelos.
 """
 
 import json
-import sqlite3
 import os
-import shutil
-from unittest.mock import patch, mock_open, Mock, MagicMock
+from unittest.mock import patch, Mock, MagicMock
 import yaml
 from pathlib import Path
 
@@ -17,7 +15,6 @@ from src.cli import app
 from src.core.agents import AgentOrchestrator, AgentResult, InputGuardrail, OutputGuardrail
 from src.core.db import DatabaseManager
 from src.core.models import ModelManager
-from src.core.kernel import get_env_var, validate_env, get_env_status
 from src.core.logger import get_logger
 
 logger = get_logger(__name__)

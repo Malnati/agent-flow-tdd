@@ -1,133 +1,65 @@
-"""
-Interface de linha de comando do sistema.
-"""
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""Interface de linha de comando do sistema."""
 
 import sys
-import click
+import argparse
 from rich.console import Console
-from rich.table import Table
-import os
-from typing import Optional
 
-from src.core import AgentOrchestrator, ModelManager, DatabaseManager
-from src.core.kernel import get_env_var, validate_env, get_env_status, setup_paths
+from src.core.agents import AgentOrchestrator
+from src.core.models import ModelManager
+from src.core.db import DatabaseManager
 from src.core.logger import get_logger
 
+# Configuração do logger
 logger = get_logger(__name__)
 console = Console()
 
 def get_orchestrator() -> AgentOrchestrator:
-    """
-    Obtém uma instância configurada do orquestrador de agentes.
-    
-    Returns:
-        AgentOrchestrator configurado
-    """
-    try:
-        # Inicializa componentes
-        model_manager = ModelManager()
-        db = DatabaseManager()
-        
-        # Cria e retorna orquestrador
-        orchestrator = AgentOrchestrator(model_manager, db)
-        logger.info("Orquestrador inicializado com sucesso")
-        return orchestrator
-        
-    except Exception as e:
-        logger.error(f"Erro ao criar orquestrador: {str(e)}")
-        raise
+    """Obtém uma instância configurada do orquestrador de agentes."""
+    model_manager = ModelManager()
+    return AgentOrchestrator(model_manager)
 
-@click.group()
-def cli():
-    """CLI do projeto prompt-tdd."""
-    console.print("🖥️ CLI do projeto prompt-tdd")
-    pass
-
-@cli.command()
-@click.argument("prompt")
-@click.option("--format", default="text", help="Formato de saída (text/json/markdown)")
-def feature(prompt: str, format: str):
-    """
-    Gera uma feature com base no prompt fornecido.
+def main():
+    """Função principal do CLI."""
+    parser = argparse.ArgumentParser(description="CLI do projeto prompt-tdd")
+    parser.add_argument("prompt", help="Prompt para o agente")
+    parser.add_argument("--format", default="json", choices=["json", "markdown"], help="Formato de saída")
+    parser.add_argument("--mode", default="feature", choices=["feature", "docs"], help="Modo de operação")
     
-    Args:
-        prompt: Descrição da feature
-        format: Formato de saída
-    """
+    args = parser.parse_args()
+    
     try:
-        # Valida ambiente
-        validate_env()
-        
-        # Obtém orquestrador
-        orchestrator = get_orchestrator()
+        # Imprime o cabeçalho
+        print("🖥️ CLI do projeto prompt-tdd")
         
         # Executa o orquestrador
-        result = orchestrator.execute(
-            prompt=prompt,
-            session_id="cli",
-            format=format
-        )
+        orchestrator = get_orchestrator()
+        result = orchestrator.execute(args.prompt, args.format, args.mode)
         
-        # Imprime resultado
-        console.print(result.output)
-        sys.exit(0)
-        
-    except Exception as e:
-        logger.error(f"Erro ao gerar feature: {str(e)}")
-        console.print(f"❌ Erro: {str(e)}", style="red")
-        sys.exit(1)
-
-@cli.command()
-@click.option("--prompt-tdd", required=True, help="Prompt para o TDD")
-@click.option("--format", default="json", help="Formato de saída (json/markdown)")
-def dev(prompt_tdd: str, format: str):
-    """Executa o CLI em modo desenvolvimento."""
-    try:
-        # Valida ambiente
-        validate_env("dev")
-        
-        # Inicializa componentes
-        model = ModelManager("tinyllama-1.1b")
+        # Formata a saída de acordo com o formato especificado
+        if result.output:
+            print("\n" + result.output)
+            
+        # Registra a execução no banco
         db = DatabaseManager()
-        orchestrator = AgentOrchestrator(model, db)
-        
-        # Executa
-        result = orchestrator.execute(prompt_tdd, format)
-        console.print(result.output)
-        
+        db.log_run(
+            prompt=args.prompt,
+            output=result.output,
+            output_type=args.format,
+            format=args.format,
+            raw_responses=result.raw_responses,
+            guardrails=result.guardrails,
+            items=result.items
+        )
+            
+        return 0
     except Exception as e:
-        console.print(f"❌ Erro: {str(e)}", style="red", file=sys.stderr)
-        sys.exit(1)
-
-@cli.command()
-def status():
-    """Verifica status do ambiente."""
-    try:
-        # Valida ambiente
-        validate_env("status")
-        console.print("✅ Ambiente configurado corretamente", style="green")
-        
-    except Exception as e:
-        console.print(f"❌ Erro: {str(e)}", style="red", file=sys.stderr)
-        sys.exit(1)
-
-def app(args=None):
-    """
-    Função principal da CLI.
-    
-    Args:
-        args: Lista de argumentos da linha de comando
-    """
-    try:
-        # Configura caminhos
-        setup_paths()
-        
-        # Executa CLI
-        cli(args)
-    except Exception as e:
-        logger.error(f"Erro na CLI: {str(e)}")
-        print(f"❌ Erro: {str(e)}")
-        sys.exit(1)
+        error_msg = str(e)
+        logger.error(error_msg)
+        print(error_msg, file=sys.stderr)
+        return 1
 
 if __name__ == "__main__":
-    app()
+    sys.exit(main())
