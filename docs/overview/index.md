@@ -1,3 +1,1 @@
-# Visão Geral
-
-Entenda os principais conceitos e a arquitetura do Agent Flow TDD.
+{"name": "Gerar Documentação", "description": "Gerar documentação para a seção 'overview'", "objectives": ["Implementar Gerar documentação para a seção 'overview'"], "requirements": ["Definir requisitos específicos"], "constraints": ["Definir restrições do sistema"]}

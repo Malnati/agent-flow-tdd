@@ -5,24 +5,99 @@ Script para geração automática de documentação via IA.
 import sys
 from pathlib import Path
 
-def create_section(docs_dir: Path, section: str, content: str) -> None:
-    """Cria uma seção da documentação."""
-    section_dir = docs_dir / section
-    section_dir.mkdir(exist_ok=True)
-    
-    index_file = section_dir / "index.md"
-    index_file.write_text(content)
+from src.core.agents import AgentOrchestrator
+from src.core.models import ModelManager
+from src.core.db import DatabaseManager
+from src.core.logger import get_logger
 
-def generate_docs() -> None:
-    """Gera a documentação do projeto."""
-    print("🤖 Gerando documentação via IA...")
+logger = get_logger(__name__)
+
+class DocsGenerator:
+    """Gerador de documentação via IA."""
     
-    # Cria diretório docs se não existir
-    docs_dir = Path("docs")
-    docs_dir.mkdir(exist_ok=True)
-    
-    # Gera index.md
-    index_content = """# Agent Flow TDD
+    def __init__(self, model_manager: ModelManager = None, db_manager: DatabaseManager = None, docs_dir: Path = None):
+        """
+        Inicializa o gerador de documentação.
+        
+        Args:
+            model_manager: Gerenciador de modelos
+            db_manager: Gerenciador de banco de dados
+            docs_dir: Diretório base para documentação
+        """
+        self.model_manager = model_manager or ModelManager()
+        self.db = db_manager or DatabaseManager()
+        self.orchestrator = AgentOrchestrator(self.model_manager)
+        self.orchestrator.db = self.db
+        self.docs_dir = docs_dir or Path("docs")
+        logger.info("DocsGenerator inicializado")
+        
+    def generate_section(self, section: str, subsection: str = None) -> None:
+        """
+        Gera uma seção da documentação.
+        
+        Args:
+            section: Nome da seção
+            subsection: Nome da subseção (opcional)
+        """
+        try:
+            # Monta prompt para o modelo
+            prompt = f"Gerar documentação para a seção '{section}'"
+            if subsection:
+                prompt += f", subseção '{subsection}'"
+                
+            # Executa o orquestrador
+            result = self.orchestrator.execute(
+                prompt=prompt,
+                session_id="docs_generation",
+                format="markdown"
+            )
+            
+            # Cria diretório da seção
+            section_dir = self.docs_dir / section
+            section_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Define arquivo de saída
+            if subsection:
+                output_file = section_dir / f"{subsection}.md"
+            else:
+                output_file = section_dir / "index.md"
+                
+            # Salva conteúdo
+            output_file.write_text(result.output)
+            logger.info(f"Documentação gerada: {output_file}")
+            
+        except Exception as e:
+            error_msg = f"Erro ao gerar seção {section}: {str(e)}"
+            logger.error(error_msg)
+            print(error_msg, file=sys.stderr)
+            raise
+            
+    def generate_docs(self) -> None:
+        """Gera a documentação completa do projeto."""
+        try:
+            print("🤖 Gerando documentação via IA...")
+            
+            # Cria diretório docs se não existir
+            self.docs_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Gera seções principais
+            sections = [
+                "overview",
+                "installation",
+                "usage",
+                "development",
+                "testing",
+                "database",
+                "logs",
+                "deployment",
+                "troubleshooting"
+            ]
+            
+            for section in sections:
+                self.generate_section(section)
+                
+            # Gera index.md
+            index_content = """# Agent Flow TDD
 
 Framework para desenvolvimento de agentes de IA usando Test-Driven Development.
 
@@ -45,193 +120,32 @@ sistemática e confiável.
 - [Deploy](deployment/): Implantação em produção
 - [Troubleshooting](troubleshooting/): Resolução de problemas
 """
-    
-    index_file = docs_dir / "index.md"
-    index_file.write_text(index_content)
-    
-    # Gera seções
-    sections = {
-        "overview": """# Visão Geral
+            
+            index_file = self.docs_dir / "index.md"
+            index_file.write_text(index_content)
+            
+            print("✅ Documentação gerada com sucesso!")
+            
+        except Exception as e:
+            error_msg = f"❌ Erro ao gerar documentação: {str(e)}"
+            logger.error(error_msg)
+            print(error_msg, file=sys.stderr)
+            sys.exit(1)
+            
+        finally:
+            if hasattr(self, 'db'):
+                self.db.close()
 
-## Objetivo
-
-O Agent Flow TDD tem como objetivo facilitar o desenvolvimento de agentes de IA
-usando práticas de TDD. O framework fornece uma estrutura que permite:
-
-- Desenvolvimento iterativo e testável de agentes
-- Gerenciamento de estado e contexto
-- Integração com diferentes modelos de IA
-- Monitoramento e logging de operações
-
-## Arquitetura
-
-O framework é organizado em camadas:
-
-1. CLI: Interface de linha de comando
-2. Kernel: Núcleo do framework
-3. Agents: Implementação dos agentes
-4. Database: Persistência de dados
-5. MCP: Gerenciamento de processos""",
+def main():
+    """Função principal."""
+    try:
+        generator = DocsGenerator()
+        generator.generate_docs()
         
-        "installation": """# Instalação
-
-## Dependências
-
-O projeto requer:
-
-- Python 3.10+
-- Poetry para gerenciamento de dependências
-- SQLite 3.x
-- Git
-
-## Ambiente
-
-1. Clone o repositório
-2. Instale o Poetry
-3. Execute `poetry install`
-4. Configure as variáveis de ambiente""",
-        
-        "usage": """# Uso
-
-## CLI
-
-O framework pode ser usado via CLI:
-
-```bash
-agent-flow run --mode interactive
-agent-flow run --mode batch
-```
-
-## MCP
-
-O Master Control Program (MCP) gerencia os agentes:
-
-```bash
-agent-flow mcp start
-agent-flow mcp status
-agent-flow mcp stop
-```""",
-        
-        "development": """# Desenvolvimento
-
-## Código
-
-O código está organizado em:
-
-- `src/core/`: Núcleo do framework
-- `src/agents/`: Implementação dos agentes
-- `src/db/`: Camada de banco de dados
-- `src/cli/`: Interface de linha de comando
-
-## Local
-
-Para desenvolvimento local:
-
-1. Configure o ambiente de desenvolvimento
-2. Execute os testes
-3. Implemente novas funcionalidades""",
-        
-        "testing": """# Testes
-
-## Unitários
-
-Os testes unitários usam pytest:
-
-```bash
-make test
-```
-
-## Cobertura
-
-A cobertura de código é medida com pytest-cov:
-
-```bash
-make coverage
-```""",
-        
-        "database": """# Banco de Dados
-
-## Estrutura
-
-O banco usa SQLite com as tabelas:
-
-- `agents`: Registro de agentes
-- `tasks`: Tarefas dos agentes
-- `logs`: Log de operações
-
-## SQL
-
-As operações são gerenciadas pela classe DatabaseManager.""",
-        
-        "logs": """# Logs
-
-## Formato
-
-Os logs seguem o formato:
-
-```json
-{
-    "timestamp": "2024-03-21T10:00:00Z",
-    "level": "INFO",
-    "message": "Agent started",
-    "context": {}
-}
-```
-
-## Níveis
-
-- DEBUG: Informações detalhadas
-- INFO: Operações normais
-- WARNING: Alertas
-- ERROR: Erros recuperáveis
-- CRITICAL: Erros críticos""",
-        
-        "deployment": """# Deploy
-
-## Docker
-
-O projeto pode ser containerizado:
-
-```bash
-docker build -t agent-flow .
-docker run agent-flow
-```
-
-## Produção
-
-Para ambiente de produção:
-
-1. Configure variáveis de ambiente
-2. Use Docker Compose
-3. Configure monitoramento""",
-        
-        "troubleshooting": """# Troubleshooting
-
-## Erros
-
-Problemas comuns e soluções:
-
-- Erro de conexão: Verifique configurações
-- Timeout: Ajuste limites de tempo
-- Memória: Monitore uso de recursos
-
-## Fallback
-
-O sistema possui mecanismos de fallback:
-
-1. Retry automático
-2. Circuit breaker
-3. Modo degradado"""
-    }
-    
-    for section, content in sections.items():
-        create_section(docs_dir, section, content)
-    
-    print("✅ Documentação gerada!")
+    except Exception as e:
+        error_msg = f"❌ Erro: {str(e)}"
+        print(error_msg, file=sys.stderr)
+        sys.exit(1)
 
 if __name__ == "__main__":
-    try:
-        generate_docs()
-    except Exception as e:
-        print(f"❌ Erro ao gerar documentação: {e}", file=sys.stderr)
-        sys.exit(1) 
+    main() 

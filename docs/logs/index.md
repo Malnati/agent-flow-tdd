@@ -1,3 +1,1 @@
-# Logs/Index
-
-Documentação em construção.
+{"name": "Gerar Documentação", "description": "Gerar documentação para a seção 'logs'", "objectives": ["Implementar Gerar documentação para a seção 'logs'"], "requirements": ["Definir requisitos específicos"], "constraints": ["Definir restrições do sistema"]}

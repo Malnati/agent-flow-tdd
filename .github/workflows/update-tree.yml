@@ -3,7 +3,7 @@ name: Atualizar estrutura do projeto (TREE.md)
 on:
   pull_request:
     branches:
-      - main
+      - 'nenhuma'  # Não executa em branch nenhuma
     types: [closed]
 
 jobs:

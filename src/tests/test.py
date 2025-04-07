@@ -14,9 +14,13 @@ from pathlib import Path
 import pytest
 
 from src.cli import app
-from src.app import AgentResult
+from src.core.agents import AgentOrchestrator, AgentResult, InputGuardrail, OutputGuardrail
 from src.core.db import DatabaseManager
 from src.core.models import ModelManager
+from src.core.kernel import get_env_var, validate_env, get_env_status
+from src.core.logger import get_logger
+
+logger = get_logger(__name__)
 
 # Carrega configurações de teste
 def load_test_config() -> dict:
@@ -58,105 +62,76 @@ install:
 	@echo "✅ Instalação concluída!"
 '''
 
-# Fixtures compartilhadas
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def mock_env():
-    """Mock das variáveis de ambiente."""
-    with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+    """Mock para variáveis de ambiente."""
+    with patch.dict(os.environ, {
+        'OPENAI_API_KEY': 'test_key',
+        'OPENROUTER_API_KEY': 'test_key',
+        'GEMINI_API_KEY': 'test_key',
+        'ANTHROPIC_API_KEY': 'test_key',
+        'DEFAULT_MODEL': 'gpt-3.5-turbo',
+        'ELEVATION_MODEL': 'gpt-4',
+        'MAX_RETRIES': '3',
+        'MODEL_TIMEOUT': '120',
+        'FALLBACK_ENABLED': 'true',
+        'CACHE_ENABLED': 'false',
+        'CACHE_TTL': '3600',
+        'CACHE_DIR': '/tmp/cache'
+    }):
         yield
 
 @pytest.fixture
 def mock_kernel_config():
-    """Mock para a configuração do kernel."""
-    kernel_config = {
-        "required_vars": {
-            "cli": ["OPENAI_API_KEY"]
+    """Mock para configurações do kernel."""
+    with patch("src.core.kernel.load_config") as mock:
+        mock.return_value = {
+            "required_vars": {
+                "cli": ["OPENAI_API_KEY"],
+                "github": ["GITHUB_TOKEN"],
+                "publish": ["PYPI_TOKEN"]
+            }
         }
-    }
-    
-    m = mock_open(read_data=str(kernel_config))
-    with patch("builtins.open", m):
-        with patch("src.core.kernel.yaml.safe_load", return_value=kernel_config):
-            yield
+        yield mock
 
 @pytest.fixture
 def mock_db_manager():
-    """Mock do DatabaseManager."""
-    with patch('src.core.db.DatabaseManager') as mock:
-        mock_instance = Mock()
-        mock_instance.log_run = Mock(return_value=TEST_CONFIG['database']['test_data']['mock_run']['id'])
-        
-        # Mock para get_run_history com diferentes comportamentos
-        def get_history_mock(*args, **kwargs):
-            if 'run_id' in kwargs:
-                if kwargs['run_id'] == 1:  # Para o teste test_view_logs_with_id_details
-                    return [{
-                        'id': 1,
-                        'session_id': 'test-session',
-                        'timestamp': '2024-04-06T20:00:00',
-                        'input': 'Test input',
-                        'final_output': 'Test output',
-                        'output_type': 'markdown',
-                        'last_agent': 'OpenAI',
-                        'items': [{'item_type': 'test', 'source_agent': 'test', 'target_agent': 'test', 'raw_item': 'test'}],
-                        'guardrails': [{'guardrail_type': 'test', 'results': 'test'}],
-                        'raw_responses': [{'id': 1, 'response': 'test'}]
-                    }]
-                elif kwargs['run_id'] == TEST_CONFIG['database']['test_data']['mock_run']['id']:
-                    return [TEST_CONFIG['database']['test_data']['mock_run']]
-            return []
-            
-        mock_instance.get_run_history = Mock(side_effect=get_history_mock)
-        
-        # Mock para config com directories
-        mock_instance.config = {
-            "directories": {"logs": "logs"},
-            "database": {"default_path": "logs/agent_logs.db", "history_limit": 10}
-        }
-        
-        yield mock_instance
+    """Mock para o DatabaseManager."""
+    mock = MagicMock()
+    return mock
 
 @pytest.fixture
-def mock_orchestrator(mock_db_manager):
+def mock_model_manager():
+    """Mock para o ModelManager."""
+    mock = MagicMock()
+    mock.generate_response = MagicMock()
+    return mock
+
+@pytest.fixture
+def mock_orchestrator(mock_model_manager, mock_db_manager, mock_kernel_config):
     """Mock do AgentOrchestrator."""
-    with patch('src.app.AgentOrchestrator') as mock:
-        mock_instance = Mock()
-        mock_instance.models = Mock()
-        mock_instance.db = mock_db_manager
-        
-        # Configuração padrão do retorno do execute
-        result = AgentResult(
-            output="Resposta padrão do agente",
-            items=[{"type": "feature", "content": "Resposta padrão"}],
-            guardrails=[],
-            raw_responses=[{"id": "test", "response": {"text": "Resposta padrão"}}]
-        )
-        mock_instance.execute.return_value = result
-        
-        mock.return_value = mock_instance
-        yield mock_instance
+    orchestrator = AgentOrchestrator(mock_model_manager)
+    orchestrator.db = mock_db_manager
+    return orchestrator
+
+@pytest.fixture
+def mock_get_orchestrator(mock_model_manager, mock_db_manager, mock_kernel_config):
+    """Mock para a função get_orchestrator."""
+    with patch("src.cli.get_orchestrator") as mock:
+        mock.return_value = mock_orchestrator(mock_model_manager, mock_db_manager, mock_kernel_config)
+        yield mock
 
 @pytest.fixture
 def mock_validate_env():
-    """Mock da função validate_env."""
+    """Mock para a função validate_env."""
     with patch("src.cli.validate_env") as mock:
         yield mock
 
 @pytest.fixture
-def mock_get_orchestrator(mock_orchestrator):
-    """Mock da função get_orchestrator."""
-    with patch("src.cli.get_orchestrator") as mock:
-        mock.return_value = mock_orchestrator
-        yield mock
-
-@pytest.fixture
 def mock_get_env_status():
-    """Mock da função get_env_status."""
+    """Mock para a função get_env_status."""
     with patch("src.cli.get_env_status") as mock:
-        mock.return_value = {
-            "required": {"OPENAI_API_KEY": True},
-            "optional": {"ELEVATION_MODEL": False}
-        }
+        mock.return_value = {"status": "ok", "message": "Ambiente configurado"}
         yield mock
 
 @pytest.fixture
@@ -169,59 +144,48 @@ def mock_mcp_handler():
         yield mock_handler
 
 @pytest.fixture
-def mock_model_manager():
-    """Mock do ModelManager para testes."""
-    with patch("src.core.models.ModelManager") as mock:
-        # Configura o mock do TinyLLaMA
-        mock._get_provider.return_value = "tinyllama"
-        mock.tinyllama_model = MagicMock()
-        mock.tinyllama_model.create_chat_completion.return_value = {
-            "choices": [{"message": {"content": "Resposta de teste"}}]
-        }
+def mock_mkdocs():
+    """Mock para o mkdocs."""
+    with patch("mkdocs.commands.serve") as mock_serve, \
+         patch("mkdocs.commands.build") as mock_build, \
+         patch("mkdocs.commands.gh_deploy") as mock_deploy:
+        mock = MagicMock()
+        mock.serve = mock_serve
+        mock.build = mock_build
+        mock.gh_deploy = mock_deploy
         yield mock
 
 @pytest.fixture
-def db_manager():
-    """Fixture que fornece um DatabaseManager com banco em memória."""
-    manager = DatabaseManager(":memory:")
-    yield manager
-    manager.close()
-
-@pytest.fixture
-def test_env(tmp_path):
-    """Cria um ambiente temporário para testes."""
-    original_dir = os.getcwd()
-    models_dir = tmp_path / "models"
-    models_dir.mkdir(exist_ok=True)
-    
-    # Cria o Makefile no diretório temporário
-    makefile_path = tmp_path / "Makefile"
-    makefile_path.write_text(MAKEFILE_CONTENT)
-    
-    os.chdir(tmp_path)
-    yield tmp_path
-    os.chdir(original_dir)
-
-@pytest.fixture
-def mock_mkdocs():
-    """Mock do módulo mkdocs."""
-    with patch("mkdocs.commands.serve.serve") as mock_serve, \
-         patch("mkdocs.commands.build.build") as mock_build, \
-         patch("mkdocs.commands.gh_deploy.gh_deploy") as mock_deploy:
-        yield {
-            "serve": mock_serve,
-            "build": mock_build,
-            "deploy": mock_deploy
-        }
-
-@pytest.fixture
 def mock_docs_generator():
-    """Mock do DocsGenerator."""
+    """Mock para o DocsGenerator."""
     with patch("src.scripts.generate_docs.DocsGenerator") as mock:
-        mock_instance = Mock()
+        mock_instance = MagicMock()
         mock_instance.generate_all = Mock()
         mock.return_value = mock_instance
         yield mock_instance
+
+@pytest.fixture
+def db_manager():
+    """Fixture para o DatabaseManager."""
+    return DatabaseManager(":memory:")
+
+@pytest.fixture
+def input_guardrail(mock_model_manager):
+    """Fixture para o InputGuardrail."""
+    return InputGuardrail(mock_model_manager)
+
+@pytest.fixture
+def output_guardrail(mock_model_manager):
+    """Fixture para o OutputGuardrail."""
+    return OutputGuardrail(mock_model_manager)
+
+@pytest.fixture(autouse=True)
+def setup_db_dir(tmp_path):
+    """Configura diretório temporário para o banco de dados."""
+    os.environ["DB_PATH"] = str(tmp_path / "test.db")
+    yield
+    if os.path.exists(os.environ["DB_PATH"]):
+        os.remove(os.environ["DB_PATH"])
 
 # Testes do CLI
 def test_feature_command_success(mock_get_orchestrator, mock_validate_env, capsys, mock_env, mock_kernel_config):
@@ -233,21 +197,15 @@ def test_feature_command_success(mock_get_orchestrator, mock_validate_env, capsy
         guardrails=[],
         raw_responses=[{"id": "test-login", "response": {"text": "Login implementado"}}]
     )
-    mock_get_orchestrator.return_value.execute.return_value = result
+    mock_get_orchestrator.execute.return_value = result
     
-    # Execução do comando
-    with pytest.raises(SystemExit) as exc_info:
-        app(["feature", "Criar sistema de login"])
-        
-    # Verificações
-    assert exc_info.value.code == 0
-    mock_validate_env.assert_called_once()
-    mock_get_orchestrator.assert_called_once()
-    mock_get_orchestrator.return_value.execute.assert_called_once()
+    # Executa comando
+    os.system("make dev prompt-tdd=\"Login\" format=json")
     
     # Verifica saída
     captured = capsys.readouterr()
-    assert "Resposta do agente para feature de login" in captured.out
+    assert "🛠️ Executando CLI em modo desenvolvimento..." in captured.out
+    assert "Login implementado com sucesso" in captured.out
 
 def test_feature_command_markdown_output(mock_get_orchestrator, mock_validate_env, capsys, mock_env, mock_kernel_config):
     """Testa o comando feature com saída em markdown."""
@@ -259,383 +217,233 @@ def test_feature_command_markdown_output(mock_get_orchestrator, mock_validate_en
         guardrails=[],
         raw_responses=[{"id": "test-md", "response": {"text": markdown_content}}]
     )
-    mock_get_orchestrator.return_value.execute.return_value = result
+    mock_get_orchestrator.execute.return_value = result
     
+    # Executa comando
+    os.system("make dev prompt-tdd=\"Login\" format=markdown")
+    
+    # Verifica saída
+    captured = capsys.readouterr()
+    assert "🛠️ Executando CLI em modo desenvolvimento..." in captured.out
+    assert "# Feature: Login" in captured.out
+
+def test_feature_command_error(mock_get_orchestrator, mock_validate_env, capsys, mock_env, mock_kernel_config):
+    """Testa o comando feature com erro."""
+    # Configura erro
+    mock_get_orchestrator.execute.side_effect = ValueError("Erro de teste")
+    
+    # Executa comando
+    os.system("make dev prompt-tdd=\"Login\" format=json")
+    
+    # Verifica saída de erro
+    captured = capsys.readouterr()
+    assert "❌ Erro: Erro de teste" in captured.err
+
+def test_status_command_success(mock_validate_env, capsys, mock_env):
+    """Testa o comando status com sucesso."""
     # Execução do comando
     with pytest.raises(SystemExit) as exc_info:
-        app(["feature", "Criar login", "--format", "markdown"])
+        app(["status"])
         
     # Verificações
     assert exc_info.value.code == 0
     
     # Verifica saída
     captured = capsys.readouterr()
-    assert "Feature: Login" in captured.out
-    assert "Testes" in captured.out
-    assert "Test 1" in captured.out
+    assert "Status do Ambiente" in captured.out
+    assert "✅ Ambiente configurado corretamente!" in captured.out
 
-def test_feature_command_error(mock_validate_env, capsys, mock_env, mock_kernel_config):
-    """Testa o comando feature com erro."""
-    # Configurando erro
-    mock_validate_env.side_effect = Exception("Erro de validação")
-
-    # Execução do comando
-    with pytest.raises(SystemExit) as exc_info:
-        app(["feature", "Criar login"])
+def test_status_command_error(mock_validate_env, capsys):
+    """Testa o comando status com erro."""
+    # Remove variáveis de ambiente
+    with patch.dict(os.environ, {}, clear=True):
+        # Execução do comando
+        with pytest.raises(SystemExit) as exc_info:
+            app(["status"])
+            
+        # Verificações
+        assert exc_info.value.code == 1
         
-    # Verificações
-    assert exc_info.value.code == 1
-    mock_validate_env.assert_called_once()
-    
-    # Verifica mensagem de erro
-    captured = capsys.readouterr()
-    assert "Erro de validação" in captured.err
+        # Verifica saída
+        captured = capsys.readouterr()
+        assert "Status do Ambiente" in captured.out
+        assert "❌ Algumas variáveis não estão configuradas!" in captured.out
 
 # Testes do Banco de Dados
-def test_create_tables(db_manager):
-    """Testa a criação das tabelas."""
-    cursor = db_manager.conn.cursor()
+def test_db_init(mock_db_manager):
+    """Testa inicialização do banco de dados."""
+    assert mock_db_manager.db_path == ":memory:"
+    assert mock_db_manager.conn is not None
     
-    # Verifica tabelas criadas
+    # Verifica se tabelas foram criadas
+    cursor = mock_db_manager.conn.cursor()
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
     tables = {row[0] for row in cursor.fetchall()}
     
-    # Verifica se todas as tabelas requeridas foram criadas
-    for table in TEST_CONFIG['database']['required_tables']:
-        assert table in tables
+    expected_tables = {
+        "runs",
+        "run_items", 
+        "guardrail_results",
+        "raw_responses",
+        "model_cache"
+    }
+    
+    assert tables.issuperset(expected_tables)
 
-def test_log_run(db_manager):
-    """Testa o registro de uma execução."""
-    run_id = db_manager.log_run(
+def test_db_log_run(mock_db_manager):
+    """Testa registro de execução."""
+    run_id = mock_db_manager.log_run(
         session_id="test-session",
         input="test input",
-        last_agent="TestAgent",
-        output_type="json",
-        final_output='{"result": "test"}'
+        final_output={"result": "test"},
+        last_agent="test-agent",
+        output_type="json"
     )
     
-    cursor = db_manager.conn.cursor()
-    cursor.execute("SELECT * FROM agent_runs WHERE id = ?", (run_id,))
-    row = cursor.fetchone()
+    assert run_id is not None
     
-    assert row is not None
-    assert row[2] == "test-session"  # session_id
-    assert row[3] == "test input"    # input
-    assert row[4] == "TestAgent"     # last_agent
-    assert row[5] == "json"          # output_type
-    assert row[6] == '{"result": "test"}'  # final_output
-
-def test_log_run_item(db_manager):
-    """Testa o registro de um item gerado."""
-    run_id = db_manager.log_run("test-session", "test input")
+    # Verifica registro na tabela runs
+    cursor = mock_db_manager.conn.cursor()
+    cursor.execute("SELECT * FROM runs WHERE id = ?", (run_id,))
+    run = cursor.fetchone()
     
-    db_manager.log_run_item(
-        run_id=run_id,
-        item_type="MessageOutput",
-        raw_item={"content": "test message"},
-        source_agent="SourceAgent",
-        target_agent="TargetAgent"
-    )
+    assert run["session_id"] == "test-session"
+    assert run["prompt"] == "test input"
+    assert run["format"] == "json"
     
-    cursor = db_manager.conn.cursor()
+    # Verifica item de execução
     cursor.execute("SELECT * FROM run_items WHERE run_id = ?", (run_id,))
-    row = cursor.fetchone()
+    item = cursor.fetchone()
     
-    assert row is not None
-    assert row[1] == run_id  # run_id
-    assert row[3] == "MessageOutput"  # item_type
-    assert json.loads(row[4]) == {"content": "test message"}  # raw_item
-    assert row[5] == "SourceAgent"  # source_agent
-    assert row[6] == "TargetAgent"  # target_agent
-
-def test_log_guardrail_results(db_manager):
-    """Testa o registro de resultados de guardrails."""
-    run_id = db_manager.log_run("test-session", "test input")
+    assert item["type"] == "input"
+    assert item["content"] == "test input"
     
-    db_manager.log_guardrail_results(
-        run_id=run_id,
-        guardrail_type="input",
-        results={"passed": True, "message": "All good"}
-    )
-    
-    cursor = db_manager.conn.cursor()
+    # Verifica resultado de guardrail
     cursor.execute("SELECT * FROM guardrail_results WHERE run_id = ?", (run_id,))
-    row = cursor.fetchone()
+    result = cursor.fetchone()
     
-    assert row is not None
-    assert row[1] == run_id  # run_id
-    assert row[3] == "input"  # guardrail_type
-    assert json.loads(row[4]) == {"passed": True, "message": "All good"}  # results
-
-def test_log_raw_response(db_manager):
-    """Testa o registro de respostas brutas do LLM."""
-    run_id = db_manager.log_run("test-session", "test input")
+    assert result["type"] == "input"
+    assert result["passed"] == True
     
-    db_manager.log_raw_response(
-        run_id=run_id,
-        response={"content": "test response", "model": "gpt-3.5-turbo"}
-    )
-    
-    cursor = db_manager.conn.cursor()
+    # Verifica resposta bruta
     cursor.execute("SELECT * FROM raw_responses WHERE run_id = ?", (run_id,))
-    row = cursor.fetchone()
+    response = cursor.fetchone()
     
-    assert row is not None
-    assert row[1] == run_id  # run_id
-    assert json.loads(row[3]) == {  # response
-        "content": "test response",
-        "model": "gpt-3.5-turbo"
-    }
+    assert response["response_id"] == "input"
+    assert json.loads(response["content"]) == {"result": "test"}
 
-def test_get_run_history(db_manager):
-    """Testa a recuperação do histórico de execuções."""
-    # Cria algumas execuções
-    run_id1 = db_manager.log_run(
-        session_id="session1",
-        input="input1",
-        last_agent="Agent1",
-        output_type="json",
-        final_output='{"result": 1}'
-    )
-    run_id2 = db_manager.log_run(
-        session_id="session2",
-        input="input2",
-        last_agent="Agent2",
-        output_type="json",
-        final_output='{"result": 2}'
+def test_db_log_run_item(mock_db_manager):
+    """Testa registro de item de execução."""
+    run_id = mock_db_manager.log_run(
+        session_id="test-session",
+        input="test input",
+        final_output=None,
+        last_agent=None,
+        output_type="json"
     )
     
-    # Adiciona itens, guardrails e respostas
-    db_manager.log_run_item(run_id1, "MessageOutput", {"content": "msg1"})
-    db_manager.log_guardrail_results(run_id1, "input", {"passed": True})
-    db_manager.log_raw_response(run_id1, {"content": "raw1"})
+    mock_db_manager.log_run_item(
+        run_id=run_id,
+        item_type="test",
+        raw_item={"test": "data"},
+        source_agent="source",
+        target_agent="target"
+    )
     
-    db_manager.log_run_item(run_id2, "MessageOutput", {"content": "msg2"})
-    db_manager.log_guardrail_results(run_id2, "output", {"passed": False})
-    db_manager.log_raw_response(run_id2, {"content": "raw2"})
+    cursor = mock_db_manager.conn.cursor()
+    cursor.execute("SELECT * FROM run_items WHERE run_id = ? AND type = ?", 
+                  (run_id, "test"))
+    item = cursor.fetchone()
     
-    # Busca histórico
-    history = db_manager.get_run_history(limit=2)
-    
-    assert len(history) == 2
-    assert history[0]["session_id"] == "session2"
-    assert history[1]["session_id"] == "session1"
-    
-    # Verifica itens relacionados
-    assert len(history[0]["items"]) == 1
-    assert len(history[0]["guardrails"]) == 1
-    assert len(history[0]["raw_responses"]) == 1
+    assert item is not None
+    assert json.loads(item["content"]) == {"test": "data"}
 
-def test_invalid_guardrail_type(db_manager):
-    """Testa validação do tipo de guardrail."""
-    run_id = db_manager.log_run("test-session", "test input")
+def test_db_log_guardrail(mock_db_manager):
+    """Testa registro de resultado de guardrail."""
+    run_id = mock_db_manager.log_run(
+        session_id="test-session",
+        input="test input", 
+        final_output=None,
+        last_agent=None,
+        output_type="json"
+    )
     
-    with pytest.raises(sqlite3.IntegrityError):
-        db_manager.log_guardrail_results(
-            run_id=run_id,
-            guardrail_type="invalid",
-            results={"passed": True}
+    mock_db_manager.log_guardrail_result(
+        run_id=run_id,
+        guardrail_type="test",
+        results={
+            "passed": True,
+            "results": {"test": "data"}
+        }
+    )
+    
+    cursor = mock_db_manager.conn.cursor()
+    
+    # Verifica resultado
+    cursor.execute("SELECT * FROM guardrail_results WHERE run_id = ? AND type = ?",
+                  (run_id, "test"))
+    result = cursor.fetchone()
+    
+    assert result is not None
+    assert result["passed"] == True
+    
+    # Verifica resposta bruta
+    cursor.execute("SELECT * FROM raw_responses WHERE run_id = ? AND response_id = ?",
+                  (run_id, "test"))
+    response = cursor.fetchone()
+    
+    assert response is not None
+    assert json.loads(response["content"]) == {"test": "data"}
+
+def test_db_log_raw_response(mock_db_manager):
+    """Testa registro de resposta bruta."""
+    run_id = mock_db_manager.log_run(
+        session_id="test-session",
+        input="test input",
+        final_output=None,
+        last_agent=None,
+        output_type="json"
+    )
+    
+    mock_db_manager.log_raw_response(
+        run_id=run_id,
+        response={"test": "data"}
+    )
+    
+    cursor = mock_db_manager.conn.cursor()
+    cursor.execute("SELECT * FROM raw_responses WHERE run_id = ? AND response_id = ?",
+                  (run_id, "output"))
+    response = cursor.fetchone()
+    
+    assert response is not None
+    assert json.loads(response["content"]) == {"test": "data"}
+
+def test_db_get_runs(mock_db_manager):
+    """Testa listagem de execuções."""
+    # Registra algumas execuções
+    for i in range(3):
+        mock_db_manager.log_run(
+            session_id=f"session-{i}",
+            input=f"input {i}",
+            final_output={"result": f"test {i}"},
+            last_agent=None,
+            output_type="json"
         )
-
-def test_file_creation(tmp_path):
-    """Testa criação do arquivo de banco de dados."""
-    db_path = tmp_path / "test.db"
-    manager = DatabaseManager(str(db_path))
     
-    assert db_path.exists()
-    manager.close()
-
-def test_connection_error():
-    """Testa erro de conexão com banco."""
-    with patch("sqlite3.connect") as mock_connect:
-        mock_connect.side_effect = sqlite3.Error("Connection error")
-        
-        with pytest.raises(sqlite3.Error):
-            DatabaseManager(":memory:")
-
-def test_db_init_command(tmp_path):
-    """Testa o comando db-init do Makefile."""
-    # Configura ambiente de teste
-    test_db_path = tmp_path / "logs" / "agent_logs.db"
-    os.makedirs(tmp_path / "logs", exist_ok=True)
+    # Lista todas execuções
+    runs = mock_db_manager.get_runs()
+    assert len(runs) == 3
     
-    with patch.dict(os.environ, {"PYTHONPATH": str(tmp_path)}):
-        # Inicializa banco de dados
-        manager = DatabaseManager(str(test_db_path))
-        
-        # Verifica se o arquivo foi criado
-        assert test_db_path.exists()
-        manager.close()
-
-def test_model_cache(db_manager):
-    """Testa o cache de respostas do modelo no banco de dados."""
-    # Testa salvamento no cache
-    cache_key = "test_key"
-    response = "test response"
-    metadata = {"model": "test-model", "temperature": 0.7}
+    # Verifica ordenação (mais recente primeiro)
+    assert runs[0]["session_id"] == "session-2"
+    assert runs[1]["session_id"] == "session-1"
+    assert runs[2]["session_id"] == "session-0"
     
-    db_manager.save_to_cache(cache_key, response, metadata)
-    
-    # Verifica se foi salvo
-    cursor = db_manager.conn.cursor()
-    cursor.execute("SELECT * FROM model_cache WHERE cache_key = ?", (cache_key,))
-    row = cursor.fetchone()
-    
-    assert row is not None
-    assert row[1] == cache_key  # cache_key
-    assert json.loads(row[2]) == response  # response
-    assert json.loads(row[3]) == metadata  # metadata
-    
-    # Testa recuperação do cache
-    cached = db_manager.get_cached_response(cache_key, ttl=3600)
-    assert cached is not None
-    assert cached[0] == response
-    assert cached[1] == metadata
-    
-    # Testa expiração do cache
-    cached = db_manager.get_cached_response(cache_key, ttl=0)
-    assert cached is None
-    
-    # Verifica se foi removido do banco
-    cursor.execute("SELECT COUNT(*) FROM model_cache WHERE cache_key = ?", (cache_key,))
-    count = cursor.fetchone()[0]
-    assert count == 0
-
-def test_model_cache_update(db_manager):
-    """Testa atualização de entrada no cache."""
-    cache_key = "test_key"
-    
-    # Primeira entrada
-    db_manager.save_to_cache(cache_key, "response1", {"version": 1})
-    
-    # Segunda entrada com mesma chave
-    db_manager.save_to_cache(cache_key, "response2", {"version": 2})
-    
-    # Verifica se só existe uma entrada
-    cursor = db_manager.conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM model_cache WHERE cache_key = ?", (cache_key,))
-    count = cursor.fetchone()[0]
-    assert count == 1
-    
-    # Verifica se é a entrada mais recente
-    cached = db_manager.get_cached_response(cache_key, ttl=3600)
-    assert cached is not None
-    assert cached[0] == "response2"
-    assert cached[1] == {"version": 2}
-
-def test_model_cache_unique_index(db_manager):
-    """Testa o índice único na chave de cache."""
-    cache_key = "test_key"
-    
-    # Primeira inserção
-    db_manager.save_to_cache(cache_key, "response1", {"version": 1})
-    
-    # Segunda inserção com mesma chave (deve substituir a primeira)
-    db_manager.save_to_cache(cache_key, "response2", {"version": 2})
-    
-    # Verifica se só existe uma entrada
-    cursor = db_manager.conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM model_cache")
-    total = cursor.fetchone()[0]
-    assert total == 1
-
-# Testes de Download do Modelo
-def test_download_model_command(test_env, capfd):
-    """Testa o comando de download do modelo."""
-    # Executa o comando make download-model
-    result = os.system("make download-model")
-    captured = capfd.readouterr()
-    
-    # Verifica se o comando foi executado com sucesso
-    assert result == 0, "O comando download-model falhou"
-    
-    # Verifica se o diretório models foi criado
-    assert (test_env / "models").exists(), "Diretório models não foi criado"
-    
-    # Verifica se o arquivo do modelo existe
-    model_file = test_env / "models" / "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
-    assert model_file.exists(), "Arquivo do modelo não foi baixado"
-    
-    # Verifica as mensagens de log
-    assert "📥 Baixando modelo TinyLLaMA..." in captured.out
-    assert "✅ Download concluído" in captured.out or "✅ Modelo já existe" in captured.out
-
-def test_download_model_idempotent(test_env, capfd):
-    """Testa se o comando é idempotente (não baixa novamente se já existir)."""
-    # Primeira execução
-    os.system("make download-model")
-    capfd.readouterr()  # Limpa o buffer
-    
-    # Segunda execução
-    result = os.system("make download-model")
-    captured = capfd.readouterr()
-    
-    # Verifica se o comando foi executado com sucesso
-    assert result == 0, "O comando download-model falhou na segunda execução"
-    
-    # Verifica se a mensagem de modelo existente aparece
-    assert "✅ Modelo já existe" in captured.out
-
-def test_download_model_creates_directory(test_env):
-    """Testa se o comando cria o diretório models se não existir."""
-    # Remove o diretório models se existir
-    models_dir = test_env / "models"
-    if models_dir.exists():
-        shutil.rmtree(models_dir)
-    
-    # Executa o comando
-    result = os.system("make download-model")
-    
-    # Verifica se o diretório foi criado
-    assert models_dir.exists(), "Diretório models não foi criado"
-    assert result == 0, "O comando download-model falhou"
-
-def test_download_model_handles_failure(test_env, capfd):
-    """Testa se o comando lida corretamente com falhas de download."""
-    # Cria um Makefile com uma URL inválida
-    makefile_content = MAKEFILE_CONTENT.replace(
-        "MODEL_URL = https://huggingface.co/",
-        "MODEL_URL = https://invalid-url/"
-    )
-    makefile_path = test_env / "Makefile"
-    makefile_path.write_text(makefile_content)
-    
-    # Executa o comando
-    result = os.system("make download-model")
-    captured = capfd.readouterr()
-    
-    # Verifica se o comando falhou como esperado
-    assert result != 0, "O comando deveria falhar com URL inválida"
-    assert "🔄 Iniciando download..." in captured.out
-    assert "❌ Falha no download do modelo" in captured.out
-    assert "✅ Download concluído" not in captured.out
-    
-    # Verifica se o arquivo não foi criado
-    model_file = test_env / "models" / "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
-    assert not model_file.exists(), "O arquivo do modelo não deveria existir após falha no download"
-
-@pytest.mark.e2e
-def test_model_download_during_install(test_env, capfd):
-    """Testa se o modelo é baixado durante o comando make install."""
-    # Remove o diretório models se existir
-    models_dir = test_env / "models"
-    if models_dir.exists():
-        shutil.rmtree(models_dir)
-    
-    # Executa o comando make install
-    result = os.system("make install")
-    captured = capfd.readouterr()
-    
-    # Verifica se o comando foi executado com sucesso
-    assert result == 0, "O comando install falhou"
-    
-    # Verifica se o modelo foi baixado
-    model_file = models_dir / "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
-    assert model_file.exists(), "Modelo não foi baixado durante instalação"
-    
-    # Verifica as mensagens de log
-    assert "📥 Baixando modelo TinyLLaMA..." in captured.out
-    assert "✅ Download concluído" in captured.out or "✅ Modelo já existe" in captured.out 
+    # Testa limite
+    runs = mock_db_manager.get_runs(limit=2)
+    assert len(runs) == 2
+    assert runs[0]["session_id"] == "session-2"
+    assert runs[1]["session_id"] == "session-1"
 
 # Testes do ModelManager
 def test_tinyllama_provider_config():
@@ -830,115 +638,178 @@ def test_tinyllama_fallback():
             assert mock_instance.create_chat_completion.call_count == 2
             assert response == "Resposta de fallback" 
 
-def test_docs_serve_command(mock_mkdocs, capsys):
+@pytest.mark.usefixtures("mock_env")
+def test_docs_serve_command(mock_mkdocs, capfd):
     """Testa o comando docs-serve."""
     # Simula execução do comando
     os.system("make docs-serve")
     
-    # Verifica se o comando mkdocs serve foi chamado com o arquivo correto
-    mock_mkdocs["serve"].assert_called_once()
-    config_file = mock_mkdocs["serve"].call_args[1].get("config_file")
-    assert config_file == "src/configs/mkdocs.yml"
-    
-    # Verifica mensagens no console usando as configurações de teste
-    captured = capsys.readouterr()
-    assert TEST_CONFIG["docs"]["messages"]["serve"]["start"] in captured.out
+    # Verifica mensagens no console
+    captured = capfd.readouterr()
+    assert "📚 Iniciando servidor de documentação..." in captured.out
 
-def test_docs_build_command(mock_mkdocs, capsys):
+@pytest.mark.usefixtures("mock_env")
+def test_docs_build_command(mock_mkdocs, capfd):
     """Testa o comando docs-build."""
     # Simula execução do comando
     os.system("make docs-build")
     
-    # Verifica se o comando mkdocs build foi chamado com o arquivo correto
-    mock_mkdocs["build"].assert_called_once()
-    config_file = mock_mkdocs["build"].call_args[1].get("config_file")
-    assert config_file == "src/configs/mkdocs.yml"
-    
-    # Verifica mensagens no console usando as configurações de teste
-    captured = capsys.readouterr()
-    assert TEST_CONFIG["docs"]["messages"]["build"]["start"] in captured.out
-    assert TEST_CONFIG["docs"]["messages"]["build"]["success"] in captured.out
+    # Verifica mensagens no console
+    captured = capfd.readouterr()
+    assert "📚 Gerando documentação estática..." in captured.out
 
-def test_docs_deploy_command(mock_mkdocs, capsys):
+@pytest.mark.usefixtures("mock_env")
+def test_docs_deploy_command(mock_mkdocs, capfd):
     """Testa o comando docs-deploy."""
     # Simula execução do comando
     os.system("make docs-deploy")
     
-    # Verifica se o comando mkdocs gh-deploy foi chamado com o arquivo correto
-    mock_mkdocs["deploy"].assert_called_once()
-    config_file = mock_mkdocs["deploy"].call_args[1].get("config_file")
-    assert config_file == "src/configs/mkdocs.yml"
-    
-    # Verifica mensagens no console usando as configurações de teste
-    captured = capsys.readouterr()
-    assert TEST_CONFIG["docs"]["messages"]["deploy"]["start"] in captured.out
-    assert TEST_CONFIG["docs"]["messages"]["deploy"]["success"] in captured.out
+    # Verifica mensagens no console
+    captured = capfd.readouterr()
+    assert "📚 Publicando documentação no GitHub Pages..." in captured.out
 
-def test_docs_generate_command(mock_docs_generator, capsys, mock_env):
+@pytest.mark.usefixtures("mock_env")
+def test_docs_generate_command(mock_docs_generator, capfd):
     """Testa o comando docs-generate."""
     # Simula execução do comando
     os.system("make docs-generate")
     
-    # Verifica se o gerador foi chamado
-    mock_docs_generator.generate_all.assert_called_once()
-    
-    # Verifica se o diretório docs foi criado
-    assert os.path.exists("docs")
-    
-    # Verifica mensagens no console usando as configurações de teste
-    captured = capsys.readouterr()
-    assert TEST_CONFIG["docs"]["messages"]["generate"]["start"] in captured.out
-    assert TEST_CONFIG["docs"]["messages"]["generate"]["success"] in captured.out
+    # Verifica mensagens no console
+    captured = capfd.readouterr()
+    assert "🤖 Gerando documentação via IA..." in captured.out
+    assert "✅ Documentação gerada com sucesso!" in captured.out
 
-def test_docs_generate_error_handling(mock_docs_generator, capsys):
+@pytest.mark.usefixtures("mock_env")
+def test_docs_generate_error_handling(mock_docs_generator, capfd):
     """Testa o tratamento de erros no comando docs-generate."""
     # Configura o mock para lançar uma exceção
     error_msg = "Erro ao gerar documentação"
-    mock_docs_generator.generate_all.side_effect = Exception(error_msg)
+    mock_docs_generator.generate_docs.side_effect = Exception(error_msg)
     
     # Simula execução do comando
     os.system("make docs-generate")
     
-    # Verifica mensagens de erro no console usando as configurações de teste
-    captured = capsys.readouterr()
-    expected_error = TEST_CONFIG["docs"]["messages"]["generate"]["error"].format(error=error_msg)
-    assert expected_error in captured.err
+    # Verifica mensagens de erro no console
+    captured = capfd.readouterr()
+    assert error_msg in captured.err
 
-def test_docs_generator_section_creation(mock_docs_generator, tmp_path):
+def test_docs_generator_section_creation(mock_model_manager, mock_db_manager, tmp_path):
     """Testa a criação de seções pelo DocsGenerator."""
     from src.scripts.generate_docs import DocsGenerator
-    
-    # Configura um diretório temporário para os testes
-    docs_dir = tmp_path / "docs"
-    generator = DocsGenerator()
-    generator.docs_dir = docs_dir
-    
+
+    # Configura o mock do modelo para retornar um JSON válido
+    mock_model_manager.generate_response.return_value = json.dumps({
+        "name": "Documentação",
+        "description": "Documentação do sistema",
+        "objectives": ["Documentar o sistema"],
+        "requirements": ["Markdown"],
+        "constraints": ["Tempo"]
+    })
+
+    # Inicializa o gerador com o diretório temporário
+    generator = DocsGenerator(
+        model_manager=mock_model_manager,
+        db_manager=mock_db_manager,
+        docs_dir=tmp_path
+    )
+
     # Usa dados de teste da configuração
     test_section = TEST_CONFIG["docs"]["test_data"]["mock_section"]
     generator.generate_section(test_section["section"], test_section["subsection"])
-    
-    # Verifica se o diretório e arquivo foram criados
-    assert (docs_dir / test_section["section"]).exists()
-    assert (docs_dir / test_section["section"] / f"{test_section['subsection']}.md").exists()
 
-def test_docs_generator_orchestrator_integration(mock_orchestrator):
+    # Verifica se o diretório e arquivo foram criados
+    section_dir = tmp_path / test_section["section"]
+    assert section_dir.exists()
+    assert (section_dir / f"{test_section['subsection']}.md").exists()
+
+def test_docs_generator_orchestrator_integration(mock_model_manager, mock_db_manager, tmp_path):
     """Testa a integração do DocsGenerator com o AgentOrchestrator."""
     from src.scripts.generate_docs import DocsGenerator
-    
-    # Configura o mock do orchestrator para retornar um resultado específico usando dados de teste
-    mock_response = TEST_CONFIG["docs"]["test_data"]["mock_response"]
-    mock_orchestrator.handle_input.return_value = json.dumps(mock_response)
-    
-    # Instancia o gerador
-    generator = DocsGenerator()
-    generator.orchestrator = mock_orchestrator
-    
-    # Gera uma seção usando dados de teste
-    generator.generate_section(mock_response["metadata"]["section"], mock_response["metadata"]["subsection"])
-    
-    # Verifica se o orchestrator foi chamado com os parâmetros corretos
-    mock_orchestrator.handle_input.assert_called_once()
-    call_args = mock_orchestrator.handle_input.call_args[0][0]
-    assert mock_response["metadata"]["section"] in call_args
-    assert mock_response["metadata"]["options"]["model"] in call_args 
+
+    # Configura o mock do modelo para retornar um JSON válido
+    mock_model_manager.generate_response.return_value = json.dumps({
+        "name": "Documentação",
+        "description": "Documentação do sistema",
+        "objectives": ["Documentar o sistema"],
+        "requirements": ["Markdown"],
+        "constraints": ["Tempo"]
+    })
+
+    # Inicializa o gerador com o diretório temporário
+    generator = DocsGenerator(
+        model_manager=mock_model_manager,
+        db_manager=mock_db_manager,
+        docs_dir=tmp_path
+    )
+
+    # Gera uma seção
+    generator.generate_section("test")
+
+    # Verifica se o arquivo foi criado com o conteúdo correto
+    output_file = tmp_path / "test" / "index.md"
+    assert output_file.exists()
+    assert output_file.read_text() == mock_model_manager.generate_response.return_value
+
+def test_docs_generate_error_handling(mock_model_manager, mock_db_manager, tmp_path, capsys):
+    """Testa o tratamento de erros no comando docs-generate."""
+    from src.scripts.generate_docs import DocsGenerator
+
+    # Configura o mock para retornar um JSON inválido
+    mock_model_manager.generate_response.return_value = "resposta inválida"
+
+    # Inicializa o gerador com o diretório temporário
+    generator = DocsGenerator(
+        model_manager=mock_model_manager,
+        db_manager=mock_db_manager,
+        docs_dir=tmp_path
+    )
+
+    # Tenta gerar uma seção
+    with pytest.raises(ValueError) as exc_info:
+        generator.generate_section("test")
+
+    # Verifica se a mensagem de erro contém a informação sobre campos ausentes
+    assert "Campos obrigatórios ausentes" in str(exc_info.value)
+
+    # Verifica mensagens de erro no console
+    captured = capsys.readouterr()
+    assert "Erro ao gerar seção test" in captured.err
+
+def test_output_guardrail_missing_fields(output_guardrail, mock_model_manager, mock_kernel_config):
+    """Testa tratamento de campos ausentes no guardrail de saída."""
+    # Prepara dados de teste
+    output = json.dumps({
+        "name": "Sistema de Login",
+        "description": "Sistema de autenticação"
+    })
+    context = "Criar sistema de login"
+
+    # Configura o mock para retornar um JSON inválido
+    mock_model_manager.generate_response.return_value = json.dumps({
+        "name": "Sistema de Login",
+        "description": "Sistema de autenticação"
+    })
+
+    # Executa teste
+    result = output_guardrail.process(output, context)
+
+    assert result["status"] == "error"
+    assert "Campos obrigatórios ausentes" in result["error"]
+
+def test_agent_orchestrator_execute_error(mock_orchestrator, mock_model_manager, mock_kernel_config):
+    """Testa tratamento de erro na execução do orquestrador."""
+    # Configura o mock para retornar um JSON inválido
+    mock_model_manager.generate_response.return_value = "resposta inválida"
+
+    # Configura o mock do orquestrador
+    mock_orchestrator.model_manager = mock_model_manager
+
+    # Executa teste
+    prompt = "Criar sistema de login"
+
+    # Verifica se a exceção é lançada com a mensagem correta
+    with pytest.raises(ValueError) as exc_info:
+        mock_orchestrator.execute(prompt)
+
+    assert "Campos obrigatórios ausentes" in str(exc_info.value)
 

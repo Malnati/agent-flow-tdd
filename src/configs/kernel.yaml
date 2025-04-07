@@ -366,111 +366,38 @@ env_vars:
 
 # Configurações dos Guardrails
 guardrails:
-  # Guardrail de Entrada
   input:
-    required_fields:
-      - name: "name"
-        description: "Nome da funcionalidade"
-        type: "string"
-        required: true
-      - name: "description"
-        description: "Descrição detalhada da funcionalidade"
-        type: "string" 
-        required: true
-      - name: "objectives"
-        description: "Objetivos principais da funcionalidade"
-        type: "array"
-        required: true
-      - name: "requirements"
-        description: "Requisitos técnicos e funcionais"
-        type: "array"
-        required: false
-      - name: "constraints"
-        description: "Limitações e restrições"
-        type: "array"
-        required: false
-    validation:
-      min_length:
-        name: 3
-        description: 10
-      max_length:
-        name: 100
-        description: 1000
-      array_limits:
-        objectives:
-          min: 1
-          max: 10
-        requirements:
-          min: 0
-          max: 20
-        constraints:
-          min: 0
-          max: 10
-    prompt_template: |
-      Por favor, forneça as seguintes informações sobre a funcionalidade:
-      
-      1. Nome: {name}
-      2. Descrição: {description}
-      3. Objetivos: {objectives}
-      4. Requisitos (opcional): {requirements}
-      5. Restrições (opcional): {constraints}
-
-  # Guardrail de Saída
+    system_prompt: |
+      Você é um assistente especializado em extrair informações estruturadas de prompts.
+      Analise o prompt fornecido e extraia as informações relevantes no formato YAML.
+      Inclua os seguintes campos obrigatórios:
+      - name: Nome da feature/tarefa
+      - description: Descrição detalhada
+      - objectives: Lista de objetivos
+      - requirements: Lista de requisitos
+      - constraints: Lista de restrições
+    requirements:
+      name: true
+      description: true
+      objectives: true
+      requirements: true
+      constraints: true
   output:
-    required_fields:
-      - name: "name"
-        description: "Nome da funcionalidade"
-        type: "string"
-        required: true
-      - name: "description"
-        description: "Descrição detalhada da funcionalidade"
-        type: "string" 
-        required: true
-      - name: "objectives"
-        description: "Objetivos principais da funcionalidade"
-        type: "array"
-        required: true
-      - name: "requirements"
-        description: "Requisitos técnicos e funcionais"
-        type: "array"
-        required: true
-      - name: "constraints"
-        description: "Limitações e restrições"
-        type: "array"
-        required: true
-    validation:
-      min_length:
-        name: 3
-        description: 10
-      max_length:
-        name: 100
-        description: 1000
-      array_limits:
-        objectives:
-          min: 1
-          max: 10
-        requirements:
-          min: 1
-          max: 20
-        constraints:
-          min: 1
-          max: 10
-    prompt_template: |
-      Analise o contexto fornecido e sugira valores para os campos ausentes.
-      
-      Contexto: {context}
-      
-      Campos ausentes: {missing_fields}
-      
-      Retorne APENAS um objeto JSON com os campos sugeridos, sem nenhum texto adicional.
-      Exemplo:
-      {
-          "name": "Nome sugerido",
-          "description": "Descrição sugerida",
-          "objectives": ["Objetivo 1", "Objetivo 2"],
-          "requirements": ["Requisito 1", "Requisito 2"],
-          "constraints": ["Restrição 1", "Restrição 2"]
-      } 
+    completion_prompt: |
+      Você é um assistente especializado em validar respostas geradas.
+      Analise a resposta fornecida e verifique se ela atende aos requisitos.
+      Inclua os seguintes campos obrigatórios:
+      - name: Nome da feature/tarefa
+      - description: Descrição detalhada
+      - objectives: Lista de objetivos
+      - requirements: Lista de requisitos
+      - constraints: Lista de restrições
+    requirements:
+      name: true
+      description: true
+      objectives: true
+      requirements: true
+      constraints: true
 
 # Configurações de Prompts do Sistema
 prompts:

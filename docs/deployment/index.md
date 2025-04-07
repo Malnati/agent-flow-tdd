@@ -1,3 +1,1 @@
-# Deployment/Index
-
-Documentação em construção.
+{"name": "Gerar Documentação", "description": "Gerar documentação para a seção 'deployment'", "objectives": ["Implementar Gerar documentação para a seção 'deployment'"], "requirements": ["Definir requisitos específicos"], "constraints": ["Definir restrições do sistema"]}
