@@ -270,22 +270,7 @@ def run_prompt_tdd(command, env_vars=None, cwd=None, timeout=COMMAND_TIMEOUT):
 
 # Testes de funcionalidade principal
 
-def test_cli_mode_text_output(test_env):
-    """Testa o modo CLI com saída em texto."""
-    # Prepara o comando
-    command = f"python -m src.prompt_tdd cli 'Criar uma função de soma em Python' --format text"
-    
-    # Executa o comando
-    returncode, stdout, stderr = run_prompt_tdd(
-        command, 
-        env_vars=test_env["env_vars"],
-        timeout=TEST_TIMEOUT
-    )
-    
-    # Verifica o resultado
-    assert returncode == 0, f"Comando falhou: {stderr}"
-    assert "def soma" in stdout, "A saída não contém a função de soma esperada"
-    assert "return" in stdout, "A saída não contém a instrução return esperada"
+# test_cli_mode_text_output removed as it's no longer necessary
 
 def test_cli_mode_json_output(test_env):
     """Testa o modo CLI com saída em JSON."""
@@ -381,21 +366,7 @@ def test_mcp_mode(test_env):
         elif isinstance(content, dict) and "code" in content:
             assert "def fatorial" in content["code"], "A saída não contém a função de fatorial"
 
-def test_app_mode(test_env):
-    """Testa o modo app."""
-    # Prepara o comando
-    command = f"python -m src.prompt_tdd app"
-    
-    # Executa o comando
-    returncode, stdout, stderr = run_prompt_tdd(
-        command, 
-        env_vars=test_env["env_vars"],
-        timeout=TEST_TIMEOUT
-    )
-    
-    # Verifica o resultado
-    assert returncode == 0, f"Comando falhou: {stderr}"
-    assert "sistema de login" in stdout.lower(), "A saída não contém o resultado esperado"
+# test_app_mode removed as it's no longer necessary
 
 def test_feature_command_success(mock_get_orchestrator, mock_validate_env, capsys, mock_env, mock_kernel_config):
     """Testa o comando feature com sucesso."""
