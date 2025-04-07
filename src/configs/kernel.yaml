@@ -138,6 +138,23 @@ database:
       foreign_keys:
         - column: "run_id"
           references: "agent_runs(id)"
+    model_cache:
+      name: "model_cache"
+      columns:
+        - name: "id"
+          type: "INTEGER PRIMARY KEY AUTOINCREMENT"
+        - name: "cache_key"
+          type: "TEXT NOT NULL"
+        - name: "response"
+          type: "TEXT NOT NULL"
+        - name: "metadata"
+          type: "TEXT NOT NULL"
+        - name: "timestamp"
+          type: "DATETIME DEFAULT CURRENT_TIMESTAMP"
+      indexes:
+        - name: "idx_cache_key"
+          columns: ["cache_key"]
+          unique: true
 
 # Configurações dos Modelos
 models:

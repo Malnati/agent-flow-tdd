@@ -446,6 +446,78 @@ def test_db_init_command(tmp_path):
         assert test_db_path.exists()
         manager.close()
 
+def test_model_cache(db_manager):
+    """Testa o cache de respostas do modelo no banco de dados."""
+    # Testa salvamento no cache
+    cache_key = "test_key"
+    response = "test response"
+    metadata = {"model": "test-model", "temperature": 0.7}
+    
+    db_manager.save_to_cache(cache_key, response, metadata)
+    
+    # Verifica se foi salvo
+    cursor = db_manager.conn.cursor()
+    cursor.execute("SELECT * FROM model_cache WHERE cache_key = ?", (cache_key,))
+    row = cursor.fetchone()
+    
+    assert row is not None
+    assert row[1] == cache_key  # cache_key
+    assert json.loads(row[2]) == response  # response
+    assert json.loads(row[3]) == metadata  # metadata
+    
+    # Testa recuperação do cache
+    cached = db_manager.get_cached_response(cache_key, ttl=3600)
+    assert cached is not None
+    assert cached[0] == response
+    assert cached[1] == metadata
+    
+    # Testa expiração do cache
+    cached = db_manager.get_cached_response(cache_key, ttl=0)
+    assert cached is None
+    
+    # Verifica se foi removido do banco
+    cursor.execute("SELECT COUNT(*) FROM model_cache WHERE cache_key = ?", (cache_key,))
+    count = cursor.fetchone()[0]
+    assert count == 0
+
+def test_model_cache_update(db_manager):
+    """Testa atualização de entrada no cache."""
+    cache_key = "test_key"
+    
+    # Primeira entrada
+    db_manager.save_to_cache(cache_key, "response1", {"version": 1})
+    
+    # Segunda entrada com mesma chave
+    db_manager.save_to_cache(cache_key, "response2", {"version": 2})
+    
+    # Verifica se só existe uma entrada
+    cursor = db_manager.conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM model_cache WHERE cache_key = ?", (cache_key,))
+    count = cursor.fetchone()[0]
+    assert count == 1
+    
+    # Verifica se é a entrada mais recente
+    cached = db_manager.get_cached_response(cache_key, ttl=3600)
+    assert cached is not None
+    assert cached[0] == "response2"
+    assert cached[1] == {"version": 2}
+
+def test_model_cache_unique_index(db_manager):
+    """Testa o índice único na chave de cache."""
+    cache_key = "test_key"
+    
+    # Primeira inserção
+    db_manager.save_to_cache(cache_key, "response1", {"version": 1})
+    
+    # Segunda inserção com mesma chave (deve substituir a primeira)
+    db_manager.save_to_cache(cache_key, "response2", {"version": 2})
+    
+    # Verifica se só existe uma entrada
+    cursor = db_manager.conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM model_cache")
+    total = cursor.fetchone()[0]
+    assert total == 1
+
 # Testes de Download do Modelo
 def test_download_model_command(test_env, capfd):
     """Testa o comando de download do modelo."""

@@ -5,7 +5,6 @@ from enum import Enum
 from typing import Any, Dict, Optional, Tuple, List
 import os
 import json
-import time
 import yaml
 import logging
 from pathlib import Path
@@ -18,6 +17,7 @@ from anthropic import Anthropic
 
 from src.core.kernel import get_env_var
 from src.core.logger import get_logger
+from src.core.db import DatabaseManager
 
 logger = get_logger(__name__)
 
@@ -78,8 +78,9 @@ class ModelManager:
         # Cache de respostas
         self.cache_enabled = get_env_var(env['cache_enabled'], str(self.config['cache']['enabled'])).lower() == 'true'
         self.cache_ttl = int(get_env_var(env['cache_ttl'], str(self.config['cache']['ttl'])))
-        self.cache_dir = get_env_var(env['cache_dir'], self.config['cache']['directory'])
-        self._setup_cache()
+        
+        # Inicializa banco de dados
+        self.db = DatabaseManager()
         
         # Inicializa clientes
         self._setup_clients()
@@ -197,22 +198,7 @@ class ModelManager:
         if not self.cache_enabled:
             return None
             
-        cache_file = os.path.join(self.cache_dir, f"{cache_key}.json")
-        if not os.path.exists(cache_file):
-            return None
-            
-        # Verifica TTL
-        if time.time() - os.path.getmtime(cache_file) > self.cache_ttl:
-            os.remove(cache_file)
-            return None
-            
-        try:
-            with open(cache_file, 'r') as f:
-                data = json.load(f)
-                return data['response'], data['metadata']
-        except Exception as e:
-            logger.error(f"Erro ao ler cache: {str(e)}")
-            return None
+        return self.db.get_cached_response(cache_key, self.cache_ttl)
             
     def _save_to_cache(self, cache_key: str, response: str, metadata: Dict[str, Any]) -> None:
         """
@@ -227,12 +213,7 @@ class ModelManager:
             return
             
         try:
-            cache_file = os.path.join(self.cache_dir, f"{cache_key}.json")
-            with open(cache_file, 'w') as f:
-                json.dump({
-                    'response': response,
-                    'metadata': metadata
-                }, f)
+            self.db.save_to_cache(cache_key, response, metadata)
         except Exception as e:
             logger.error(f"Erro ao salvar cache: {str(e)}")
             
