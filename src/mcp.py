@@ -38,8 +38,7 @@ logging.basicConfig(
     level=getattr(logging, CONFIG["logging"]["level"]),
     format=CONFIG["logging"]["format"],
     handlers=[
-        logging.StreamHandler(sys.stdout) if CONFIG["logging"]["handlers"]["stdout"] else None,
-        logging.FileHandler(CONFIG["logging"]["handlers"]["file"]["path"]) if CONFIG["logging"]["handlers"]["file"]["enabled"] else None
+        logging.FileHandler(CONFIG["logging"]["handlers"]["file"]["path"])
     ]
 )
 

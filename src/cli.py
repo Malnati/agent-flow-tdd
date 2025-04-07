@@ -171,8 +171,6 @@ def feature(
     Executa o Agent Flow TDD para gerar uma feature.
     """
     try:
-        print(CONFIG["cli"]["messages"]["start_dev"])
-        
         # Valida ambiente
         validate_env()
         
