@@ -1,47 +1,48 @@
 # Configurações dos Guardrails
-guardrails:
-  input:
-    system_prompt: |
-      Você é um assistente especializado em extrair informações estruturadas de prompts.
-      Analise o prompt fornecido e extraia APENAS as informações relevantes no formato YAML.
-      
-      NÃO forneça explicações adicionais ou texto introdutório. Retorne APENAS o YAML.
-      
-      Inclua os seguintes campos obrigatórios no formato YAML:
-      
-      name: Nome da feature/tarefa
-      description: Descrição detalhada
-      objectives:
-        - Objetivo 1
-        - Objetivo 2
-      requirements:
-        - Requisito 1
-        - Requisito 2
-      constraints:
-        - Restrição 1
-        - Restrição 2
-    requirements:
-      name: true
-      description: true
-      objectives: true
-      requirements: true
-      constraints: true
-  output:
-    completion_prompt: |
-      Você é um assistente especializado em validar respostas geradas.
-      Analise a resposta fornecida e verifique se ela atende aos requisitos.
-      Inclua os seguintes campos obrigatórios:
-      - name: Nome da feature/tarefa
-      - description: Descrição detalhada
-      - objectives: Lista de objetivos
-      - requirements: Lista de requisitos
-      - constraints: Lista de restrições
-    requirements:
-      name: true
-      description: true
-      objectives: true
-      requirements: true
-      constraints: true
+GuardRails:
+  Input:
+    identificar_titulo:
+      system_prompt: |
+        Você é um especialista em análise de sistemas. Dado um pedido sucinto como "cadastro de endereço", identifique o título mais apropriado para o sistema solicitado. Seja conciso e direto. Retorne apenas:
+        name: <título do sistema>
+
+      requirements: |
+        O título deve refletir o propósito principal do sistema ou funcionalidade descrita no pedido.
+
+    identificar_descricao:
+      system_prompt: |
+        Dado o pedido e o título já identificado, forneça uma descrição detalhada da funcionalidade solicitada. Considere o contexto de sistemas de informação. Retorne apenas:
+        description: <descrição detalhada>
+
+      requirements: |
+        A descrição deve incluir o escopo geral do sistema e seu objetivo principal, com clareza e sem ambiguidade.
+
+    identificar_campos:
+      system_prompt: |
+        Com base na funcionalidade descrita, identifique os principais campos de entrada necessários. Inclua nome do campo, tipo, formato esperado e se é obrigatório. Retorne no formato YAML:
+        fields:
+          - name: ...
+            type: ...
+            format: ...
+            required: true
+
+      requirements: |
+        Os campos devem ser compatíveis com o objetivo do sistema e descrever claramente as entradas esperadas.
+
+  Output:
+    gerar_prompt_tdd:
+      completion_prompt: |
+        Com base nas informações coletadas anteriormente (título, descrição e campos), gere um prompt no formato TDD. Inclua critérios de aceite claros, objetivos e verificáveis. Utilize o seguinte modelo:
+
+        Nome: <...>
+        Descrição: <...>
+        Critérios de Aceite:
+          - <critério 1>
+          - <critério 2>
+          - ...
+
+      requirements: |
+        O prompt gerado deve estar completo, coeso, e adequado para ser utilizado em um sistema de geração de código por TDD. 
 
 # Configurações de Prompts do Sistema
 prompts:
@@ -56,4 +57,4 @@ prompts:
     - Requisitos técnicos
     - Restrições do sistema
     
-    Mantenha o foco em qualidade e boas práticas de desenvolvimento. 
+    Mantenha o foco em qualidade e boas práticas de desenvolvimento.
