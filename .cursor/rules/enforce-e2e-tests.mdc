@@ -1,7 +1,7 @@
 ---
 description: 
 globs: 
-alwaysApply: true
+alwaysApply: false
 ---
 # Regra: *Execução Obrigatória de Testes E2E*: 
 1. Após qualquer alteração em scripts ou código fonte do projeto, é obrigatória a execução dos testes end-to-end (e2e) para garantir que as mudanças não quebraram a funcionalidade existente.
