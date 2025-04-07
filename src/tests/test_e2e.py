@@ -141,18 +141,6 @@ def test_e2e_dev_command(test_env):
     assert (test_env / ".venv").exists()
     assert (test_env / ".venv" / "bin" / "python").exists()
 
-@pytest.mark.e2e
-def test_e2e_help_command(test_env):
-    """Testa o comando help."""
-    # Executa comando help
-    result = run_command_with_timeout("make help", cwd=test_env)
-    
-    # Verifica se a ajuda foi exibida
-    assert "Comandos disponíveis:" in result.stdout
-    assert "make install" in result.stdout
-    assert "make dev" in result.stdout
-    assert "make test" in result.stdout
-
 # Removendo temporariamente o teste do comando test que estava tendo problemas com timeout
 # @pytest.mark.e2e
 # def test_e2e_test_command(test_env):

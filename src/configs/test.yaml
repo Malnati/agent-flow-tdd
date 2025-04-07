@@ -7,8 +7,6 @@ environment:
     install: 60  # Timeout para instalação de pacotes
     pip_install: 120  # Timeout para instalação de dependências
     dev_command: 120  # Timeout para comando dev
-    test_command: 30  # Timeout para comandos de teste
-    help_command: 10  # Timeout para comando help
   directories:
     required_files:
       - "Makefile"

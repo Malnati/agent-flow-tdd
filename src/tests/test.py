@@ -11,10 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from src.cli import app
 from src.core.agents import AgentOrchestrator, AgentResult, InputGuardrail, OutputGuardrail
 from src.core.db import DatabaseManager
-from src.core.models import ModelManager
 from src.core.logger import get_logger
 
 logger = get_logger(__name__)
