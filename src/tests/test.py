@@ -161,7 +161,242 @@ def setup_db_dir(tmp_path):
     if os.path.exists(os.environ["DB_PATH"]):
         os.remove(os.environ["DB_PATH"])
 
-# Testes do CLI
+"""
+Testes end-to-end para o Agent Flow TDD.
+Foca em testes que simulam o uso real da ferramenta através de prompt_tdd.py.
+"""
+
+import os
+import json
+import subprocess
+import tempfile
+from pathlib import Path
+import pytest
+import yaml
+
+from src.core.logger import get_logger
+
+# Logger
+logger = get_logger(__name__)
+
+# Carrega configurações de teste
+def load_test_config() -> dict:
+    """Carrega configurações de teste do arquivo YAML."""
+    config_path = Path(__file__).resolve().parent.parent / 'configs' / 'test.yaml'
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return yaml.safe_load(f)
+
+TEST_CONFIG = load_test_config()
+
+# Constantes para timeouts
+COMMAND_TIMEOUT = 30  # Timeout padrão para comandos
+TEST_TIMEOUT = 120  # Timeout para execução de testes
+
+@pytest.fixture(scope="module")
+def test_env(tmp_path_factory):
+    """Configura o ambiente de teste."""
+    # Cria diretório temporário
+    test_dir = tmp_path_factory.mktemp("test_env")
+    
+    try:
+        # Cria diretórios necessários
+        os.makedirs(test_dir / "logs", exist_ok=True)
+        os.makedirs(test_dir / "models", exist_ok=True)
+        
+        # Cria um arquivo de modelo simulado para testes
+        model_file = test_dir / "models" / "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+        with open(model_file, "w") as f:
+            f.write("Mock model content for testing")
+        
+        # Configura variáveis de ambiente para testes
+        env_vars = {
+            "MODEL_PATH": str(model_file),
+            "USE_LOCAL_MODEL": "true",
+            "CACHE_ENABLED": "false",
+            "LOG_LEVEL": "ERROR"
+        }
+        
+        # Retorna o ambiente de teste
+        yield {
+            "dir": test_dir,
+            "env_vars": env_vars,
+            "model_file": model_file
+        }
+        
+    except Exception as e:
+        logger.error(f"Erro ao configurar ambiente de teste: {str(e)}")
+        raise
+
+def run_prompt_tdd(command, env_vars=None, cwd=None, timeout=COMMAND_TIMEOUT):
+    """
+    Executa o comando prompt_tdd com os argumentos fornecidos.
+    
+    Args:
+        command: Comando completo a ser executado
+        env_vars: Variáveis de ambiente adicionais
+        cwd: Diretório de trabalho
+        timeout: Timeout para o comando
+        
+    Returns:
+        Tuple[int, str, str]: Código de saída, stdout, stderr
+    """
+    try:
+        # Prepara o ambiente
+        env = os.environ.copy()
+        if env_vars:
+            env.update(env_vars)
+        
+        # Executa o comando
+        process = subprocess.Popen(
+            command,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+            cwd=cwd,
+            text=True
+        )
+        
+        # Aguarda a conclusão com timeout
+        stdout, stderr = process.communicate(timeout=timeout)
+        return process.returncode, stdout, stderr
+        
+    except subprocess.TimeoutExpired:
+        logger.error(f"Timeout ao executar comando: {command}")
+        return -1, "", "Timeout"
+    except Exception as e:
+        logger.error(f"Erro ao executar comando: {str(e)}")
+        return -1, "", str(e)
+
+# Testes de funcionalidade principal
+
+def test_cli_mode_text_output(test_env):
+    """Testa o modo CLI com saída em texto."""
+    # Prepara o comando
+    command = f"python -m src.prompt_tdd cli 'Criar uma função de soma em Python' --format text"
+    
+    # Executa o comando
+    returncode, stdout, stderr = run_prompt_tdd(
+        command, 
+        env_vars=test_env["env_vars"],
+        timeout=TEST_TIMEOUT
+    )
+    
+    # Verifica o resultado
+    assert returncode == 0, f"Comando falhou: {stderr}"
+    assert "def soma" in stdout, "A saída não contém a função de soma esperada"
+    assert "return" in stdout, "A saída não contém a instrução return esperada"
+
+def test_cli_mode_json_output(test_env):
+    """Testa o modo CLI com saída em JSON."""
+    # Prepara o comando
+    command = f"python -m src.prompt_tdd cli 'Criar uma classe Pessoa em Python' --format json"
+    
+    # Executa o comando
+    returncode, stdout, stderr = run_prompt_tdd(
+        command, 
+        env_vars=test_env["env_vars"],
+        timeout=TEST_TIMEOUT
+    )
+    
+    # Verifica o resultado
+    assert returncode == 0, f"Comando falhou: {stderr}"
+    
+    # Tenta extrair o JSON da saída
+    try:
+        # Procura por um bloco JSON na saída
+        json_start = stdout.find('{')
+        json_end = stdout.rfind('}') + 1
+        if json_start >= 0 and json_end > json_start:
+            json_content = stdout[json_start:json_end]
+            data = json.loads(json_content)
+            assert "code" in data or "class" in data or "content" in data, "JSON não contém o código esperado"
+    except json.JSONDecodeError:
+        # Se não conseguir extrair JSON válido, verifica se pelo menos a saída contém a classe
+        assert "class Pessoa" in stdout, "A saída não contém a classe Pessoa esperada"
+
+def test_cli_mode_markdown_output(test_env):
+    """Testa o modo CLI com saída em markdown."""
+    # Prepara o comando
+    command = f"python -m src.prompt_tdd cli 'Explicar como usar funções em Python' --format markdown"
+    
+    # Executa o comando
+    returncode, stdout, stderr = run_prompt_tdd(
+        command, 
+        env_vars=test_env["env_vars"],
+        timeout=TEST_TIMEOUT
+    )
+    
+    # Verifica o resultado
+    assert returncode == 0, f"Comando falhou: {stderr}"
+    assert "#" in stdout, "A saída não contém cabeçalhos markdown"
+    assert "```python" in stdout, "A saída não contém blocos de código Python"
+    assert "def" in stdout, "A saída não contém exemplos de definição de função"
+
+def test_mcp_mode(test_env):
+    """Testa o modo MCP com um arquivo de entrada."""
+    # Cria um arquivo de entrada temporário
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.log', dir=test_env["dir"] / "logs", delete=False) as f:
+        f.write(json.dumps({
+            "content": "Criar uma função que calcula o fatorial",
+            "metadata": {
+                "format": "json",
+                "session_id": "test-session"
+            }
+        }))
+        pipe_file = f.name
+    
+    # Renomeia para mcp_pipe.log
+    mcp_pipe = test_env["dir"] / "logs" / "mcp_pipe.log"
+    os.rename(pipe_file, mcp_pipe)
+    
+    # Prepara o comando
+    command = f"python -m src.prompt_tdd mcp"
+    
+    # Executa o comando
+    returncode, stdout, stderr = run_prompt_tdd(
+        command, 
+        env_vars=test_env["env_vars"],
+        cwd=test_env["dir"],
+        timeout=TEST_TIMEOUT
+    )
+    
+    # Verifica o resultado
+    assert returncode == 0, f"Comando falhou: {stderr}"
+    
+    # Verifica se o arquivo de saída foi criado
+    output_file = test_env["dir"] / "logs" / "mcp_output.log"
+    assert output_file.exists(), "Arquivo de saída não foi criado"
+    
+    # Verifica o conteúdo do arquivo de saída
+    with open(output_file, 'r') as f:
+        output_data = json.load(f)
+        assert "content" in output_data, "Saída não contém campo 'content'"
+        assert "metadata" in output_data, "Saída não contém campo 'metadata'"
+        
+        # Verifica se o conteúdo contém a função de fatorial
+        content = output_data["content"]
+        if isinstance(content, str):
+            assert "def fatorial" in content, "A saída não contém a função de fatorial"
+        elif isinstance(content, dict) and "code" in content:
+            assert "def fatorial" in content["code"], "A saída não contém a função de fatorial"
+
+def test_app_mode(test_env):
+    """Testa o modo app."""
+    # Prepara o comando
+    command = f"python -m src.prompt_tdd app"
+    
+    # Executa o comando
+    returncode, stdout, stderr = run_prompt_tdd(
+        command, 
+        env_vars=test_env["env_vars"],
+        timeout=TEST_TIMEOUT
+    )
+    
+    # Verifica o resultado
+    assert returncode == 0, f"Comando falhou: {stderr}"
+    assert "sistema de login" in stdout.lower(), "A saída não contém o resultado esperado"
+
 def test_feature_command_success(mock_get_orchestrator, mock_validate_env, capsys, mock_env, mock_kernel_config):
     """Testa o comando feature com sucesso."""
     # Configurando o resultado esperado
