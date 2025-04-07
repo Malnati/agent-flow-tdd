@@ -7,7 +7,6 @@ import os
 import sqlite3
 import time
 from typing import Any, Dict, List, Optional, Tuple
-import yaml
 
 logger = logging.getLogger(__name__)
 

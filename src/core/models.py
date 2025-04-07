@@ -7,6 +7,7 @@ import os
 import json
 import yaml
 from pathlib import Path
+from dataclasses import dataclass
 
 import google.generativeai as genai
 from pydantic import BaseModel
@@ -18,6 +19,16 @@ from src.core.logger import get_logger
 from src.core.db import DatabaseManager
 
 logger = get_logger(__name__)
+
+@dataclass
+class AgentResult:
+    """Resultado da execução do agente."""
+    output: str
+    raw_responses: List[str]
+    created_at: str
+    id: Optional[str] = None
+    prompt: Optional[str] = None
+    updated_at: Optional[str] = None
 
 def load_config() -> Dict[str, Any]:
     """

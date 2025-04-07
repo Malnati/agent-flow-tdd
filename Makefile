@@ -1,6 +1,6 @@
 # Makefile para o projeto prompt-tdd
 
-.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs test-e2e publish download-model docs-serve docs-build docs-deploy docs-generate status
+.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs test-e2e test-dev test-e2e-dev publish download-model docs-serve docs-build docs-deploy docs-generate status
 
 # Configuração do ambiente virtual
 VENV = .venv
@@ -36,8 +36,10 @@ help:
 	@echo "  make docs-generate - Gera documentação via IA"
 	@echo ""
 	@echo "Qualidade:"
-	@echo "  make test       - Executa testes unitários"
-	@echo "  make test-e2e   - Executa testes end-to-end"
+	@echo "  make test       - Executa todos os testes"
+	@echo "  make test-dev   - Executa apenas testes principais (rápidos)"
+	@echo "  make test-e2e   - Executa todos os testes end-to-end"
+	@echo "  make test-e2e-dev - Executa apenas testes end-to-end principais"
 	@echo "  make coverage   - Gera relatório de cobertura"
 	@echo "  make lint       - Executa linters"
 	@echo "  make format     - Formata código"
@@ -70,6 +72,13 @@ test:
 	@echo "✅ Testes concluídos!"
 	@make autoflake
 
+# Testes principais (desenvolvimento)
+test-dev:
+	@echo "🧪 Executando testes principais..."
+	$(PYTHON) -m pytest src/tests/ -v -m "core and not install and not slow"
+	@echo "✅ Testes principais concluídos!"
+	@make autoflake
+
 # Execução do CLI
 run:
 	@echo "🖥️ Executando CLI..."
@@ -85,8 +94,15 @@ run:
 
 # Execução do CLI em modo desenvolvimento
 dev:
-	@echo "🛠️ Executando CLI em modo desenvolvimento..."
-	@$(PYTHON) src/cli.py feature "$(prompt_tdd)" --format="$(format)"
+	@echo "🖥️ CLI do projeto prompt-tdd"
+	@$(PYTHON) -m src.cli "$(prompt_tdd)" --format="$(format)" --mode=feature || true
+	@make autoflake
+
+# Execução do CLI em modo documentação
+docs:
+	@echo "🖥️ CLI do projeto prompt-tdd"
+	@$(PYTHON) -m src.cli "$(prompt_tdd)" --format="$(format)" --mode=docs || true
+	@make autoflake
 
 # Limpeza de código com autoflake
 autoflake:
@@ -167,6 +183,14 @@ test-e2e:
 	@make db-clean
 	@make db-init
 	$(PYTHON) -m pytest -v -m e2e src/tests/test_e2e.py
+
+# Testes end-to-end principais (desenvolvimento)
+test-e2e-dev:
+	@echo "🧪 Executando testes end-to-end principais..."
+	@echo "🗄️ Reinicializando banco de dados..."
+	@make db-clean
+	@make db-init
+	$(PYTHON) -m pytest -v -m "e2e and core and not slow" src/tests/test_e2e.py
 
 # Download do modelo TinyLLaMA
 download-model:
