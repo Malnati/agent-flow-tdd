@@ -261,59 +261,72 @@ class DatabaseManager:
         
         self.conn.commit()
         
-    def get_run_history(self, limit: Optional[int] = None, run_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    def get_run_history(self, limit: int = 10) -> List[Dict[str, Any]]:
         """
-        Obtém histórico de execuções.
+        Obtém o histórico de execuções.
         
         Args:
-            limit: Limite de registros
-            run_id: ID específico de execução
+            limit: Limite de registros a retornar
             
         Returns:
-            Lista de execuções
+            Lista de execuções com seus itens e resultados
         """
-        cursor = self.conn.cursor()
-        
-        # Monta SQL base
-        sql = """
-        SELECT r.*, i.content as raw_item, g.content as guardrail_results, rr.content as raw_response
-        FROM runs r
-        LEFT JOIN run_items i ON r.id = i.run_id
-        LEFT JOIN guardrail_results g ON r.id = g.run_id
-        LEFT JOIN raw_responses rr ON r.id = rr.run_id
-        """
-        
-        params = []
-        
-        # Adiciona filtro por ID
-        if run_id is not None:
-            sql += " WHERE r.id = ?"
-            params.append(run_id)
+        try:
+            cursor = self.conn.cursor()
             
-        # Adiciona ordenação e limite
-        sql += " ORDER BY r.created_at DESC"
-        if limit is not None:
-            sql += " LIMIT ?"
-            params.append(limit)
+            cursor.execute("""
+            SELECT 
+                r.id,
+                r.session_id,
+                r.prompt,
+                r.format,
+                r.created_at,
+                GROUP_CONCAT(DISTINCT i.content) as items,
+                GROUP_CONCAT(DISTINCT g.type || ':' || g.passed) as guardrails,
+                GROUP_CONCAT(DISTINCT rr.content) as responses
+            FROM runs r
+            LEFT JOIN run_items i ON i.run_id = r.id
+            LEFT JOIN guardrail_results g ON g.run_id = r.id
+            LEFT JOIN raw_responses rr ON rr.run_id = r.id
+            GROUP BY r.id
+            ORDER BY r.created_at DESC
+            LIMIT ?
+            """, (limit,))
             
-        cursor.execute(sql, params)
-        
-        # Processa resultados
-        results = []
-        for row in cursor.fetchall():
-            result = dict(row)
-            
-            # Converte campos JSON
-            if result["raw_item"]:
-                result["raw_item"] = json.loads(result["raw_item"])
-            if result["guardrail_results"]:
-                result["guardrail_results"] = json.loads(result["guardrail_results"])
-            if result["raw_response"]:
-                result["raw_response"] = json.loads(result["raw_response"])
+            runs = []
+            for row in cursor.fetchall():
+                run = dict(row)
                 
-            results.append(result)
+                # Processa itens
+                items = []
+                if run["items"]:
+                    items = [{"content": item} for item in run["items"].split(",")]
+                run["items"] = items
+                
+                # Processa guardrails
+                guardrails = []
+                if run["guardrails"]:
+                    for g in run["guardrails"].split(","):
+                        type_, passed = g.split(":")
+                        guardrails.append({
+                            "type": type_,
+                            "passed": passed == "1"
+                        })
+                run["guardrails"] = guardrails
+                
+                # Processa respostas
+                responses = []
+                if run["responses"]:
+                    responses = [json.loads(r) for r in run["responses"].split(",")]
+                run["responses"] = responses
+                
+                runs.append(run)
+                
+            return runs
             
-        return results
+        except sqlite3.Error as e:
+            logger.error(f"FALHA - get_run_history | Erro: {str(e)}")
+            raise
 
     def get_runs(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """

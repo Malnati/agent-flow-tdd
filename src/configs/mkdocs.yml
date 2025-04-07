@@ -1,7 +1,7 @@
 site_name: Agent Flow TDD
 site_description: Framework para desenvolvimento de agentes de IA usando TDD
 site_author: Agent Flow Team
-repo_url: https://github.com/yourusername/agent-flow-tdd
+repo_url: https://github.com/Malnati/agent-flow-tdd
 
 theme:
   name: material
@@ -50,61 +50,61 @@ docs_dir: ../../docs
 site_dir: ../../site
 
 nav:
-  - Home: index.md
-  - Visão Geral: overview/index.md
-  - Instalação: installation/index.md
-  - Uso: usage/index.md
-  - Desenvolvimento: development/index.md
-  - Testes: testing/index.md
-  - Banco de Dados: database/index.md
-  - Logs: logs/index.md
-  - Deploy: deployment/index.md
-  - Troubleshooting: troubleshooting/index.md
+  - Home: README.md
+  - Visão Geral: overview/README.md
+  - Instalação: installation/README.md
+  - Uso: usage/README.md
+  - Desenvolvimento: development/README.md
+  - Testes: testing/README.md
+  - Banco de Dados: database/README.md
+  - Logs: logs/README.md
+  - Deploy: deployment/README.md
+  - Troubleshooting: troubleshooting/README.md
   - Visão Geral:
-    - overview/index.md
+    - overview/README.md
     - Objetivo: overview/objective.md
     - Arquitetura: overview/architecture.md
     - Tecnologias: overview/technologies.md
   - Instalação:
-    - installation/index.md
+    - installation/README.md
     - Dependências: installation/dependencies.md
     - Ambiente Virtual: installation/virtualenv.md
     - Variáveis: installation/environment.md
   - Uso:
-    - usage/index.md
+    - usage/README.md
     - Interface CLI: usage/cli.md
     - Modo MCP: usage/mcp.md
     - Exemplos: usage/examples.md
   - Desenvolvimento:
-    - development/index.md
+    - development/README.md
     - Organização: development/code-organization.md
     - Execução Local: development/local-execution.md
     - Docker: development/docker.md
     - Makefile: development/makefile.md
   - Testes:
-    - testing/index.md
+    - testing/README.md
     - Testes Unitários: testing/unit-tests.md
     - Cobertura: testing/coverage.md
     - Testes E2E: testing/e2e-tests.md
   - Banco de Dados:
-    - database/index.md
+    - database/README.md
     - Estrutura: database/structure.md
     - Scripts SQL: database/sql-scripts.md
     - Gerenciador: database/manager.md
     - Makefile: database/makefile.md
   - Logs:
-    - logs/index.md
+    - logs/README.md
     - Formato: logs/format.md
     - CLI: logs/cli.md
     - Níveis: logs/levels.md
     - Armazenamento: logs/storage.md
   - Deploy:
-    - deployment/index.md
+    - deployment/README.md
     - Docker: deployment/docker.md
     - Produção: deployment/production.md
     - GitHub Pages: deployment/github-pages.md
   - Troubleshooting:
-    - troubleshooting/index.md
+    - troubleshooting/README.md
     - Erros Comuns: troubleshooting/common-errors.md
     - Fallback: troubleshooting/fallback.md
     - Logs de Execução: troubleshooting/execution-logs.md 

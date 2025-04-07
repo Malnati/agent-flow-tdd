@@ -1,1 +1,0 @@
-{"name": "Gerar Documentação", "description": "Gerar documentação para a seção 'database'", "objectives": ["Implementar Gerar documentação para a seção 'database'"], "requirements": ["Definir requisitos específicos"], "constraints": ["Definir restrições do sistema"]}

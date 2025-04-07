@@ -1,1 +1,0 @@
-{"name": "Gerar Documentação", "description": "Gerar documentação para a seção 'installation'", "objectives": ["Implementar Gerar documentação para a seção 'installation'"], "requirements": ["Definir requisitos específicos"], "constraints": ["Definir restrições do sistema"]}
