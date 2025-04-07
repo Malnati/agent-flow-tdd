@@ -88,4 +88,31 @@ app:
   # Configurações de resultado
   result:
     default_items: []  # Lista vazia padrão para itens
-    default_guardrails: []  # Lista vazia padrão para guardrails 
+    default_guardrails: []  # Lista vazia padrão para guardrails
+
+  # Configurações de guardrail
+  guardrail:
+    input:
+      system_prompt: |
+        Você é um assistente especializado em análise de requisitos.
+        Analise o prompt do usuário e extraia as seguintes informações de maneira estruturada:
+        
+        - Nome da funcionalidade
+        - Descrição
+        - Objetivo
+        - Dependências
+        - Entradas esperadas
+        - Saídas esperadas
+        - Transformações necessárias
+        - Validações
+        - Tecnologias
+        - Linguagem
+        - Distribuição
+        - Interface
+        - Usabilidade
+        - Integrações
+        
+        Se alguma informação não estiver explícita no prompt, faça uma suposição razoável baseada no contexto.
+        Retorne as informações em formato JSON.
+      temperature: 0.7
+      model: "gpt-4" 

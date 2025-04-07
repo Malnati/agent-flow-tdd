@@ -199,17 +199,15 @@ class ModelManager:
         if not os.path.exists(cache_file):
             return None
             
+        # Verifica TTL
+        if time.time() - os.path.getmtime(cache_file) > self.cache_ttl:
+            os.remove(cache_file)
+            return None
+            
         try:
             with open(cache_file, 'r') as f:
-                cache_data = json.load(f)
-                
-            # Verifica TTL
-            if time.time() - cache_data['timestamp'] > self.cache_ttl:
-                os.remove(cache_file)
-                return None
-                
-            return cache_data['response'], cache_data['metadata']
-            
+                data = json.load(f)
+                return data['response'], data['metadata']
         except Exception as e:
             logger.error(f"Erro ao ler cache: {str(e)}")
             return None
@@ -227,19 +225,15 @@ class ModelManager:
             return
             
         try:
-            cache_data = {
-                'response': response,
-                'metadata': metadata,
-                'timestamp': time.time()
-            }
-            
             cache_file = os.path.join(self.cache_dir, f"{cache_key}.json")
             with open(cache_file, 'w') as f:
-                json.dump(cache_data, f)
-                
+                json.dump({
+                    'response': response,
+                    'metadata': metadata
+                }, f)
         except Exception as e:
             logger.error(f"Erro ao salvar cache: {str(e)}")
-
+            
     def _get_provider(self, model: str) -> str:
         """
         Identifica o provedor com base no nome do modelo.
@@ -360,7 +354,7 @@ class ModelManager:
                     full_prompt,
                     max_tokens=self.max_tokens or provider_config.get('default_max_tokens', 256),
                     temperature=self.temperature,
-                    stop=["</s>"]
+                    stop=[""]
                 )
                 
                 return response["choices"][0]["text"].strip(), {
@@ -408,7 +402,7 @@ class ModelManager:
         **kwargs
     ) -> Tuple[str, Dict[str, Any]]:
         """
-        Gera resposta para um prompt.
+        Gera uma resposta usando o modelo configurado.
         
         Args:
             prompt: Prompt para o modelo
@@ -495,3 +489,209 @@ class ModelManager:
             available_models['tinyllama'] = CONFIG['providers']['tinyllama']['prefix_patterns']
             
         return available_models 
+
+    def generate_response(self, system_prompt: str, user_prompt: str) -> str:
+        """
+        Gera uma resposta usando o modelo configurado.
+        
+        Args:
+            system_prompt: Prompt de sistema
+            user_prompt: Prompt do usuário
+            
+        Returns:
+            String com a resposta gerada
+        """
+        try:
+            # Verifica cache
+            cache_key = self._get_cache_key(user_prompt, system_prompt)
+            cached = self._get_cached_response(cache_key)
+            if cached:
+                return cached[0]
+                
+            # Tenta gerar com modelo principal
+            response = self._generate_with_model(system_prompt, user_prompt)
+            
+            # Se falhou e fallback está habilitado, tenta modelo de elevação
+            if response is None and self.fallback_enabled:
+                logger.warning(f"Fallback para modelo {self.elevation_model}")
+                temp_model = self.model_name
+                self.model_name = self.elevation_model
+                response = self._generate_with_model(system_prompt, user_prompt)
+                self.model_name = temp_model
+                
+            # Se ainda é None, retorna string vazia
+            if response is None:
+                logger.error("Falha ao gerar resposta com todos os modelos")
+                return ""
+                
+            return response
+            
+        except Exception as e:
+            logger.error(f"Erro ao gerar resposta: {str(e)}")
+            return ""
+            
+    def _generate_with_model(self, system_prompt: str, user_prompt: str) -> Optional[str]:
+        """
+        Gera resposta com um modelo específico.
+        
+        Args:
+            system_prompt: Prompt de sistema
+            user_prompt: Prompt do usuário
+            
+        Returns:
+            String com resposta ou None se falhar
+        """
+        try:
+            # Identifica o provedor baseado nos padrões de prefixo
+            provider = None
+            for prov, config in CONFIG['providers'].items():
+                for pattern in config['prefix_patterns']:
+                    if self.model_name.startswith(pattern):
+                        provider = prov
+                        break
+                if provider:
+                    break
+                    
+            if not provider:
+                logger.error(f"Provedor não identificado para modelo {self.model_name}")
+                return None
+                
+            if provider == 'openai':
+                response = self.openai_client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens
+                )
+                return response.choices[0].message.content
+                
+            elif provider == 'openrouter' and self.openrouter_client:
+                response = self.openrouter_client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens
+                )
+                return response.choices[0].message.content
+                
+            elif provider == 'gemini' and self.gemini_model:
+                response = self.gemini_model.generate_content(
+                    f"{system_prompt}\n\n{user_prompt}",
+                    generation_config={
+                        "temperature": self.temperature,
+                        "max_output_tokens": self.max_tokens
+                    }
+                )
+                return response.text
+                
+            elif provider == 'tinyllama' and self.tinyllama_model:
+                response = self.tinyllama_model.create_chat_completion(
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens
+                )
+                return response['choices'][0]['message']['content']
+                
+            logger.error(f"Cliente não configurado para provedor {provider}")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Erro ao gerar com {self.model_name}: {str(e)}")
+            return None
+
+    def _generate_openai(self, prompt: str, system: Optional[str] = None, **kwargs) -> Tuple[str, Dict[str, Any]]:
+        """Gera resposta usando OpenAI."""
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+        
+        response = self.openai_client.chat.completions.create(
+            model=self.model_name,
+            messages=messages,
+            temperature=kwargs.get('temperature', self.temperature),
+            max_tokens=kwargs.get('max_tokens', self.max_tokens)
+        )
+        
+        return response.choices[0].message.content, {
+            "model": response.model,
+            "usage": response.usage.model_dump()
+        }
+
+    def _generate_gemini(self, prompt: str, system: Optional[str] = None, **kwargs) -> Tuple[str, Dict[str, Any]]:
+        """Gera resposta usando Gemini."""
+        if not self.gemini_model:
+            raise ValueError("Gemini não configurado")
+            
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+        
+        response = self.gemini_model.generate_content(
+            messages,
+            generation_config={
+                "temperature": kwargs.get('temperature', self.temperature),
+                "max_output_tokens": kwargs.get('max_tokens', self.max_tokens)
+            }
+        )
+        
+        return response.text, {
+            "model": self.model_name,
+            "usage": {}
+        }
+
+    def _generate_anthropic(self, prompt: str, system: Optional[str] = None, **kwargs) -> Tuple[str, Dict[str, Any]]:
+        """Gera resposta usando Anthropic."""
+        if not self.anthropic_client:
+            raise ValueError("Anthropic não configurado")
+            
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+        
+        response = self.anthropic_client.messages.create(
+            model=self.model_name,
+            messages=messages,
+            temperature=kwargs.get('temperature', self.temperature),
+            max_tokens=kwargs.get('max_tokens', self.max_tokens)
+        )
+        
+        return response.content[0].text, {
+            "model": response.model,
+            "usage": {}
+        }
+
+    def _generate_tinyllama(self, prompt: str, system: Optional[str] = None, **kwargs) -> Tuple[str, Dict[str, Any]]:
+        """Gera resposta usando TinyLLaMA."""
+        if not self.tinyllama_model:
+            raise ValueError("TinyLLaMA não configurado")
+            
+        # Formata o prompt
+        full_prompt = ""
+        if system:
+            full_prompt += f"<|system|>\n{system}\n"
+        full_prompt += f"<|user|>\n{prompt}\n<|assistant|>\n"
+        
+        # Gera a resposta
+        response = self.tinyllama_model(
+            full_prompt,
+            max_tokens=kwargs.get('max_tokens', self.max_tokens),
+            temperature=kwargs.get('temperature', self.temperature),
+            stop=[""]
+        )
+        
+        return response["choices"][0]["text"], {
+            "model": "tinyllama",
+            "usage": {}
+        }

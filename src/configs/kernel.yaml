@@ -154,6 +154,19 @@ models:
     directory: "cache"
   fallback:
     enabled: true
+  env_vars:
+    default_model: "DEFAULT_MODEL"
+    elevation_model: "ELEVATION_MODEL"
+    max_retries: "MAX_RETRIES"
+    model_timeout: "MODEL_TIMEOUT"
+    fallback_enabled: "FALLBACK_ENABLED"
+    cache_enabled: "CACHE_ENABLED"
+    cache_ttl: "CACHE_TTL"
+    cache_dir: "CACHE_DIR"
+    openai_key: "OPENAI_API_KEY"
+    openrouter_key: "OPENROUTER_KEY"
+    gemini_key: "GEMINI_KEY"
+    anthropic_key: "ANTHROPIC_KEY"
   providers:
     openai:
       base_url: "https://api.openai.com/v1"
@@ -200,27 +213,10 @@ models:
         - "claude-2.1"
     tinyllama:
       model_path: "models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
-      prefix_patterns:
-        - "tinyllama-"
-      default_max_tokens: 256
-      default_model: "tinyllama-1.1b"
-      n_ctx: 256
+      n_ctx: 2048
       n_threads: 4
       models:
         - "tinyllama-1.1b"
-  env_vars:
-    default_model: "DEFAULT_MODEL"
-    elevation_model: "ELEVATION_MODEL"
-    max_retries: "MAX_RETRIES"
-    model_timeout: "MODEL_TIMEOUT"
-    fallback_enabled: "FALLBACK_ENABLED"
-    cache_enabled: "CACHE_ENABLED"
-    cache_ttl: "CACHE_TTL"
-    cache_dir: "CACHE_DIR"
-    openai_key: "OPENAI_API_KEY"
-    openrouter_key: "OPENROUTER_KEY"
-    gemini_key: "GEMINI_KEY"
-    anthropic_key: "ANTHROPIC_KEY"
 
 # Configurações de variáveis de ambiente por contexto
 
@@ -330,4 +326,109 @@ sensitive_data_patterns:
   - pattern: 'sk-[a-zA-Z0-9]+'
     replacement: '***OPENAI_API_KEY***'
   - pattern: 'pypi-[a-zA-Z0-9]{20,}'
-    replacement: '***PYPI_TOKEN***' 
+    replacement: '***PYPI_TOKEN***'
+
+# Configurações de variáveis de ambiente
+env_vars:
+  default_model: "DEFAULT_MODEL"
+  elevation_model: "ELEVATION_MODEL"
+  max_retries: "MAX_RETRIES"
+  model_timeout: "MODEL_TIMEOUT"
+  fallback_enabled: "FALLBACK_ENABLED"
+  cache_enabled: "CACHE_ENABLED"
+  cache_ttl: "CACHE_TTL"
+  cache_dir: "CACHE_DIR"
+  openai_key: "OPENAI_API_KEY"
+  openrouter_key: "OPENROUTER_KEY"
+  gemini_key: "GEMINI_KEY"
+  anthropic_key: "ANTHROPIC_KEY"
+
+# Configurações dos Guardrails
+guardrails:
+  # Guardrail de Entrada
+  input:
+    required_fields:
+      - name: "name"
+        description: "Nome da funcionalidade"
+        type: "string"
+        required: true
+      - name: "description"
+        description: "Descrição detalhada da funcionalidade"
+        type: "string" 
+        required: true
+      - name: "objectives"
+        description: "Objetivos principais da funcionalidade"
+        type: "array"
+        required: true
+      - name: "requirements"
+        description: "Requisitos técnicos e funcionais"
+        type: "array"
+        required: false
+      - name: "constraints"
+        description: "Limitações e restrições"
+        type: "array"
+        required: false
+    validation:
+      min_length:
+        name: 3
+        description: 10
+      max_length:
+        name: 100
+        description: 1000
+      array_limits:
+        objectives:
+          min: 1
+          max: 10
+        requirements:
+          min: 0
+          max: 20
+        constraints:
+          min: 0
+          max: 10
+    prompt_template: |
+      Por favor, forneça as seguintes informações sobre a funcionalidade:
+      
+      1. Nome: {name}
+      2. Descrição: {description}
+      3. Objetivos: {objectives}
+      4. Requisitos (opcional): {requirements}
+      5. Restrições (opcional): {constraints}
+
+  # Guardrail de Saída
+  output:
+    required_fields:
+      - name: "content"
+        description: "Conteúdo da resposta"
+        type: "string"
+        required: true
+      - name: "metadata"
+        description: "Metadados da resposta"
+        type: "object"
+        required: true
+    validation:
+      min_length:
+        content: 10
+      max_length:
+        content: 10000
+      metadata_required_fields:
+        - type
+        - options
+    metadata_options:
+      type:
+        - feature
+        - bug
+        - enhancement
+        - documentation
+      options:
+        format:
+          - json
+          - markdown
+          - text
+        model:
+          - gpt-4
+          - gpt-3.5-turbo
+          - gemini-pro
+        temperature:
+          min: 0.0
+          max: 1.0
+          default: 0.7 
