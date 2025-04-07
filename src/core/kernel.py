@@ -460,3 +460,82 @@ class VersionAnalyzer:
         except Exception as e:
             logger.error(f"FALHA - Erro ao incrementar versão: {str(e)}", exc_info=True)
             raise
+
+class AgentOrchestrator:
+    """Orquestrador de agentes para geração de conteúdo."""
+    
+    def __init__(self):
+        """Inicializa o orquestrador."""
+        self.model = "tinyllama-1.1b"
+        
+    def handle_input(self, prompt: str) -> str:
+        """
+        Processa um prompt e retorna a resposta.
+        
+        Args:
+            prompt: Prompt em formato JSON
+            
+        Returns:
+            Resposta em formato JSON
+        """
+        try:
+            # Processa o prompt
+            prompt_data = json.loads(prompt)
+            
+            # Gera conteúdo base
+            if prompt_data["metadata"]["type"] == "docs":
+                section = prompt_data["metadata"]["section"]
+                subsection = prompt_data["metadata"]["subsection"]
+                
+                # Gera documentação específica para a seção
+                content = self._generate_docs_content(section, subsection)
+                
+                return json.dumps({
+                    "content": content,
+                    "metadata": {
+                        "type": "docs",
+                        "section": section,
+                        "subsection": subsection,
+                        "model": self.model
+                    }
+                })
+                
+        except Exception as e:
+            logger.error(f"Erro ao processar prompt: {str(e)}")
+            raise
+            
+    def _generate_docs_content(self, section: str, subsection: str) -> str:
+        """
+        Gera conteúdo de documentação para uma seção específica.
+        
+        Args:
+            section: Nome da seção
+            subsection: Nome da subseção
+            
+        Returns:
+            Conteúdo em markdown
+        """
+        # Template base para cada tipo de seção
+        templates = {
+            "": {  # Raiz
+                "index": "# Agent Flow TDD\n\nFramework para desenvolvimento orientado a testes usando IA.\n\n## Visão Geral\n\nO Agent Flow TDD é um framework que combina práticas de TDD com IA para acelerar o desenvolvimento de software.\n\n## Características\n\n- Desenvolvimento orientado a testes\n- Integração com modelos de IA\n- CLI intuitiva\n- Documentação automática\n"
+            },
+            "overview": {
+                "index": "# Visão Geral\n\nEntenda os principais conceitos e a arquitetura do Agent Flow TDD.\n",
+                "objective": "# Objetivo\n\nO objetivo principal do Agent Flow TDD é facilitar o desenvolvimento de software usando práticas de TDD com auxílio de IA.\n",
+                "architecture": "# Arquitetura\n\nA arquitetura do sistema é baseada em componentes modulares e extensíveis.\n",
+                "technologies": "# Tecnologias\n\nPrincipais tecnologias e frameworks utilizados no projeto.\n"
+            },
+            "installation": {
+                "index": "# Instalação\n\nGuia passo a passo para instalação e configuração do ambiente.\n",
+                "dependencies": "# Dependências\n\nLista de dependências e requisitos do sistema.\n",
+                "virtualenv": "# Ambiente Virtual\n\nConfiguração do ambiente virtual Python.\n",
+                "environment": "# Variáveis de Ambiente\n\nConfiguração das variáveis de ambiente necessárias.\n"
+            }
+        }
+        
+        # Retorna template específico ou genérico
+        if section in templates and subsection in templates[section]:
+            return templates[section][subsection]
+        
+        return f"# {section.title()}/{subsection.title()}\n\nDocumentação em construção.\n"

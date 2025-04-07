@@ -197,22 +197,19 @@ download-model:
 
 # Comandos de documentação
 docs-serve:
-	@echo "🚀 Iniciando servidor de documentação..."
-	@$(PYTHON) -m mkdocs serve -f src/configs/mkdocs.yml
+	@echo "📚 Iniciando servidor de documentação..."
+	@cd src/configs && mkdocs serve
 
 docs-build:
 	@echo "📚 Gerando documentação estática..."
-	@$(PYTHON) -m mkdocs build -f src/configs/mkdocs.yml
-	@echo "✅ Documentação gerada em site/"
+	@cd src/configs && mkdocs build
 
 docs-deploy:
-	@echo "🚀 Fazendo deploy da documentação..."
-	@$(PYTHON) -m mkdocs gh-deploy --force -f src/configs/mkdocs.yml
-	@echo "✅ Documentação publicada!"
+	@echo "📚 Publicando documentação no GitHub Pages..."
+	@cd src/configs && mkdocs gh-deploy
 
 docs-generate:
 	@echo "🤖 Gerando documentação via IA..."
 	@mkdir -p docs
-	@echo '{"content": "Gerar documentação", "metadata": {"type": "docs", "options": {"model": "tinyllama-1.1b", "format": "markdown"}}}' > logs/mcp_pipe.log
-	@$(PYTHON) src/scripts/generate_docs.py
+	@python src/scripts/generate_docs.py
 	@echo "✅ Documentação gerada!" 

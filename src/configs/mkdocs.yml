@@ -1,1 +1,110 @@
- 
+site_name: Agent Flow TDD
+site_description: Framework para desenvolvimento de agentes de IA usando TDD
+site_author: Agent Flow Team
+repo_url: https://github.com/yourusername/agent-flow-tdd
+
+theme:
+  name: material
+  language: pt-BR
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.tracking
+    - navigation.indexes
+    - navigation.instant
+    - navigation.footer
+    - toc.follow
+    - toc.integrate
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: true
+            show_root_heading: true
+  - gen-files
+  - literate-nav
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - footnotes
+  - meta
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+
+docs_dir: ../../docs
+site_dir: ../../site
+
+nav:
+  - Home: index.md
+  - Visão Geral: overview/index.md
+  - Instalação: installation/index.md
+  - Uso: usage/index.md
+  - Desenvolvimento: development/index.md
+  - Testes: testing/index.md
+  - Banco de Dados: database/index.md
+  - Logs: logs/index.md
+  - Deploy: deployment/index.md
+  - Troubleshooting: troubleshooting/index.md
+  - Visão Geral:
+    - overview/index.md
+    - Objetivo: overview/objective.md
+    - Arquitetura: overview/architecture.md
+    - Tecnologias: overview/technologies.md
+  - Instalação:
+    - installation/index.md
+    - Dependências: installation/dependencies.md
+    - Ambiente Virtual: installation/virtualenv.md
+    - Variáveis: installation/environment.md
+  - Uso:
+    - usage/index.md
+    - Interface CLI: usage/cli.md
+    - Modo MCP: usage/mcp.md
+    - Exemplos: usage/examples.md
+  - Desenvolvimento:
+    - development/index.md
+    - Organização: development/code-organization.md
+    - Execução Local: development/local-execution.md
+    - Docker: development/docker.md
+    - Makefile: development/makefile.md
+  - Testes:
+    - testing/index.md
+    - Testes Unitários: testing/unit-tests.md
+    - Cobertura: testing/coverage.md
+    - Testes E2E: testing/e2e-tests.md
+  - Banco de Dados:
+    - database/index.md
+    - Estrutura: database/structure.md
+    - Scripts SQL: database/sql-scripts.md
+    - Gerenciador: database/manager.md
+    - Makefile: database/makefile.md
+  - Logs:
+    - logs/index.md
+    - Formato: logs/format.md
+    - CLI: logs/cli.md
+    - Níveis: logs/levels.md
+    - Armazenamento: logs/storage.md
+  - Deploy:
+    - deployment/index.md
+    - Docker: deployment/docker.md
+    - Produção: deployment/production.md
+    - GitHub Pages: deployment/github-pages.md
+  - Troubleshooting:
+    - troubleshooting/index.md
+    - Erros Comuns: troubleshooting/common-errors.md
+    - Fallback: troubleshooting/fallback.md
+    - Logs de Execução: troubleshooting/execution-logs.md 
