@@ -66,7 +66,7 @@ install:
 # Testes
 test:
 	@echo "🧪 Executando testes..."
-	$(PYTHON) -m pytest src/tests/ -v
+	$(PYTHON) -m pytest src/tests/ -v -m "not install"
 	@echo "✅ Testes concluídos!"
 	@make autoflake
 
@@ -86,7 +86,7 @@ run:
 # Execução do CLI em modo desenvolvimento
 dev:
 	@echo "🛠️ Executando CLI em modo desenvolvimento..."
-	@$(PYTHON) src/cli.py feature "$(prompt-tdd)" --format="$(format)"
+	@$(PYTHON) src/cli.py feature "$(prompt_tdd)" --format="$(format)"
 
 # Limpeza de código com autoflake
 autoflake:

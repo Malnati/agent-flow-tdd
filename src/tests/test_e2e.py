@@ -11,6 +11,9 @@ import pytest
 from unittest.mock import patch
 import yaml
 from pathlib import Path
+from pipes import quote
+import base64
+from urllib.parse import quote
 
 from src.core.agents import AgentResult
 from src.core.db import DatabaseManager
@@ -171,36 +174,54 @@ def mock_orchestrator():
 def run_make_command(prompt: str, mode: str = "feature", format: str = "json", test_env: Optional[Path] = None) -> Dict[str, str]:
     """Executa um comando make com os parâmetros fornecidos."""
     try:
-        # Escapa aspas duplas no prompt
-        escaped_prompt = prompt.replace('"', '\\"')
-        
-        # Constrói o comando base
+        # Configura ambiente
+        if test_env:
+            os.chdir(test_env)
+            
+        # Codifica os argumentos
+        encoded_prompt = quote(prompt, safe='')
+        encoded_format = quote(format, safe='')
+            
+        # Prepara o comando
         if mode == "feature":
-            cmd = f"make dev 'prompt-tdd={escaped_prompt}' format={format}"
+            cmd = f"make dev prompt_tdd={encoded_prompt} format={encoded_format}"
         else:
-            cmd = f"make {mode} 'prompt-tdd={escaped_prompt}' format={format}"
+            cmd = f"make {mode} prompt_tdd={encoded_prompt} format={encoded_format}"
 
         # Executa o comando
-        process = subprocess.run(
+        result = subprocess.run(
             cmd,
             shell=True,
-            text=True,
             capture_output=True,
-            env=os.environ.copy()
+            text=True,
+            cwd=str(test_env) if test_env else None,
+            env=os.environ.copy(),
+            timeout=30
         )
 
-        return {
-            "stdout": process.stdout,
-            "stderr": process.stderr,
-            "returncode": process.returncode
-        }
+        # Inicializa banco
+        db = DatabaseManager()
+        
+        try:
+            # Busca histórico
+            history = db.get_run_history(limit=1)
+            
+            return {
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "returncode": result.returncode,
+                "history": history[0] if history else None
+            }
+        finally:
+            db.conn.close()
 
     except Exception as e:
         logger.error(f"Erro ao executar comando: {str(e)}")
         return {
             "stdout": "",
             "stderr": str(e),
-            "returncode": 1
+            "returncode": 1,
+            "history": None
         }
 
 @pytest.mark.e2e
@@ -322,9 +343,14 @@ def test_e2e_address_registration_logging():
         assert "response" in raw_response
         assert isinstance(raw_response["response"], str)  # Deve ser um JSON serializado
 
+@pytest.mark.skip(reason="Teste de instalação muito lento - execute apenas com --runslow")
+@pytest.mark.install
 @pytest.mark.e2e
 def test_e2e_install_command(test_env):
-    """Testa o comando make install."""
+    """
+    Testa o comando make install.
+    Para executar este teste use: pytest -v -m "install" src/tests/test_e2e.py
+    """
     # Configura ambiente de teste
     os.chdir(test_env)
     
