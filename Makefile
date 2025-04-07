@@ -86,7 +86,7 @@ run:
 # Execução do CLI em modo desenvolvimento
 dev:
 	@echo "🛠️ Executando CLI em modo desenvolvimento..."
-	@$(PYTHON) src/cli.py dev --prompt-tdd="$(prompt-tdd)" --format="$(format)"
+	@$(PYTHON) src/cli.py feature "$(prompt-tdd)" --format="$(format)"
 
 # Limpeza de código com autoflake
 autoflake:

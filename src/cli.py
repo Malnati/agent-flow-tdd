@@ -40,6 +40,7 @@ def get_orchestrator() -> AgentOrchestrator:
 @click.group()
 def cli():
     """CLI do projeto prompt-tdd."""
+    console.print("🖥️ CLI do projeto prompt-tdd")
     pass
 
 @cli.command()
@@ -68,12 +69,12 @@ def feature(prompt: str, format: str):
         )
         
         # Imprime resultado
-        print(result.output)
+        console.print(result.output)
         sys.exit(0)
         
     except Exception as e:
         logger.error(f"Erro ao gerar feature: {str(e)}")
-        print(f"❌ Erro: {str(e)}")
+        console.print(f"❌ Erro: {str(e)}", style="red")
         sys.exit(1)
 
 @cli.command()
@@ -92,10 +93,10 @@ def dev(prompt_tdd: str, format: str):
         
         # Executa
         result = orchestrator.execute(prompt_tdd, format)
-        print(result.output)
+        console.print(result.output)
         
     except Exception as e:
-        print(f"❌ Erro: {str(e)}", file=sys.stderr)
+        console.print(f"❌ Erro: {str(e)}", style="red", file=sys.stderr)
         sys.exit(1)
 
 @cli.command()
@@ -104,10 +105,10 @@ def status():
     try:
         # Valida ambiente
         validate_env("status")
-        print("✅ Ambiente configurado corretamente")
+        console.print("✅ Ambiente configurado corretamente", style="green")
         
     except Exception as e:
-        print(f"❌ Erro: {str(e)}", file=sys.stderr)
+        console.print(f"❌ Erro: {str(e)}", style="red", file=sys.stderr)
         sys.exit(1)
 
 def app(args=None):
