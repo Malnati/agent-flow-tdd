@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Arquivo unificado do sistema prompt-tdd.
-Combina as funcionalidades de app.py, cli.py e mcp.py em um único ponto de entrada.
+Combina as funcionalidades em um único ponto de entrada.
 """
 
 import os
@@ -71,30 +71,6 @@ def get_orchestrator() -> AgentOrchestrator:
         
     except Exception as e:
         logger.error(f"Erro ao criar orquestrador: {str(e)}")
-        raise
-
-# ----- Funcionalidade App -----
-
-def run_app_mode():
-    """Executa o sistema no modo aplicação."""
-    try:
-        # Obtém orquestrador
-        orchestrator = get_orchestrator()
-        
-        # Exemplo de prompt
-        prompt = "Criar sistema de login"
-        
-        # Executa o orquestrador
-        result = orchestrator.execute(
-            prompt=prompt,
-            format="json"
-        )
-        
-        # Imprime resultado
-        print(result.output)
-        
-    except Exception as e:
-        logger.error(f"Erro na execução do modo app: {str(e)}")
         raise
 
 # ----- Funcionalidade CLI -----

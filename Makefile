@@ -94,12 +94,6 @@ dev:
 	@$(PYTHON) -m src.prompt_tdd cli "$(prompt)" --format="$(format)" --session-id="dev"
 	@make autoflake
 
-# Execução do modo app
-app:
-	@echo "🖥️ Executando modo app..."
-	@$(PYTHON) -m src.prompt_tdd app
-	@make autoflake
-
 # Limpeza de código com autoflake
 autoflake:
 	@echo "🧹 Limpando código com autoflake..."
