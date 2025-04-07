@@ -65,7 +65,7 @@ install:
 # Testes
 test:
 	@echo "🧪 Executando testes..."
-	$(PYTHON) -m pytest src/tests/ -v
+	$(PYTHON) -m pytest src/tests/test.py -v
 	@echo "✅ Testes concluídos!"
 	@make autoflake
 
