@@ -142,8 +142,8 @@ database:
 # Configurações dos Modelos
 models:
   defaults:
-    model: "gpt-4"
-    elevation_model: "gpt-4"
+    model: "tinyllama-1.1b"
+    elevation_model: "tinyllama-1.1b"
     temperature: 0.7
     max_tokens: null
     max_retries: 3
@@ -425,9 +425,7 @@ guardrails:
           - markdown
           - text
         model:
-          - gpt-4
-          - gpt-3.5-turbo
-          - gemini-pro
+          - tinyllama-1.1b
         temperature:
           min: 0.0
           max: 1.0
