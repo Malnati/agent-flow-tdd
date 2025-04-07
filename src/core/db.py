@@ -5,7 +5,8 @@ import json
 import logging
 import os
 import sqlite3
-from typing import Any, Dict, List, Optional
+import time
+from typing import Any, Dict, List, Optional, Tuple
 import yaml
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,9 @@ class DatabaseManager:
         
         # Define caminho do banco
         self.db_path = db_path or self.config["database"]["default_path"]
+        
+        # Cria diretório do banco se não existir
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         
         # Conecta ao banco
         self.conn = sqlite3.connect(self.db_path)
@@ -69,6 +73,72 @@ class DatabaseManager:
             )
             """
             cursor.execute(sql)
+            
+            # Cria índices se definidos
+            if "indexes" in table_config:
+                for idx in table_config["indexes"]:
+                    unique = "UNIQUE" if idx.get("unique", False) else ""
+                    sql = f"""
+                    CREATE {unique} INDEX IF NOT EXISTS {idx['name']}
+                    ON {table_config['name']} ({','.join(idx['columns'])})
+                    """
+                    cursor.execute(sql)
+        
+        self.conn.commit()
+    
+    def get_cached_response(self, cache_key: str, ttl: int) -> Optional[Tuple[str, Dict[str, Any]]]:
+        """
+        Obtém uma resposta do cache se disponível e não expirada.
+        
+        Args:
+            cache_key: Chave de cache
+            ttl: Tempo de vida em segundos
+            
+        Returns:
+            Tupla (resposta, metadados) se encontrada e válida, None caso contrário
+        """
+        cursor = self.conn.cursor()
+        
+        # Busca resposta não expirada
+        cursor.execute("""
+        SELECT response, metadata, timestamp
+        FROM model_cache
+        WHERE cache_key = ?
+        """, (cache_key,))
+        
+        row = cursor.fetchone()
+        if row is None:
+            return None
+            
+        # Verifica TTL
+        timestamp = time.mktime(time.strptime(row['timestamp'], '%Y-%m-%d %H:%M:%S'))
+        if time.time() - timestamp > ttl:
+            # Remove resposta expirada
+            cursor.execute("DELETE FROM model_cache WHERE cache_key = ?", (cache_key,))
+            self.conn.commit()
+            return None
+            
+        return json.loads(row['response']), json.loads(row['metadata'])
+    
+    def save_to_cache(self, cache_key: str, response: str, metadata: Dict[str, Any]):
+        """
+        Salva uma resposta no cache.
+        
+        Args:
+            cache_key: Chave de cache
+            response: Resposta do modelo
+            metadata: Metadados da resposta
+        """
+        cursor = self.conn.cursor()
+        
+        # Remove entrada anterior se existir
+        cursor.execute("DELETE FROM model_cache WHERE cache_key = ?", (cache_key,))
+        
+        # Insere nova entrada
+        cursor.execute("""
+        INSERT INTO model_cache (cache_key, response, metadata)
+        VALUES (?, ?, ?)
+        """, (cache_key, json.dumps(response), json.dumps(metadata)))
         
         self.conn.commit()
     

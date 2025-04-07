@@ -193,7 +193,37 @@ Atualmente:
 - OpenAI GPT-3.5 Turbo
 - OpenAI GPT-4 Turbo
 - Anthropic Claude (via MCP)
+- TinyLLaMA 1.1B (local, via llama.cpp)
 - Outros modelos compatíveis com MCP
+
+### Configuração do TinyLLaMA
+
+Para usar o TinyLLaMA:
+
+1. O modelo será baixado automaticamente durante a instalação (`make install`). 
+   Alternativamente, você pode baixá-lo manualmente:
+```bash
+make download-model
+```
+
+2. Use o modelo via CLI:
+```bash
+prompt-tdd feature "Criar API" --model tinyllama-1.1b
+```
+
+3. Ou via MCP:
+```json
+{
+  "content": "Criar API REST",
+  "metadata": {
+    "type": "feature",
+    "options": {
+      "model": "tinyllama-1.1b",
+      "temperature": 0.7
+    }
+  }
+}
+```
 
 ## 🧪 Testes
 
@@ -556,4 +586,45 @@ make logs ARGS="--limit 20 --session abc123"
 
 # Visualiza detalhes de uma execução específica
 make logs ARGS="--id 42"
+```
+
+## 🐳 Usando com Docker
+
+### Pré-requisitos
+- Docker
+- Docker Compose
+
+### Configuração
+1. Copie o arquivo de exemplo de variáveis de ambiente:
+```bash
+cp .docker/.env.example .docker/.env
+```
+
+2. Configure suas chaves de API no arquivo `.docker/.env`
+
+### Executando
+Para desenvolvimento:
+```bash
+docker-compose -f .docker/docker-compose.yml run dev
+```
+
+Para produção:
+```bash
+docker-compose -f .docker/docker-compose.yml run app
+```
+
+### Comandos Úteis
+- Construir as imagens:
+```bash
+docker-compose -f .docker/docker-compose.yml build
+```
+
+- Visualizar logs:
+```bash
+docker-compose -f .docker/docker-compose.yml logs -f
+```
+
+- Limpar volumes:
+```bash
+docker-compose -f .docker/docker-compose.yml down -v
 ```

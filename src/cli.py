@@ -6,17 +6,22 @@ import json
 import sys
 import time
 import os
+import warnings
 from typing import Dict
 
 import typer
 import yaml
 from rich.console import Console
 from rich.markdown import Markdown
+import urllib3
 
 from src.app import AgentOrchestrator
 from src.core.models import ModelManager
 from src.core.logger import get_logger, log_execution
 from src.core.kernel import get_env_var, get_env_status as get_kernel_env_status, validate_env as validate_kernel_env
+
+# Suprime avisos do urllib3 sobre SSL
+warnings.filterwarnings('ignore', category=urllib3.exceptions.NotOpenSSLWarning)
 
 # Constantes do sistema
 EXIT_CODE_SUCCESS = 0
@@ -171,8 +176,6 @@ def feature(
     Executa o Agent Flow TDD para gerar uma feature.
     """
     try:
-        print(CONFIG["cli"]["messages"]["start_dev"])
-        
         # Valida ambiente
         validate_env()
         

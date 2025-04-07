@@ -84,38 +84,41 @@ def get_env_var(name: str, default: Optional[str] = None, args_value: Optional[s
 
 def get_env_status(context: str = "cli") -> Dict[str, Dict[str, bool]]:
     """
-    Verifica o status das variáveis de ambiente necessárias.
-
+    Obtém o status das variáveis de ambiente.
+    
     Args:
-        context: Contexto de execução ("cli", "github", "all")
-
+        context: Contexto para verificação (cli, github, etc)
+        
     Returns:
-        Dicionário com o status de cada variável.
+        Dict com o status das variáveis
     """
-    # Obtém variáveis das configurações
-    required_vars = CONFIG["required_vars"]
-    optional_vars = CONFIG["optional_vars"]
-
-    # Seleciona as variáveis baseado no contexto
+    # Carrega configurações
+    config = load_config('src/configs/kernel.yaml')
+    required_vars = config['required_vars']
+    optional_vars = config.get('optional_vars', {})
+    
+    # Seleciona variáveis do contexto
     if context == "all":
-        selected_required = {k: v for d in required_vars.values() for k, v in d.items()}
-        selected_optional = {k: v for d in optional_vars.values() for k, v in d.items()}
+        selected_required = []
+        for vars_list in required_vars.values():
+            selected_required.extend(vars_list)
+        selected_optional = {}
+        for opt_dict in optional_vars.values():
+            selected_optional.update(opt_dict)
     else:
-        selected_required = required_vars.get(context, {})
+        selected_required = required_vars.get(context, [])
         selected_optional = optional_vars.get(context, {})
 
     # Verifica variáveis obrigatórias
-    for var in selected_required:
-        selected_required[var] = bool(get_env_var(var))
+    required_status = {var: bool(get_env_var(var)) for var in selected_required}
 
     # Verifica variáveis opcionais
-    for var in selected_optional:
-        selected_optional[var] = bool(get_env_var(var))
+    optional_status = {var: bool(get_env_var(var)) for var in selected_optional}
 
     return {
-        "required": selected_required,
-        "optional": selected_optional,
-        "all_required_set": all(selected_required.values()),
+        "required": required_status,
+        "optional": optional_status,
+        "all_required_set": all(required_status.values()) if required_status else True,
     }
 
 

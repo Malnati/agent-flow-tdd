@@ -61,8 +61,11 @@ logging:
 
 # Configurações do Banco de Dados
 database:
-  default_path: logs/agent_logs.db
+  default_path: data/database.db
   history_limit: 10
+  default_session: "default"
+  default_agent: "tinyllama"
+  default_output_format: "json"
   schema:
     guardrail_types:
       - "input"
@@ -138,12 +141,29 @@ database:
       foreign_keys:
         - column: "run_id"
           references: "agent_runs(id)"
+    model_cache:
+      name: "model_cache"
+      columns:
+        - name: "id"
+          type: "INTEGER PRIMARY KEY AUTOINCREMENT"
+        - name: "cache_key"
+          type: "TEXT NOT NULL"
+        - name: "response"
+          type: "TEXT NOT NULL"
+        - name: "metadata"
+          type: "TEXT NOT NULL"
+        - name: "timestamp"
+          type: "DATETIME DEFAULT CURRENT_TIMESTAMP"
+      indexes:
+        - name: "idx_cache_key"
+          columns: ["cache_key"]
+          unique: true
 
 # Configurações dos Modelos
 models:
   defaults:
-    model: "gpt-4"
-    elevation_model: "gpt-4"
+    model: "tinyllama-1.1b"
+    elevation_model: "tinyllama-1.1b"
     temperature: 0.7
     max_tokens: null
     max_retries: 3
@@ -154,34 +174,6 @@ models:
     directory: "cache"
   fallback:
     enabled: true
-  providers:
-    openai:
-      base_url: "https://api.openai.com/v1"
-      prefix_patterns:
-        - "gpt-"
-        - "text-"
-      default_max_tokens: 2048
-      default_model: "gpt-4"
-    openrouter:
-      base_url: "https://openrouter.ai/api/v1"
-      prefix_patterns:
-        - "deepseek-"
-        - "anthropic/"
-        - "meta-llama/"
-      default_max_tokens: 4096
-      default_model: "deepseek-coder-33b-instruct"
-    gemini:
-      base_url: "https://generativelanguage.googleapis.com"
-      prefix_patterns:
-        - "gemini-"
-      default_max_tokens: 2048
-      default_model: "gemini-pro"
-    anthropic:
-      base_url: "https://api.anthropic.com"
-      prefix_patterns:
-        - "claude-"
-      default_max_tokens: 4096
-      default_model: "claude-3-opus-20240229"
   env_vars:
     default_model: "DEFAULT_MODEL"
     elevation_model: "ELEVATION_MODEL"
@@ -195,6 +187,57 @@ models:
     openrouter_key: "OPENROUTER_KEY"
     gemini_key: "GEMINI_KEY"
     anthropic_key: "ANTHROPIC_KEY"
+  providers:
+    openai:
+      base_url: "https://api.openai.com/v1"
+      prefix_patterns:
+        - "gpt-"
+        - "text-"
+      default_max_tokens: 2048
+      default_model: "gpt-4"
+      models:
+        - "gpt-4"
+        - "gpt-4-turbo-preview"
+        - "gpt-3.5-turbo"
+        - "gpt-3.5-turbo-16k"
+    openrouter:
+      base_url: "https://openrouter.ai/api/v1"
+      prefix_patterns:
+        - "deepseek-"
+        - "anthropic/"
+        - "meta-llama/"
+      default_max_tokens: 4096
+      default_model: "deepseek-coder-33b-instruct"
+      models:
+        - "deepseek-coder-33b-instruct"
+        - "anthropic/claude-3-opus"
+        - "meta-llama/llama-2-70b-chat"
+    gemini:
+      base_url: "https://generativelanguage.googleapis.com"
+      prefix_patterns:
+        - "gemini-"
+      default_max_tokens: 2048
+      default_model: "gemini-pro"
+      models:
+        - "gemini-pro"
+        - "gemini-pro-vision"
+    anthropic:
+      base_url: "https://api.anthropic.com"
+      prefix_patterns:
+        - "claude-"
+      default_max_tokens: 4096
+      default_model: "claude-3-opus-20240229"
+      models:
+        - "claude-3-opus-20240229"
+        - "claude-3-sonnet-20240229"
+        - "claude-2.1"
+    tinyllama:
+      model_path: "models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+      n_ctx: 2048
+      n_threads: 4
+      prefix_patterns: ["tinyllama-"]
+      default_model: "tinyllama-1.1b"
+      models: ["tinyllama-1.1b"]
 
 # Configurações de variáveis de ambiente por contexto
 
@@ -304,4 +347,142 @@ sensitive_data_patterns:
   - pattern: 'sk-[a-zA-Z0-9]+'
     replacement: '***OPENAI_API_KEY***'
   - pattern: 'pypi-[a-zA-Z0-9]{20,}'
-    replacement: '***PYPI_TOKEN***' 
+    replacement: '***PYPI_TOKEN***'
+
+# Configurações de variáveis de ambiente
+env_vars:
+  default_model: "DEFAULT_MODEL"
+  elevation_model: "ELEVATION_MODEL"
+  max_retries: "MAX_RETRIES"
+  model_timeout: "MODEL_TIMEOUT"
+  fallback_enabled: "FALLBACK_ENABLED"
+  cache_enabled: "CACHE_ENABLED"
+  cache_ttl: "CACHE_TTL"
+  cache_dir: "CACHE_DIR"
+  openai_key: "OPENAI_API_KEY"
+  openrouter_key: "OPENROUTER_KEY"
+  gemini_key: "GEMINI_KEY"
+  anthropic_key: "ANTHROPIC_KEY"
+
+# Configurações dos Guardrails
+guardrails:
+  # Guardrail de Entrada
+  input:
+    required_fields:
+      - name: "name"
+        description: "Nome da funcionalidade"
+        type: "string"
+        required: true
+      - name: "description"
+        description: "Descrição detalhada da funcionalidade"
+        type: "string" 
+        required: true
+      - name: "objectives"
+        description: "Objetivos principais da funcionalidade"
+        type: "array"
+        required: true
+      - name: "requirements"
+        description: "Requisitos técnicos e funcionais"
+        type: "array"
+        required: false
+      - name: "constraints"
+        description: "Limitações e restrições"
+        type: "array"
+        required: false
+    validation:
+      min_length:
+        name: 3
+        description: 10
+      max_length:
+        name: 100
+        description: 1000
+      array_limits:
+        objectives:
+          min: 1
+          max: 10
+        requirements:
+          min: 0
+          max: 20
+        constraints:
+          min: 0
+          max: 10
+    prompt_template: |
+      Por favor, forneça as seguintes informações sobre a funcionalidade:
+      
+      1. Nome: {name}
+      2. Descrição: {description}
+      3. Objetivos: {objectives}
+      4. Requisitos (opcional): {requirements}
+      5. Restrições (opcional): {constraints}
+
+  # Guardrail de Saída
+  output:
+    required_fields:
+      - name: "name"
+        description: "Nome da funcionalidade"
+        type: "string"
+        required: true
+      - name: "description"
+        description: "Descrição detalhada da funcionalidade"
+        type: "string" 
+        required: true
+      - name: "objectives"
+        description: "Objetivos principais da funcionalidade"
+        type: "array"
+        required: true
+      - name: "requirements"
+        description: "Requisitos técnicos e funcionais"
+        type: "array"
+        required: true
+      - name: "constraints"
+        description: "Limitações e restrições"
+        type: "array"
+        required: true
+    validation:
+      min_length:
+        name: 3
+        description: 10
+      max_length:
+        name: 100
+        description: 1000
+      array_limits:
+        objectives:
+          min: 1
+          max: 10
+        requirements:
+          min: 1
+          max: 20
+        constraints:
+          min: 1
+          max: 10
+    prompt_template: |
+      Analise o contexto fornecido e sugira valores para os campos ausentes.
+      
+      Contexto: {context}
+      
+      Campos ausentes: {missing_fields}
+      
+      Retorne APENAS um objeto JSON com os campos sugeridos, sem nenhum texto adicional.
+      Exemplo:
+      {
+          "name": "Nome sugerido",
+          "description": "Descrição sugerida",
+          "objectives": ["Objetivo 1", "Objetivo 2"],
+          "requirements": ["Requisito 1", "Requisito 2"],
+          "constraints": ["Restrição 1", "Restrição 2"]
+      } 
+
+# Configurações de Prompts do Sistema
+prompts:
+  system: |
+    Você é um assistente especializado em análise e desenvolvimento de software.
+    Seu objetivo é ajudar a estruturar e desenvolver funcionalidades seguindo boas práticas.
+    
+    Por favor, analise o prompt do usuário e retorne uma estrutura JSON com:
+    - Nome da funcionalidade
+    - Descrição detalhada
+    - Objetivos principais
+    - Requisitos técnicos
+    - Restrições do sistema
+    
+    Mantenha o foco em qualidade e boas práticas de desenvolvimento. 

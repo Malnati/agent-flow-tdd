@@ -1,11 +1,16 @@
 # Makefile para o projeto prompt-tdd
 
-.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs test-e2e publish
+.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs test-e2e publish download-model
 
 # Configuração do ambiente virtual
 VENV = .venv
 PYTHON = $(VENV)/bin/python
 PIP = $(VENV)/bin/pip
+
+# URL e nome do modelo TinyLLaMA
+MODEL_URL = https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
+MODEL_NAME = tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
+MODEL_DIR = models
 
 # Carrega variáveis de ambiente do arquivo .env se existir
 ifneq (,$(wildcard .env))
@@ -18,9 +23,10 @@ help:
 	@echo "Comandos disponíveis:"
 	@echo ""
 	@echo "Ambiente:"
-	@echo "  make install    - Instala dependências do projeto"
-	@echo "  make clean      - Remove arquivos temporários"
-	@echo "  make dev        - Executa em modo desenvolvimento"
+	@echo "  make install      - Instala dependências do projeto"
+	@echo "  make clean        - Remove arquivos temporários"
+	@echo "  make dev          - Executa em modo desenvolvimento"
+	@echo "  make download-model - Baixa o modelo TinyLLaMA"
 	@echo ""
 	@echo "Qualidade:"
 	@echo "  make test       - Executa testes unitários"
@@ -47,6 +53,7 @@ install:
 	@echo "🔧 Instalando dependências..."
 	python -m venv $(VENV)
 	$(PIP) install -e ".[dev]"
+	@make download-model || exit 1
 	@echo "✅ Instalação concluída!"
 
 # Testes
@@ -164,4 +171,20 @@ test-e2e:
 	@echo "🗄️ Reinicializando banco de dados..."
 	@make db-clean
 	@make db-init
-	$(PYTHON) -m pytest -v -m e2e src/tests/test_e2e.py 
+	$(PYTHON) -m pytest -v -m e2e src/tests/test_e2e.py
+
+# Download do modelo TinyLLaMA
+download-model:
+	@echo "📥 Baixando modelo TinyLLaMA..."
+	@mkdir -p $(MODEL_DIR)
+	@if [ -f "$(MODEL_DIR)/$(MODEL_NAME)" ]; then \
+		echo "✅ Modelo já existe em $(MODEL_DIR)/$(MODEL_NAME)"; \
+	else \
+		echo "🔄 Iniciando download..."; \
+		if ! curl -L -f $(MODEL_URL) -o $(MODEL_DIR)/$(MODEL_NAME); then \
+			echo "❌ Falha no download do modelo"; \
+			rm -f $(MODEL_DIR)/$(MODEL_NAME); \
+			exit 1; \
+		fi; \
+		echo "✅ Download concluído em $(MODEL_DIR)/$(MODEL_NAME)"; \
+	fi 

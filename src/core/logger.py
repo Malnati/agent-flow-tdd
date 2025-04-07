@@ -125,20 +125,25 @@ def setup_logger(name: str, level: Optional[str] = None) -> logging.Logger:
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
     
-    # Adiciona handler de console
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.DEBUG)
+    # Cria diretório de logs se não existir
+    log_dir = os.path.join(BASE_DIR, CONFIG['directories']['logs'])
+    os.makedirs(log_dir, exist_ok=True)
+    
+    # Adiciona handler de arquivo
+    log_file = os.path.join(log_dir, f"{name.replace('.', '_')}.log")
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.DEBUG)
     
     # Define formato
     formatter = logging.Formatter(CONFIG['logging']['format']['default'])
-    console_handler.setFormatter(formatter)
+    file_handler.setFormatter(formatter)
     
     # Adiciona filtro de segurança
     secure_filter = SecureLogFilter()
-    console_handler.addFilter(secure_filter)
+    file_handler.addFilter(secure_filter)
     
     # Adiciona handler
-    logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
     
     return logger
 
