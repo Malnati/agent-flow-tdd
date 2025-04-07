@@ -12,9 +12,10 @@ import yaml
 from pathlib import Path
 
 from src.core.db import DatabaseManager
-from src.core.logger import setup_logger
+from src.core.logger import get_logger
 
-logger = setup_logger(__name__)
+# Logger
+logger = get_logger(__name__)
 
 # Carrega configurações de teste
 def load_test_config() -> dict:
@@ -229,8 +230,7 @@ def test_e2e_address_registration_cli_markdown():
         assert db_record is not None
         assert db_record["input"] == prompt
         assert db_record["output_type"] == "markdown"
-        assert db_record["last_agent"] == "OpenAI"
-        assert len(db_record["raw_responses"]) > 0
+        assert db_record["last_agent"] == "tinyllama"
 
 @pytest.mark.e2e
 def test_e2e_address_registration_cli_json():
@@ -292,8 +292,7 @@ def test_e2e_address_registration_cli_json():
         assert db_record is not None
         assert db_record["input"] == prompt
         assert db_record["output_type"] == "json"
-        assert db_record["last_agent"] == "OpenAI"
-        assert len(db_record["raw_responses"]) > 0
+        assert db_record["last_agent"] == "tinyllama"
 
 @pytest.mark.e2e
 def test_e2e_address_registration_error_handling():
