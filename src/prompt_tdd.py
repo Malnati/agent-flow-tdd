@@ -305,10 +305,7 @@ def main():
         return 1
     
     # Executa o modo selecionado
-    if args.mode == "app":
-        run_app_mode()
-        return 0
-    elif args.mode == "cli":
+    if args.mode == "cli":
         return run_cli_mode(args)
     elif args.mode == "mcp":
         run_mcp_mode()
