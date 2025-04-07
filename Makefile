@@ -1,6 +1,6 @@
 # Makefile para o projeto prompt-tdd
 
-.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs test-e2e test-dev test-e2e-dev publish download-model docs-serve docs-build docs-deploy docs-generate status
+.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs test-e2e publish download-model docs-serve docs-build docs-deploy docs-generate status
 
 # Configuração do ambiente virtual
 VENV = .venv
@@ -37,7 +37,6 @@ help:
 	@echo ""
 	@echo "Qualidade:"
 	@echo "  make test       - Executa todos os testes"
-	@echo "  make test-e2e   - Executa todos os testes end-to-end"
 	@echo "  make coverage   - Gera relatório de cobertura"
 	@echo "  make lint       - Executa linters"
 	@echo "  make format     - Formata código"
@@ -52,7 +51,7 @@ help:
 	@echo "  make publish    - Publica pacote no PyPI"
 	@echo ""
 	@echo "Exemplos:"
-	@echo "  make dev prompt-tdd=\"Cadastro de pessoas\" mode=mcp format=markdown"
+	@echo "  make dev prompt=\"Cadastro de pessoas\" format=markdown"
 	@echo "  make logs ARGS=\"--limit 20 --session abc123\""
 
 # Instalação e setup
@@ -66,7 +65,7 @@ install:
 # Testes
 test:
 	@echo "🧪 Executando testes..."
-	$(PYTHON) -m pytest src/tests/ -v -m "not install"
+	$(PYTHON) -m pytest src/tests/ -v
 	@echo "✅ Testes concluídos!"
 	@make autoflake
 
@@ -75,24 +74,24 @@ run:
 	@echo "🖥️ Executando CLI..."
 	@if [ "$(mode)" = "mcp" ]; then \
 		rm -f logs/mcp_pipe.log && \
-		echo '{"content": "$(prompt-tdd)", "metadata": {"type": "feature", "options": {"format": "$(format)", "model": "gpt-3.5-turbo", "temperature": 0.7}}}' > logs/mcp_pipe.log && \
-		$(PYTHON) -m src.cli "$(prompt-tdd)" --format $(format) --mode $(mode) > logs/mcp_server.log 2>&1 & \
+		echo '{"content": "$(prompt)", "metadata": {"type": "feature", "options": {"format": "$(format)", "model": "gpt-3.5-turbo", "temperature": 0.7}}}' > logs/mcp_pipe.log && \
+		$(PYTHON) -m src.prompt_tdd mcp > logs/mcp_server.log 2>&1 & \
 		echo "✅ Servidor MCP iniciado em background (PID: $$!)"; \
 	else \
-		$(PYTHON) -m src.cli "$(prompt-tdd)" --format $(format) --mode $(mode); \
+		$(PYTHON) -m src.prompt_tdd cli "$(prompt)" --format $(format) --session-id $(session_id); \
 	fi
 	@make autoflake
 
 # Execução do CLI em modo desenvolvimento
 dev:
 	@echo "🖥️ CLI do projeto prompt-tdd"
-	@$(PYTHON) -m src.cli "$(prompt_tdd)" --format="$(format)" --mode=feature || true
+	@$(PYTHON) -m src.prompt_tdd cli "$(prompt)" --format="$(format)" --session-id="dev"
 	@make autoflake
 
-# Execução do CLI em modo documentação
-docs:
-	@echo "🖥️ CLI do projeto prompt-tdd"
-	@$(PYTHON) -m src.cli "$(prompt_tdd)" --format="$(format)" --mode=docs || true
+# Execução do modo app
+app:
+	@echo "🖥️ Executando modo app..."
+	@$(PYTHON) -m src.prompt_tdd app
 	@make autoflake
 
 # Limpeza de código com autoflake
@@ -163,18 +162,6 @@ publish:
 	@PUBLISHING=true $(PYTHON) -m twine upload dist/* --username __token__ --password $(PYPI_TOKEN)
 	@echo "✅ Pacote publicado com sucesso!"
 
-# Permite argumentos extras para o comando run
-%:
-	@:
-
-# Testes end-to-end
-test-e2e:
-	@echo "🧪 Executando testes end-to-end..."
-	@echo "🗄️ Reinicializando banco de dados..."
-	@make db-clean
-	@make db-init
-	$(PYTHON) -m pytest -v -m e2e src/tests/test_e2e.py
-
 # Download do modelo TinyLLaMA
 download-model:
 	@echo "📥 Baixando modelo TinyLLaMA..."
@@ -207,9 +194,7 @@ docs-deploy:
 docs-generate:
 	@echo "🤖 Gerando documentação via IA..."
 	@$(PYTHON) src/scripts/generate_docs.py
-	@echo "✅ Documentação gerada!"
 
-# Novo comando status
-status:
-	@echo "📊 Verificando status do ambiente..."
-	@$(PYTHON) src/cli.py status 
+# Permite argumentos extras para o comando run
+%:
+	@:
