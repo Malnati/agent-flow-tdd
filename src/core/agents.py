@@ -53,8 +53,14 @@ class AgentOrchestrator:
             model_manager: Gerenciador de modelos opcional
         """
         self.model_manager = model_manager or ModelManager()
-        self.input_guardrail = InputGuardrail(self.model_manager)
-        self.output_guardrail = OutputGuardrail(self.model_manager)
+        self.input_guardrails = [
+            InputGuardrail(self.model_manager, config)
+            for config in CONFIG.get("GuardRails", {}).get("Input", {}).values()
+        ]
+        self.output_guardrails = [
+            OutputGuardrail(self.model_manager, config)
+            for config in CONFIG.get("GuardRails", {}).get("Output", {}).values()
+        ]
         self.db = DatabaseManager()
         logger.info("AgentOrchestrator inicializado")
 
@@ -78,20 +84,23 @@ class AgentOrchestrator:
             )
 
             # Valida entrada
-            input_result = self.input_guardrail.process(prompt)
-            self.db.log_guardrail_results(
-                run_id=run_id,
-                guardrail_type="input",
-                results={
-                    "prompt": prompt,
-                    "info": input_result.get("info", {}),
-                    "status": input_result.get("status", "error"),
-                    "passed": input_result.get("status") == "success"
-                }
-            )
+            input_results = []
+            for guardrail in self.input_guardrails:
+                result = guardrail.process(prompt)
+                input_results.append(result)
+                self.db.log_guardrail_results(
+                    run_id=run_id,
+                    guardrail_type="input",
+                    results={
+                        "prompt": prompt,
+                        "info": result.get("info", {}),
+                        "status": result.get("status", "error"),
+                        "passed": result.get("status") == "success"
+                    }
+                )
 
-            if input_result.get("status") != "success":
-                raise ValueError(input_result.get("error", "Erro desconhecido"))
+            if any(result.get("status") != "success" for result in input_results):
+                raise ValueError("Erro na validação de entrada")
 
             # Gera resposta
             messages = [
@@ -101,20 +110,23 @@ class AgentOrchestrator:
             response = self.model_manager.generate_response(messages)
 
             # Valida saída
-            output_result = self.output_guardrail.process(response, prompt)
-            self.db.log_guardrail_results(
-                run_id=run_id,
-                guardrail_type="output",
-                results={
-                    "response": response,
-                    "info": output_result.get("info", {}),
-                    "status": output_result.get("status", "error"),
-                    "passed": output_result.get("status") == "success"
-                }
-            )
+            output_results = []
+            for guardrail in self.output_guardrails:
+                result = guardrail.process(response, prompt)
+                output_results.append(result)
+                self.db.log_guardrail_results(
+                    run_id=run_id,
+                    guardrail_type="output",
+                    results={
+                        "response": response,
+                        "info": result.get("info", {}),
+                        "status": result.get("status", "error"),
+                        "passed": result.get("status") == "success"
+                    }
+                )
 
-            if output_result.get("status") != "success":
-                raise ValueError(output_result.get("error", "Erro desconhecido"))
+            if any(result.get("status") != "success" for result in output_results):
+                raise ValueError("Erro na validação de saída")
 
             # Registra resposta
             self.db.log_raw_response(run_id, response)
@@ -123,7 +135,7 @@ class AgentOrchestrator:
             return AgentResult(
                 output=response,
                 items=[{"type": "response", "content": response}],
-                guardrails=[input_result, output_result],
+                guardrails=input_results + output_results,
                 raw_responses=[{"id": "response", "response": response}]
             )
 
@@ -134,16 +146,17 @@ class AgentOrchestrator:
 class InputGuardrail:
     """Guardrail para validação e estruturação de entrada."""
     
-    def __init__(self, model_manager: ModelManager):
+    def __init__(self, model_manager: ModelManager, config: Dict[str, Any]):
         """
         Inicializa o guardrail.
         
         Args:
             model_manager: Gerenciador de modelos
+            config: Configurações do guardrail
         """
         self.model_manager = model_manager
-        self.config = self._load_config()
-        self.requirements = self._load_requirements()
+        self.config = config
+        self.requirements = self.config.get("requirements", {})
         logger.info("InputGuardrail inicializado")
         
     def _load_config(self) -> Dict[str, Any]:
@@ -498,16 +511,17 @@ class InputGuardrail:
 class OutputGuardrail:
     """Guardrail para validação e estruturação de saída."""
     
-    def __init__(self, model_manager: ModelManager):
+    def __init__(self, model_manager: ModelManager, config: Dict[str, Any]):
         """
         Inicializa o guardrail.
         
         Args:
             model_manager: Gerenciador de modelos
+            config: Configurações do guardrail
         """
         self.model_manager = model_manager
-        self.config = self._load_config()
-        self.requirements = self._load_requirements()
+        self.config = config
+        self.requirements = self.config.get("requirements", {})
         logger.info("OutputGuardrail inicializado")
         
     def _load_config(self) -> Dict[str, Any]:
