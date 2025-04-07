@@ -36,6 +36,9 @@ class DatabaseManager:
         # Define caminho do banco
         self.db_path = db_path or self.config["database"]["default_path"]
         
+        # Cria diretório do banco se não existir
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        
         # Conecta ao banco
         self.conn = sqlite3.connect(self.db_path)
         self.conn.row_factory = sqlite3.Row

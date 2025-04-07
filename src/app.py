@@ -13,17 +13,17 @@ from src.core.models import InputGuardrail, OutputGuardrail
 
 logger = get_logger(__name__)
 
-# Carrega configurações
 def load_config() -> Dict[str, Any]:
-    """Carrega configurações do arquivo YAML."""
-    config_path = os.path.join(os.path.dirname(__file__), "configs", "cli.yaml")
-    try:
-        with open(config_path, "r") as f:
-            config = yaml.safe_load(f)
-            return config["app"]
-    except Exception as e:
-        logger.error(f"Erro ao carregar configurações: {str(e)}", exc_info=True)
-        raise
+    """
+    Carrega configurações do sistema.
+    
+    Returns:
+        Dict com configurações
+    """
+    config_path = os.path.join(os.path.dirname(__file__), "configs", "kernel.yaml")
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f)
+    return config
 
 # Configurações globais
 CONFIG = load_config()
@@ -38,8 +38,8 @@ class PromptRequirement(BaseModel):
 class AgentResult(BaseModel):
     """Resultado de uma execução do agente."""
     output: Any
-    items: List[Dict[str, Any]] = CONFIG["result"]["default_items"]
-    guardrails: List[Dict[str, Any]] = CONFIG["result"]["default_guardrails"]
+    items: List[Dict[str, Any]] = []
+    guardrails: List[Dict[str, Any]] = []
     raw_responses: List[Dict[str, Any]] = []
 
 class AgentOrchestrator:

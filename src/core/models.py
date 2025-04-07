@@ -330,15 +330,15 @@ class ModelManager:
                 # Formata o prompt
                 full_prompt = ""
                 if system:
-                    full_prompt += f"<|system|>\n{system}\n"
-                full_prompt += f"<|user|>\n{prompt}\n<|assistant|>\n"
+                    full_prompt += f"<|system|>\n{system}</s>\n"
+                full_prompt += f"<|user|>\n{prompt}</s>\n<|assistant|>\n"
                 
                 # Gera resposta
                 response = self.tinyllama_model(
                     full_prompt,
                     max_tokens=kwargs.get('max_tokens', self.max_tokens) or self.config['providers']['tinyllama'].get('default_max_tokens', 256),
                     temperature=kwargs.get('temperature', self.temperature),
-                    stop=["", "<|user|>", "<|system|>", "<|assistant|>"]
+                    stop=["</s>", "<|user|>", "<|system|>", "<|assistant|>"]
                 )
                 
                 # Extrai o texto da resposta
@@ -346,7 +346,6 @@ class ModelManager:
                 
                 # Tenta extrair JSON se presente
                 try:
-                    # Remove texto antes e depois do JSON
                     if '{' in text and '}' in text:
                         start = text.find('{')
                         end = text.rfind('}') + 1
@@ -358,37 +357,26 @@ class ModelManager:
                             json_str = json_str.replace('  ', ' ')
                         
                         # Valida se é um JSON válido
-                        try:
-                            json_data = json.loads(json_str)
-                            text = json.dumps(json_data, ensure_ascii=False)
-                        except json.JSONDecodeError as e:
-                            logger.error(f"Erro ao decodificar JSON: {str(e)}")
-                            # Retorna um JSON padrão em caso de erro
-                            text = json.dumps({
-                                "name": "Sistema de Login 2FA",
-                                "description": "Sistema de login com autenticação de dois fatores",
-                                "objectives": ["Implementar autenticação segura"],
-                                "requirements": ["Login com senha", "Segundo fator de autenticação"],
-                                "constraints": ["Segurança", "Usabilidade"]
-                            }, ensure_ascii=False)
+                        json_data = json.loads(json_str)
+                        text = json.dumps(json_data, ensure_ascii=False)
                     else:
                         # Se não encontrou JSON, retorna estrutura padrão
                         text = json.dumps({
-                            "name": "Sistema de Login 2FA",
-                            "description": "Sistema de login com autenticação de dois fatores",
-                            "objectives": ["Implementar autenticação segura"],
-                            "requirements": ["Login com senha", "Segundo fator de autenticação"],
-                            "constraints": ["Segurança", "Usabilidade"]
+                            "name": "Sistema Genérico",
+                            "description": "Sistema a ser especificado",
+                            "objectives": ["Definir objetivos específicos"],
+                            "requirements": ["Definir requisitos específicos"],
+                            "constraints": ["Definir restrições do sistema"]
                         }, ensure_ascii=False)
                 except Exception as e:
-                    logger.error(f"Erro ao processar resposta: {str(e)}")
+                    logger.error(f"Erro ao processar resposta JSON: {str(e)}")
                     # Retorna estrutura padrão em caso de erro
                     text = json.dumps({
-                        "name": "Sistema de Login 2FA",
-                        "description": "Sistema de login com autenticação de dois fatores",
-                        "objectives": ["Implementar autenticação segura"],
-                        "requirements": ["Login com senha", "Segundo fator de autenticação"],
-                        "constraints": ["Segurança", "Usabilidade"]
+                        "name": "Sistema Genérico",
+                        "description": "Sistema a ser especificado",
+                        "objectives": ["Definir objetivos específicos"],
+                        "requirements": ["Definir requisitos específicos"],
+                        "constraints": ["Definir restrições do sistema"]
                     }, ensure_ascii=False)
                 
                 return text, {
@@ -786,79 +774,88 @@ class ModelManager:
         if not self.tinyllama_model:
             raise ValueError("TinyLLaMA não configurado")
             
-        # Formata o prompt
-        full_prompt = ""
-        if system:
-            full_prompt += f"<|system|>\n{system}\n"
-        full_prompt += f"<|user|>\n{prompt}\n<|assistant|>\n"
-        
-        # Gera resposta
-        response = self.tinyllama_model(
-            full_prompt,
-            max_tokens=kwargs.get('max_tokens', self.max_tokens) or self.config['providers']['tinyllama'].get('default_max_tokens', 256),
-            temperature=kwargs.get('temperature', self.temperature),
-            stop=["", "<|user|>", "<|system|>", "<|assistant|>"]
-        )
-        
-        # Extrai o texto da resposta
-        text = response["choices"][0]["text"].strip()
-        
-        # Tenta extrair JSON se presente
         try:
-            # Remove texto antes e depois do JSON
-            if '{' in text and '}' in text:
-                start = text.find('{')
-                end = text.rfind('}') + 1
-                json_str = text[start:end]
-                
-                # Limpa o JSON
-                json_str = json_str.replace('\n', ' ').replace('\r', '')
-                while '  ' in json_str:
-                    json_str = json_str.replace('  ', ' ')
-                
-                # Valida se é um JSON válido
-                try:
+            # Formata o prompt
+            full_prompt = ""
+            if system:
+                full_prompt += f"<|system|>\n{system}</s>\n"
+            full_prompt += f"<|user|>\n{prompt}</s>\n<|assistant|>\n"
+            
+            # Gera resposta
+            response = self.tinyllama_model(
+                full_prompt,
+                max_tokens=kwargs.get('max_tokens', self.max_tokens) or self.config['providers']['tinyllama'].get('default_max_tokens', 256),
+                temperature=kwargs.get('temperature', self.temperature),
+                stop=["</s>", "<|user|>", "<|system|>", "<|assistant|>"]
+            )
+            
+            # Extrai o texto da resposta
+            text = response["choices"][0]["text"].strip()
+            
+            # Tenta extrair JSON se presente
+            try:
+                if '{' in text and '}' in text:
+                    start = text.find('{')
+                    end = text.rfind('}') + 1
+                    json_str = text[start:end]
+                    
+                    # Limpa o JSON
+                    json_str = json_str.replace('\n', ' ').replace('\r', '')
+                    while '  ' in json_str:
+                        json_str = json_str.replace('  ', ' ')
+                    
+                    # Valida se é um JSON válido
                     json_data = json.loads(json_str)
                     text = json.dumps(json_data, ensure_ascii=False)
-                except json.JSONDecodeError as e:
-                    logger.error(f"Erro ao decodificar JSON: {str(e)}")
-                    # Retorna um JSON padrão em caso de erro
+                else:
+                    # Se não encontrou JSON, retorna estrutura padrão
                     text = json.dumps({
-                        "name": "Sistema de Login 2FA",
-                        "description": "Sistema de login com autenticação de dois fatores",
-                        "objectives": ["Implementar autenticação segura"],
-                        "requirements": ["Login com senha", "Segundo fator de autenticação"],
-                        "constraints": ["Segurança", "Usabilidade"]
+                        "name": "Sistema Genérico",
+                        "description": "Sistema a ser especificado",
+                        "objectives": ["Definir objetivos específicos"],
+                        "requirements": ["Definir requisitos específicos"],
+                        "constraints": ["Definir restrições do sistema"]
                     }, ensure_ascii=False)
-            else:
-                # Se não encontrou JSON, retorna estrutura padrão
+            except Exception as e:
+                logger.error(f"Erro ao processar resposta JSON: {str(e)}")
+                # Retorna estrutura padrão em caso de erro
                 text = json.dumps({
-                    "name": "Sistema de Login 2FA",
-                    "description": "Sistema de login com autenticação de dois fatores",
-                    "objectives": ["Implementar autenticação segura"],
-                    "requirements": ["Login com senha", "Segundo fator de autenticação"],
-                    "constraints": ["Segurança", "Usabilidade"]
+                    "name": "Sistema Genérico",
+                    "description": "Sistema a ser especificado",
+                    "objectives": ["Definir objetivos específicos"],
+                    "requirements": ["Definir requisitos específicos"],
+                    "constraints": ["Definir restrições do sistema"]
                 }, ensure_ascii=False)
+            
+            return text, {
+                "model": "tinyllama-1.1b",
+                "usage": {
+                    "prompt_tokens": len(full_prompt.split()),
+                    "completion_tokens": len(text.split()),
+                    "total_tokens": len(full_prompt.split()) + len(text.split())
+                }
+            }
                 
         except Exception as e:
-            logger.error(f"Erro ao processar resposta: {str(e)}")
+            logger.error(f"Erro ao gerar resposta com TinyLLaMA: {str(e)}")
             # Retorna estrutura padrão em caso de erro
             text = json.dumps({
-                "name": "Sistema de Login 2FA",
-                "description": "Sistema de login com autenticação de dois fatores",
-                "objectives": ["Implementar autenticação segura"],
-                "requirements": ["Login com senha", "Segundo fator de autenticação"],
-                "constraints": ["Segurança", "Usabilidade"]
+                "name": "Sistema Genérico",
+                "description": "Sistema a ser especificado",
+                "objectives": ["Definir objetivos específicos"],
+                "requirements": ["Definir requisitos específicos"],
+                "constraints": ["Definir restrições do sistema"]
             }, ensure_ascii=False)
             
-        return text, {
-            "model": "tinyllama-1.1b",
-            "usage": {
-                "prompt_tokens": len(full_prompt.split()),
-                "completion_tokens": len(text.split()),
-                "total_tokens": len(full_prompt.split()) + len(text.split())
+            return text, {
+                "model": "tinyllama-1.1b",
+                "error": str(e),
+                "usage": {
+                    "prompt_tokens": len(prompt.split()),
+                    "completion_tokens": len(text.split()),
+                    "total_tokens": len(prompt.split()) + len(text.split())
+                }
             }
-        }
 
 class InputGuardrail:
     """Guardrail para processamento de entrada."""
