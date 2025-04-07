@@ -703,4 +703,339 @@ def test_e2e_test_e2e_command(test_env):
             str(e),
             test_env
         )
-        raise 
+        raise
+
+@pytest.mark.e2e
+def test_e2e_docs_build(test_env, capfd):
+    """Teste e2e do comando docs-build."""
+    # Configura ambiente de teste
+    os.chdir(test_env)
+    
+    # Instala dependências de documentação
+    pip_cmd = str(test_env / ".venv" / "bin" / "pip")
+    result = run_command_with_timeout(
+        f"{pip_cmd} install mkdocs mkdocs-material",
+        cwd=test_env,
+        timeout=60
+    )
+    assert result.returncode == 0, "Falha ao instalar dependências de documentação"
+    
+    # Cria estrutura básica de documentação
+    docs_dir = test_env / "docs"
+    docs_dir.mkdir(exist_ok=True)
+    
+    # Cria arquivo index.md de teste
+    index_file = docs_dir / "index.md"
+    index_file.write_text("# Teste\nConteúdo de teste")
+    
+    # Cria diretório de configuração
+    config_dir = test_env / "src" / "configs"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Cria arquivo mkdocs.yml
+    mkdocs_file = config_dir / "mkdocs.yml"
+    mkdocs_file.write_text("""
+site_name: Agent Flow TDD
+theme:
+  name: material
+  language: pt-BR
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.tracking
+    - navigation.indexes
+    - navigation.instant
+    - navigation.footer
+    - toc.follow
+    - toc.integrate
+docs_dir: ../../docs
+site_dir: ../../site
+nav:
+  - Home: index.md
+""")
+    
+    # Cria Makefile
+    makefile_content = """
+docs-build:
+	@echo "📚 Gerando documentação estática..."
+	@cd src/configs && mkdocs build
+"""
+    makefile = test_env / "Makefile"
+    makefile.write_text(makefile_content)
+    
+    # Executa o comando
+    result = run_command_with_timeout(
+        "make docs-build",
+        cwd=test_env,
+        timeout=30,
+        env={**os.environ, "PYTHONPATH": str(test_env)}
+    )
+    
+    # Verifica resultado
+    assert result.returncode == 0, "O comando docs-build falhou"
+    assert "📚 Gerando documentação estática..." in result.stdout
+    
+    # Verifica se o site foi gerado
+    site_dir = test_env / "site"
+    assert site_dir.exists(), "Diretório site não foi criado"
+    assert (site_dir / "index.html").exists(), "Arquivo index.html não foi gerado"
+
+@pytest.mark.e2e
+def test_e2e_docs_workflow(test_env, capfd):
+    """Teste e2e do fluxo completo de documentação."""
+    # Configura ambiente de teste
+    os.chdir(test_env)
+    
+    # Instala dependências de documentação
+    pip_cmd = str(test_env / ".venv" / "bin" / "pip")
+    result = run_command_with_timeout(
+        f"{pip_cmd} install mkdocs mkdocs-material",
+        cwd=test_env,
+        timeout=60
+    )
+    assert result.returncode == 0, "Falha ao instalar dependências de documentação"
+    
+    # Cria diretório de configuração
+    config_dir = test_env / "src" / "configs"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Cria arquivo mkdocs.yml
+    mkdocs_file = config_dir / "mkdocs.yml"
+    mkdocs_file.write_text("""
+site_name: Agent Flow TDD
+theme:
+  name: material
+  language: pt-BR
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.tracking
+    - navigation.indexes
+    - navigation.instant
+    - navigation.footer
+    - toc.follow
+    - toc.integrate
+docs_dir: ../../docs
+site_dir: ../../site
+nav:
+  - Home: index.md
+""")
+    
+    # Cria diretório scripts
+    scripts_dir = test_env / "src" / "scripts"
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Copia o script generate_docs.py
+    shutil.copy(
+        Path(__file__).parent.parent / "scripts" / "generate_docs.py",
+        scripts_dir / "generate_docs.py"
+    )
+    
+    # Cria Makefile
+    makefile_content = """
+docs-generate:
+	@echo "🤖 Gerando documentação via IA..."
+	@mkdir -p docs
+	@python src/scripts/generate_docs.py
+
+docs-build:
+	@echo "📚 Gerando documentação estática..."
+	@cd src/configs && mkdocs build
+"""
+    makefile = test_env / "Makefile"
+    makefile.write_text(makefile_content)
+    
+    # 1. Gera documentação via IA
+    result = run_command_with_timeout(
+        "make docs-generate",
+        cwd=test_env,
+        timeout=30,
+        env={**os.environ, "PYTHONPATH": str(test_env)}
+    )
+    assert result.returncode == 0, "O comando docs-generate falhou"
+    
+    # 2. Gera documentação estática
+    result = run_command_with_timeout(
+        "make docs-build",
+        cwd=test_env,
+        timeout=30,
+        env={**os.environ, "PYTHONPATH": str(test_env)}
+    )
+    
+    # Verifica resultado do build
+    assert result.returncode == 0, "O comando docs-build falhou"
+    assert "📚 Gerando documentação estática..." in result.stdout
+    
+    # Verifica estrutura gerada
+    site_dir = test_env / "site"
+    assert site_dir.exists(), "Diretório site não foi criado"
+    assert (site_dir / "index.html").exists(), "Arquivo index.html não foi gerado"
+    
+    # Verifica se os arquivos HTML foram gerados para cada seção
+    sections = [
+        "overview", "installation", "usage", "development",
+        "testing", "database", "logs", "deployment", "troubleshooting"
+    ]
+    
+    for section in sections:
+        section_dir = site_dir / section
+        assert section_dir.exists(), f"Diretório {section} não foi criado no site"
+        assert (section_dir / "index.html").exists(), f"Arquivo index.html não foi gerado para {section}"
+
+@pytest.mark.e2e
+def test_e2e_docs_content_validation(test_env):
+    """Teste e2e para validar o conteúdo gerado da documentação."""
+    # Configura ambiente de teste
+    os.chdir(test_env)
+    
+    # Gera documentação
+    result = run_command_with_timeout(
+        "make docs-generate",
+        cwd=test_env,
+        timeout=30,
+        env={**os.environ, "PYTHONPATH": str(test_env)}
+    )
+    assert result.returncode == 0, "O comando docs-generate falhou"
+    
+    # Verifica conteúdo dos arquivos principais
+    docs_dir = test_env / "docs"
+    
+    # 1. Verifica index.md
+    index_content = (docs_dir / "index.md").read_text()
+    assert "# Agent Flow TDD" in index_content
+    assert "Framework para desenvolvimento" in index_content
+    
+    # 2. Verifica seções principais
+    sections = {
+        "overview": ["Visão Geral", "Objetivo", "Arquitetura"],
+        "installation": ["Instalação", "Dependências", "Ambiente"],
+        "usage": ["Uso", "CLI", "MCP"],
+        "development": ["Desenvolvimento", "Código", "Local"],
+        "testing": ["Testes", "Unitários", "Cobertura"],
+        "database": ["Banco de Dados", "Estrutura", "SQL"],
+        "logs": ["Logs", "Formato", "Níveis"],
+        "deployment": ["Deploy", "Docker", "Produção"],
+        "troubleshooting": ["Troubleshooting", "Erros", "Fallback"]
+    }
+    
+    for section, expected_content in sections.items():
+        section_index = (docs_dir / section / "index.md").read_text()
+        # Verifica se o título da seção existe
+        assert expected_content[0] in section_index
+        # Verifica se os tópicos principais são mencionados
+        for topic in expected_content[1:]:
+            assert topic in section_index
+
+@pytest.mark.e2e
+def test_e2e_docs_links_validation(test_env):
+    """Teste e2e para validar os links na documentação gerada."""
+    # Configura ambiente de teste
+    os.chdir(test_env)
+    
+    # Instala dependências de documentação
+    pip_cmd = str(test_env / ".venv" / "bin" / "pip")
+    result = run_command_with_timeout(
+        f"{pip_cmd} install mkdocs mkdocs-material",
+        cwd=test_env,
+        timeout=60
+    )
+    assert result.returncode == 0, "Falha ao instalar dependências de documentação"
+    
+    # Cria diretório de configuração
+    config_dir = test_env / "src" / "configs"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Cria arquivo mkdocs.yml
+    mkdocs_file = config_dir / "mkdocs.yml"
+    mkdocs_file.write_text("""
+site_name: Agent Flow TDD
+theme:
+  name: material
+  language: pt-BR
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.tracking
+    - navigation.indexes
+    - navigation.instant
+    - navigation.footer
+    - toc.follow
+    - toc.integrate
+docs_dir: ../../docs
+site_dir: ../../site
+nav:
+  - Home: index.md
+""")
+    
+    # Cria diretório scripts
+    scripts_dir = test_env / "src" / "scripts"
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Copia o script generate_docs.py
+    shutil.copy(
+        Path(__file__).parent.parent / "scripts" / "generate_docs.py",
+        scripts_dir / "generate_docs.py"
+    )
+    
+    # Cria Makefile
+    makefile_content = """
+docs-generate:
+	@echo "🤖 Gerando documentação via IA..."
+	@mkdir -p docs
+	@python src/scripts/generate_docs.py
+
+docs-build:
+	@echo "📚 Gerando documentação estática..."
+	@cd src/configs && mkdocs build
+"""
+    makefile = test_env / "Makefile"
+    makefile.write_text(makefile_content)
+    
+    # Gera e compila a documentação
+    result = run_command_with_timeout(
+        "make docs-generate",
+        cwd=test_env,
+        timeout=30,
+        env={**os.environ, "PYTHONPATH": str(test_env)}
+    )
+    assert result.returncode == 0, "O comando docs-generate falhou"
+    
+    result = run_command_with_timeout(
+        "make docs-build",
+        cwd=test_env,
+        timeout=30,
+        env={**os.environ, "PYTHONPATH": str(test_env)}
+    )
+    assert result.returncode == 0, "O comando docs-build falhou"
+    
+    # Verifica os links no site gerado
+    site_dir = test_env / "site"
+    
+    # 1. Verifica se o arquivo de busca foi gerado
+    assert (site_dir / "search" / "search_index.json").exists()
+    
+    # 2. Verifica se os assets do tema foram copiados
+    assert (site_dir / "assets").exists()
+    
+    # 3. Verifica se os links internos estão corretos
+    index_html = (site_dir / "index.html").read_text()
+    
+    # Verifica links para seções principais
+    sections = [
+        "overview", "installation", "usage", "development",
+        "testing", "database", "logs", "deployment", "troubleshooting"
+    ]
+    
+    for section in sections:
+        assert f'href="{section}/' in index_html
+        
+        # Verifica se a página da seção tem links para suas subseções
+        section_html = (site_dir / section / "index.html").read_text()
+        assert "nav" in section_html
+        assert "md-nav" in section_html 
