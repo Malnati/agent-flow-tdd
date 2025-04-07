@@ -1,7 +1,7 @@
 ---
 description: 
 globs: 
-alwaysApply: true
+alwaysApply: false
 ---
 # *Regra 1*:  Durante a execução e correção de testes, deve-se priorizar a modificação do próprio teste ao invés de alterar o código-fonte da aplicação. Quando necessário alterar o código-fonte, existem restrições específicas que devem ser seguidas.
 
