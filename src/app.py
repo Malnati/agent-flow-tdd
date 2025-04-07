@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from src.core import ModelManager
 from src.core.db import DatabaseManager
 from src.core.logger import get_logger
-from src.core.guardrails import InputGuardrail, OutputGuardrail
+from src.core.models import InputGuardrail, OutputGuardrail
 
 logger = get_logger(__name__)
 
