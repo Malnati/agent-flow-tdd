@@ -32,7 +32,6 @@ help:
 	@echo "Ambiente:"
 	@echo "  make install      - Instala dependências do projeto"
 	@echo "  make clean        - Remove arquivos temporários"
-	@echo "  make dev          - Executa em modo desenvolvimento"
 	@echo "  make download-model - Baixa o modelo TinyLLaMA"
 	@echo ""
 	@echo "Documentação:"
@@ -57,7 +56,7 @@ help:
 	@echo "  make publish    - Publica pacote no PyPI"
 	@echo ""
 	@echo "Exemplos:"
-	@echo "  make dev prompt=\"Cadastro de pessoas\" format=markdown"
+	@echo "  make tdd prompt=\"Cadastro de pessoas\" format=json"
 	@echo "  make logs ARGS=\"--limit 20 --session abc123\""
 
 # Instalação e setup
@@ -76,7 +75,7 @@ test:
 	@make autoflake
 
 # Execução do CLI
-run:
+tdd:
 	@echo "🖥️ Executando CLI..."
 	@if [ "$(mode)" = "mcp" ]; then \
 		rm -f logs/mcp_pipe.log && \
@@ -86,13 +85,6 @@ run:
 	else \
 		$(PYTHON) -m src.prompt_tdd cli "$(prompt)" --format $(format) --session-id $(session_id); \
 	fi
-	@make autoflake
-
-# Execução do CLI em modo desenvolvimento
-dev:
-	@echo "🖥️ CLI do projeto prompt-tdd"
-	@$(PYTHON) -m src.prompt_tdd cli "$(prompt)" --format="$(format)" --session-id="dev"
-	@make autoflake
 
 # Limpeza de código com autoflake
 autoflake:
