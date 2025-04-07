@@ -419,39 +419,96 @@ def test_feature_command_error(mock_get_orchestrator, mock_validate_env, capsys,
 
 def test_output_guardrail_missing_fields(output_guardrail, mock_model_manager, mock_kernel_config):
     """Testa tratamento de campos ausentes no guardrail de saída."""
-    # Prepara dados de teste
-    output = json.dumps({
-        "name": "Sistema de Login",
-        "description": "Sistema de autenticação"
-    })
-    context = "Criar sistema de login"
+    
+    # Patch para a função load_config do agents.py
+    with patch("src.core.agents.load_config") as mock_agents_config:
+        mock_agents_config.return_value = {
+            "guardrails": {
+                "output": {
+                    "completion_prompt": "Analise a resposta e verifique os campos",
+                    "requirements": {
+                        "name": True,
+                        "description": True,
+                        "objectives": True,
+                        "requirements": True,
+                        "constraints": True
+                    }
+                }
+            }
+        }
+        
+        # Atualiza configuração do guardrail com o mock
+        output_guardrail.config = mock_agents_config.return_value["guardrails"]["output"]
+        output_guardrail.requirements = mock_agents_config.return_value["guardrails"]["output"]["requirements"]
+    
+        # Prepara dados de teste
+        output = json.dumps({
+            "name": "Sistema de Login",
+            "description": "Sistema de autenticação"
+        })
+        context = "Criar sistema de login"
 
-    # Configura o mock para retornar um JSON inválido
-    mock_model_manager.generate_response.return_value = json.dumps({
-        "name": "Sistema de Login",
-        "description": "Sistema de autenticação"
-    })
+        # Configura o mock para retornar um JSON inválido
+        mock_model_manager.generate_response.return_value = json.dumps({
+            "name": "Sistema de Login",
+            "description": "Sistema de autenticação"
+        })
 
-    # Executa teste
-    result = output_guardrail.process(output, context)
+        # Executa teste
+        result = output_guardrail.process(output, context)
 
-    assert result["status"] == "error"
-    assert "Campos obrigatórios ausentes" in result["error"]
+        assert result["status"] == "error"
+        assert "Campos obrigatórios ausentes" in result["error"]
 
 def test_agent_orchestrator_execute_error(mock_orchestrator, mock_model_manager, mock_kernel_config):
     """Testa tratamento de erro na execução do orquestrador."""
-    # Configura o mock para retornar um JSON inválido
-    mock_model_manager.generate_response.return_value = "resposta inválida"
+    
+    # Patch para a função load_config do agents.py
+    with patch("src.core.agents.load_config") as mock_agents_config:
+        mock_agents_config.return_value = {
+            "guardrails": {
+                "input": {
+                    "system_prompt": "Analise o prompt e extraia informações",
+                    "requirements": {
+                        "name": True,
+                        "description": True,
+                        "objectives": True,
+                        "requirements": True,
+                        "constraints": True
+                    }
+                },
+                "output": {
+                    "completion_prompt": "Analise a resposta e verifique os campos",
+                    "requirements": {
+                        "name": True,
+                        "description": True,
+                        "objectives": True,
+                        "requirements": True,
+                        "constraints": True
+                    }
+                }
+            },
+            "prompts": {
+                "system": "Você é um assistente especializado em análise de software."
+            }
+        }
+        
+        # Configura o mock para retornar um JSON inválido
+        mock_model_manager.generate_response.return_value = "resposta inválida"
 
-    # Configura o mock do orquestrador
-    mock_orchestrator.model_manager = mock_model_manager
+        # Configura o mock do orquestrador
+        mock_orchestrator.model_manager = mock_model_manager
+        mock_orchestrator.input_guardrail.config = mock_agents_config.return_value["guardrails"]["input"]
+        mock_orchestrator.input_guardrail.requirements = mock_agents_config.return_value["guardrails"]["input"]["requirements"]
+        mock_orchestrator.output_guardrail.config = mock_agents_config.return_value["guardrails"]["output"]
+        mock_orchestrator.output_guardrail.requirements = mock_agents_config.return_value["guardrails"]["output"]["requirements"]
 
-    # Executa teste
-    prompt = "Criar sistema de login"
+        # Executa teste
+        prompt = "Criar sistema de login"
 
-    # Verifica se a exceção é lançada com a mensagem correta
-    with pytest.raises(ValueError) as exc_info:
-        mock_orchestrator.execute(prompt)
+        # Verifica se a exceção é lançada com a mensagem correta
+        with pytest.raises(ValueError) as exc_info:
+            mock_orchestrator.execute(prompt)
 
-    assert "Campos obrigatórios ausentes" in str(exc_info.value)
+        assert "Campos obrigatórios ausentes" in str(exc_info.value)
 

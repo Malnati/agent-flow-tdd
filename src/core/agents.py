@@ -20,8 +20,8 @@ def load_config() -> Dict[str, Any]:
     Returns:
         Dict com configurações
     """
-    config_path = os.path.join(os.path.dirname(__file__), "..", "configs", "kernel.yaml")
-    with open(config_path, "r") as f:
+    agents_config_path = os.path.join(os.path.dirname(__file__), "..", "configs", "agents.yaml")
+    with open(agents_config_path, "r") as f:
         config = yaml.safe_load(f)
     return config
 
