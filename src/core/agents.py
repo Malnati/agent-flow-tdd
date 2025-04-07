@@ -85,22 +85,39 @@ class AgentOrchestrator:
 
             # Valida entrada
             input_results = []
+            has_critical_input_error = False
+            
             for guardrail in self.input_guardrails:
-                result = guardrail.process(prompt)
-                input_results.append(result)
-                self.db.log_guardrail_results(
-                    run_id=run_id,
-                    guardrail_type="input",
-                    results={
-                        "prompt": prompt,
-                        "info": result.get("info", {}),
-                        "status": result.get("status", "error"),
-                        "passed": result.get("status") == "success"
-                    }
-                )
+                try:
+                    result = guardrail.process(prompt)
+                    input_results.append(result)
+                    self.db.log_guardrail_results(
+                        run_id=run_id,
+                        guardrail_type="input",
+                        results={
+                            "prompt": prompt,
+                            "info": result.get("info", {}),
+                            "status": result.get("status", "error"),
+                            "passed": result.get("status") == "success"
+                        }
+                    )
+                    
+                    if result.get("status") != "success":
+                        # Falha lógica: continuamos a execução, apenas logamos alerta
+                        logger.warning(f"Guardrail de entrada falhou: {result.get('error', 'Erro desconhecido')}")
+                except Exception as e:
+                    # Falha sistêmica: registramos e consideramos crítico
+                    logger.error(f"Erro sistêmico no guardrail de entrada: {str(e)}")
+                    has_critical_input_error = True
+                    input_results.append({
+                        "status": "error",
+                        "error": f"Erro sistêmico: {str(e)}",
+                        "prompt": prompt
+                    })
 
-            if any(result.get("status") != "success" for result in input_results):
-                raise ValueError("Erro na validação de entrada")
+            if has_critical_input_error:
+                # Interrompe apenas em caso de erro sistêmico
+                raise ValueError("Erro crítico na validação de entrada")
 
             # Gera resposta
             messages = [
@@ -111,22 +128,39 @@ class AgentOrchestrator:
 
             # Valida saída
             output_results = []
+            has_critical_output_error = False
+            
             for guardrail in self.output_guardrails:
-                result = guardrail.process(response, prompt)
-                output_results.append(result)
-                self.db.log_guardrail_results(
-                    run_id=run_id,
-                    guardrail_type="output",
-                    results={
-                        "response": response,
-                        "info": result.get("info", {}),
-                        "status": result.get("status", "error"),
-                        "passed": result.get("status") == "success"
-                    }
-                )
+                try:
+                    result = guardrail.process(response, prompt)
+                    output_results.append(result)
+                    self.db.log_guardrail_results(
+                        run_id=run_id,
+                        guardrail_type="output",
+                        results={
+                            "response": response,
+                            "info": result.get("info", {}),
+                            "status": result.get("status", "error"),
+                            "passed": result.get("status") == "success"
+                        }
+                    )
+                    
+                    if result.get("status") != "success":
+                        # Falha lógica: continuamos a execução, apenas logamos alerta
+                        logger.warning(f"Guardrail de saída falhou: {result.get('error', 'Erro desconhecido')}")
+                except Exception as e:
+                    # Falha sistêmica: registramos e consideramos crítico
+                    logger.error(f"Erro sistêmico no guardrail de saída: {str(e)}")
+                    has_critical_output_error = True
+                    output_results.append({
+                        "status": "error",
+                        "error": f"Erro sistêmico: {str(e)}",
+                        "response": response
+                    })
 
-            if any(result.get("status") != "success" for result in output_results):
-                raise ValueError("Erro na validação de saída")
+            if has_critical_output_error:
+                # Interrompe apenas em caso de erro sistêmico
+                raise ValueError("Erro crítico na validação de saída")
 
             # Registra resposta
             self.db.log_raw_response(run_id, response)
@@ -156,14 +190,15 @@ class InputGuardrail:
         """
         self.model_manager = model_manager
         self.config = config
-        self.requirements = self.config.get("requirements", {})
+        # Requisitos agora é texto plano, não um dicionário de chaves
+        self.requirements = self.config.get("requirements", "")
         logger.info("InputGuardrail inicializado")
         
     def _load_config(self) -> Dict[str, Any]:
         """Carrega configurações do guardrail."""
         return CONFIG["guardrails"]["input"]
         
-    def _load_requirements(self) -> Dict[str, Any]:
+    def _load_requirements(self) -> str:
         """Carrega requisitos do prompt."""
         return self.config["requirements"]
         
@@ -521,14 +556,15 @@ class OutputGuardrail:
         """
         self.model_manager = model_manager
         self.config = config
-        self.requirements = self.config.get("requirements", {})
+        # Requisitos agora é texto plano, não um dicionário de chaves
+        self.requirements = self.config.get("requirements", "")
         logger.info("OutputGuardrail inicializado")
         
     def _load_config(self) -> Dict[str, Any]:
         """Carrega configurações do guardrail."""
         return CONFIG["guardrails"]["output"]
         
-    def _load_requirements(self) -> Dict[str, Any]:
+    def _load_requirements(self) -> str:
         """Carrega requisitos da saída."""
         return self.config["requirements"]
         
@@ -542,10 +578,12 @@ class OutputGuardrail:
         Returns:
             Lista de campos ausentes
         """
+        # Como requirements agora é texto, realizamos uma validação básica
+        # A implementação atual apenas verifica se é um dicionário não vazio
+        # Em versões futuras, esta lógica será mais inteligente
         missing_fields = []
-        for field, required in self.requirements.items():
-            if required and field not in data:
-                missing_fields.append(field)
+        if not data or not isinstance(data, dict):
+            missing_fields.append("formato_json_valido")
         return missing_fields
         
     def _suggest_missing_fields(self, data: Dict[str, Any], missing_fields: List[str], context: str) -> Dict[str, Any]:

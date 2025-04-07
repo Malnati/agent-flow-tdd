@@ -6,16 +6,14 @@ GuardRails:
         Você é um especialista em análise de sistemas. Dado um pedido sucinto como "cadastro de endereço", identifique o título mais apropriado para o sistema solicitado. Seja conciso e direto. Retorne apenas:
         name: <título do sistema>
 
-      requirements: |
-        O título deve refletir o propósito principal do sistema ou funcionalidade descrita no pedido.
+      requirements: O título deve refletir o propósito principal do sistema ou funcionalidade descrita no pedido.
 
     identificar_descricao:
       system_prompt: |
         Dado o pedido e o título já identificado, forneça uma descrição detalhada da funcionalidade solicitada. Considere o contexto de sistemas de informação. Retorne apenas:
         description: <descrição detalhada>
 
-      requirements: |
-        A descrição deve incluir o escopo geral do sistema e seu objetivo principal, com clareza e sem ambiguidade.
+      requirements: A descrição deve incluir o escopo geral do sistema e seu objetivo principal, com clareza e sem ambiguidade.
 
     identificar_campos:
       system_prompt: |
@@ -26,8 +24,7 @@ GuardRails:
             format: ...
             required: true
 
-      requirements: |
-        Os campos devem ser compatíveis com o objetivo do sistema e descrever claramente as entradas esperadas.
+      requirements: Os campos devem ser compatíveis com o objetivo do sistema e descrever claramente as entradas esperadas.
 
   Output:
     gerar_prompt_tdd:
@@ -41,8 +38,17 @@ GuardRails:
           - <critério 2>
           - ...
 
-      requirements: |
-        O prompt gerado deve estar completo, coeso, e adequado para ser utilizado em um sistema de geração de código por TDD. 
+      requirements: O prompt gerado deve estar completo, coeso, e adequado para ser utilizado em um sistema de geração de código por TDD.
+
+    verificar_coerencia:
+      completion_prompt: |
+        Verifique se as informações extraídas (nome, descrição e campos) são coerentes entre si e com o pedido original. Identifique quaisquer inconsistências ou contradições. Retorne no formato YAML:
+        coerencia: true/false
+        problemas:
+          - <descrição do problema 1>
+          - <descrição do problema 2>
+
+      requirements: A análise deve verificar se todos os elementos são compatíveis entre si e representam adequadamente o sistema solicitado.
 
 # Configurações de Prompts do Sistema
 prompts:
