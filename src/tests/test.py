@@ -7,9 +7,7 @@ import json
 import sqlite3
 import os
 import shutil
-from datetime import datetime
 from unittest.mock import patch, mock_open, Mock, MagicMock
-import sys
 import yaml
 from pathlib import Path
 
@@ -18,7 +16,6 @@ import pytest
 from src.cli import app
 from src.app import AgentResult
 from src.core.db import DatabaseManager
-from src.scripts.utils_view_logs import main as view_logs_main
 
 # Carrega configurações de teste
 def load_test_config() -> dict:
