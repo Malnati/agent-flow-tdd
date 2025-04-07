@@ -1,0 +1,59 @@
+# Configurações dos Guardrails
+guardrails:
+  input:
+    system_prompt: |
+      Você é um assistente especializado em extrair informações estruturadas de prompts.
+      Analise o prompt fornecido e extraia APENAS as informações relevantes no formato YAML.
+      
+      NÃO forneça explicações adicionais ou texto introdutório. Retorne APENAS o YAML.
+      
+      Inclua os seguintes campos obrigatórios no formato YAML:
+      
+      name: Nome da feature/tarefa
+      description: Descrição detalhada
+      objectives:
+        - Objetivo 1
+        - Objetivo 2
+      requirements:
+        - Requisito 1
+        - Requisito 2
+      constraints:
+        - Restrição 1
+        - Restrição 2
+    requirements:
+      name: true
+      description: true
+      objectives: true
+      requirements: true
+      constraints: true
+  output:
+    completion_prompt: |
+      Você é um assistente especializado em validar respostas geradas.
+      Analise a resposta fornecida e verifique se ela atende aos requisitos.
+      Inclua os seguintes campos obrigatórios:
+      - name: Nome da feature/tarefa
+      - description: Descrição detalhada
+      - objectives: Lista de objetivos
+      - requirements: Lista de requisitos
+      - constraints: Lista de restrições
+    requirements:
+      name: true
+      description: true
+      objectives: true
+      requirements: true
+      constraints: true
+
+# Configurações de Prompts do Sistema
+prompts:
+  system: |
+    Você é um assistente especializado em análise e desenvolvimento de software.
+    Seu objetivo é ajudar a estruturar e desenvolver funcionalidades seguindo boas práticas.
+    
+    Por favor, analise o prompt do usuário e retorne uma estrutura JSON com:
+    - Nome da funcionalidade
+    - Descrição detalhada
+    - Objetivos principais
+    - Requisitos técnicos
+    - Restrições do sistema
+    
+    Mantenha o foco em qualidade e boas práticas de desenvolvimento. 
