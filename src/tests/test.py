@@ -365,7 +365,6 @@ def test_mcp_mode(test_env):
         elif isinstance(content, dict) and "code" in content:
             assert "def fatorial" in content["code"], "A saída não contém a função de fatorial"
 
-# test_app_mode removed as it's no longer necessary
 
 def test_feature_command_success(mock_get_orchestrator, mock_validate_env, capsys, mock_env, mock_kernel_config):
     """Testa o comando feature com sucesso."""
