@@ -67,7 +67,46 @@ cli:
         - "Qualidade:"
         - "Banco de Dados:"
         - "Publicação:"
+        - "Documentação:"
       commands:
         - "make install"
         - "make test"
         - "make logs"
+        - "make docs-serve"
+        - "make docs-build"
+        - "make docs-deploy"
+        - "make docs-generate"
+
+# Configurações de Documentação
+docs:
+  required_files:
+    - "src/configs/mkdocs.yml"
+    - "docs/index.md"
+  test_data:
+    mock_section:
+      section: "overview"
+      subsection: "index"
+      content: "# Visão Geral\n\nDocumentação de teste gerada pela IA."
+    mock_response:
+      content: "# Teste\nConteúdo gerado pela IA"
+      metadata:
+        type: "docs"
+        section: "test"
+        subsection: "index"
+        options:
+          model: "tinyllama-1.1b"
+          format: "markdown"
+  messages:
+    serve:
+      start: "🚀 Iniciando servidor de documentação..."
+      success: "✅ Servidor iniciado em http://localhost:8000"
+    build:
+      start: "📚 Gerando documentação estática..."
+      success: "✅ Documentação gerada em site/"
+    deploy:
+      start: "🚀 Fazendo deploy da documentação..."
+      success: "✅ Documentação publicada!"
+    generate:
+      start: "🤖 Gerando documentação via IA..."
+      success: "✅ Documentação gerada!"
+      error: "❌ Erro ao gerar documentação: {error}"

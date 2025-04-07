@@ -202,6 +202,27 @@ def test_env(tmp_path):
     yield tmp_path
     os.chdir(original_dir)
 
+@pytest.fixture
+def mock_mkdocs():
+    """Mock do módulo mkdocs."""
+    with patch("mkdocs.commands.serve.serve") as mock_serve, \
+         patch("mkdocs.commands.build.build") as mock_build, \
+         patch("mkdocs.commands.gh_deploy.gh_deploy") as mock_deploy:
+        yield {
+            "serve": mock_serve,
+            "build": mock_build,
+            "deploy": mock_deploy
+        }
+
+@pytest.fixture
+def mock_docs_generator():
+    """Mock do DocsGenerator."""
+    with patch("src.scripts.generate_docs.DocsGenerator") as mock:
+        mock_instance = Mock()
+        mock_instance.generate_all = Mock()
+        mock.return_value = mock_instance
+        yield mock_instance
+
 # Testes do CLI
 def test_feature_command_success(mock_get_orchestrator, mock_validate_env, capsys, mock_env, mock_kernel_config):
     """Testa o comando feature com sucesso."""
@@ -808,3 +829,115 @@ def test_tinyllama_fallback():
             # Verifica chamadas
             assert mock_instance.create_chat_completion.call_count == 2
             assert response == "Resposta de fallback" 
+
+def test_docs_serve_command(mock_mkdocs, capsys):
+    """Testa o comando docs-serve."""
+    # Simula execução do comando
+    os.system("make docs-serve")
+    
+    # Verifica se o comando mkdocs serve foi chamado com o arquivo correto
+    mock_mkdocs["serve"].assert_called_once()
+    config_file = mock_mkdocs["serve"].call_args[1].get("config_file")
+    assert config_file == "src/configs/mkdocs.yml"
+    
+    # Verifica mensagens no console usando as configurações de teste
+    captured = capsys.readouterr()
+    assert TEST_CONFIG["docs"]["messages"]["serve"]["start"] in captured.out
+
+def test_docs_build_command(mock_mkdocs, capsys):
+    """Testa o comando docs-build."""
+    # Simula execução do comando
+    os.system("make docs-build")
+    
+    # Verifica se o comando mkdocs build foi chamado com o arquivo correto
+    mock_mkdocs["build"].assert_called_once()
+    config_file = mock_mkdocs["build"].call_args[1].get("config_file")
+    assert config_file == "src/configs/mkdocs.yml"
+    
+    # Verifica mensagens no console usando as configurações de teste
+    captured = capsys.readouterr()
+    assert TEST_CONFIG["docs"]["messages"]["build"]["start"] in captured.out
+    assert TEST_CONFIG["docs"]["messages"]["build"]["success"] in captured.out
+
+def test_docs_deploy_command(mock_mkdocs, capsys):
+    """Testa o comando docs-deploy."""
+    # Simula execução do comando
+    os.system("make docs-deploy")
+    
+    # Verifica se o comando mkdocs gh-deploy foi chamado com o arquivo correto
+    mock_mkdocs["deploy"].assert_called_once()
+    config_file = mock_mkdocs["deploy"].call_args[1].get("config_file")
+    assert config_file == "src/configs/mkdocs.yml"
+    
+    # Verifica mensagens no console usando as configurações de teste
+    captured = capsys.readouterr()
+    assert TEST_CONFIG["docs"]["messages"]["deploy"]["start"] in captured.out
+    assert TEST_CONFIG["docs"]["messages"]["deploy"]["success"] in captured.out
+
+def test_docs_generate_command(mock_docs_generator, capsys, mock_env):
+    """Testa o comando docs-generate."""
+    # Simula execução do comando
+    os.system("make docs-generate")
+    
+    # Verifica se o gerador foi chamado
+    mock_docs_generator.generate_all.assert_called_once()
+    
+    # Verifica se o diretório docs foi criado
+    assert os.path.exists("docs")
+    
+    # Verifica mensagens no console usando as configurações de teste
+    captured = capsys.readouterr()
+    assert TEST_CONFIG["docs"]["messages"]["generate"]["start"] in captured.out
+    assert TEST_CONFIG["docs"]["messages"]["generate"]["success"] in captured.out
+
+def test_docs_generate_error_handling(mock_docs_generator, capsys):
+    """Testa o tratamento de erros no comando docs-generate."""
+    # Configura o mock para lançar uma exceção
+    error_msg = "Erro ao gerar documentação"
+    mock_docs_generator.generate_all.side_effect = Exception(error_msg)
+    
+    # Simula execução do comando
+    os.system("make docs-generate")
+    
+    # Verifica mensagens de erro no console usando as configurações de teste
+    captured = capsys.readouterr()
+    expected_error = TEST_CONFIG["docs"]["messages"]["generate"]["error"].format(error=error_msg)
+    assert expected_error in captured.err
+
+def test_docs_generator_section_creation(mock_docs_generator, tmp_path):
+    """Testa a criação de seções pelo DocsGenerator."""
+    from src.scripts.generate_docs import DocsGenerator
+    
+    # Configura um diretório temporário para os testes
+    docs_dir = tmp_path / "docs"
+    generator = DocsGenerator()
+    generator.docs_dir = docs_dir
+    
+    # Usa dados de teste da configuração
+    test_section = TEST_CONFIG["docs"]["test_data"]["mock_section"]
+    generator.generate_section(test_section["section"], test_section["subsection"])
+    
+    # Verifica se o diretório e arquivo foram criados
+    assert (docs_dir / test_section["section"]).exists()
+    assert (docs_dir / test_section["section"] / f"{test_section['subsection']}.md").exists()
+
+def test_docs_generator_orchestrator_integration(mock_orchestrator):
+    """Testa a integração do DocsGenerator com o AgentOrchestrator."""
+    from src.scripts.generate_docs import DocsGenerator
+    
+    # Configura o mock do orchestrator para retornar um resultado específico usando dados de teste
+    mock_response = TEST_CONFIG["docs"]["test_data"]["mock_response"]
+    mock_orchestrator.handle_input.return_value = json.dumps(mock_response)
+    
+    # Instancia o gerador
+    generator = DocsGenerator()
+    generator.orchestrator = mock_orchestrator
+    
+    # Gera uma seção usando dados de teste
+    generator.generate_section(mock_response["metadata"]["section"], mock_response["metadata"]["subsection"])
+    
+    # Verifica se o orchestrator foi chamado com os parâmetros corretos
+    mock_orchestrator.handle_input.assert_called_once()
+    call_args = mock_orchestrator.handle_input.call_args[0][0]
+    assert mock_response["metadata"]["section"] in call_args
+    assert mock_response["metadata"]["options"]["model"] in call_args 
