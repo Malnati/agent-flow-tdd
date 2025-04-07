@@ -200,7 +200,12 @@ Atualmente:
 
 Para usar o TinyLLaMA:
 
-1. Baixe o modelo quantizado (formato .gguf) e coloque em `models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf`
+1. O modelo será baixado automaticamente durante a instalação (`make install`). 
+   Alternativamente, você pode baixá-lo manualmente:
+```bash
+make download-model
+```
+
 2. Use o modelo via CLI:
 ```bash
 prompt-tdd feature "Criar API" --model tinyllama-1.1b
