@@ -37,9 +37,7 @@ help:
 	@echo ""
 	@echo "Qualidade:"
 	@echo "  make test       - Executa todos os testes"
-	@echo "  make test-dev   - Executa apenas testes principais (rápidos)"
 	@echo "  make test-e2e   - Executa todos os testes end-to-end"
-	@echo "  make test-e2e-dev - Executa apenas testes end-to-end principais"
 	@echo "  make coverage   - Gera relatório de cobertura"
 	@echo "  make lint       - Executa linters"
 	@echo "  make format     - Formata código"
@@ -70,13 +68,6 @@ test:
 	@echo "🧪 Executando testes..."
 	$(PYTHON) -m pytest src/tests/ -v -m "not install"
 	@echo "✅ Testes concluídos!"
-	@make autoflake
-
-# Testes principais (desenvolvimento)
-test-dev:
-	@echo "🧪 Executando testes principais..."
-	$(PYTHON) -m pytest src/tests/ -v -m "core and not install and not slow"
-	@echo "✅ Testes principais concluídos!"
 	@make autoflake
 
 # Execução do CLI
@@ -183,14 +174,6 @@ test-e2e:
 	@make db-clean
 	@make db-init
 	$(PYTHON) -m pytest -v -m e2e src/tests/test_e2e.py
-
-# Testes end-to-end principais (desenvolvimento)
-test-e2e-dev:
-	@echo "🧪 Executando testes end-to-end principais..."
-	@echo "🗄️ Reinicializando banco de dados..."
-	@make db-clean
-	@make db-init
-	$(PYTHON) -m pytest -v -m "e2e and core and not slow" src/tests/test_e2e.py
 
 # Download do modelo TinyLLaMA
 download-model:
