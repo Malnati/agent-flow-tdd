@@ -8,8 +8,11 @@ import os
 import sys
 import json
 import argparse
-from typing import Dict, Any, Optional
+import subprocess
+import uuid
+from typing import Dict, Any
 from dataclasses import dataclass
+from pathlib import Path
 from rich.console import Console
 
 from src.core.agents import AgentOrchestrator
@@ -47,11 +50,23 @@ def get_orchestrator() -> AgentOrchestrator:
     try:
         # Inicializa componentes
         model_manager = ModelManager()
+        
+        # Verifica se o modelo é o tinyllama e se está disponível
+        if model_manager.model_name.startswith("tinyllama-") and not model_manager.tinyllama_model:
+            logger.warning("Modelo TinyLlama não disponível. Iniciando com modelo OpenAI como fallback.")
+            # Define o modelo para um modelo que não requer arquivo local
+            os.environ["DEFAULT_MODEL"] = "gpt-3.5-turbo"
+            # Reinicializa o model_manager com o novo modelo padrão
+            model_manager = ModelManager()
+            
         db = DatabaseManager()
         
-        # Cria e retorna orquestrador
-        orchestrator = AgentOrchestrator(model_manager, db)
-        logger.info("Orquestrador inicializado com sucesso")
+        # Cria e configura orquestrador - apenas model_manager como parâmetro
+        orchestrator = AgentOrchestrator(model_manager)
+        # Define o db como atributo separado
+        orchestrator.db = db
+        
+        logger.info(f"Orquestrador inicializado com sucesso usando modelo {model_manager.model_name}")
         return orchestrator
         
     except Exception as e:
@@ -72,7 +87,6 @@ def run_app_mode():
         # Executa o orquestrador
         result = orchestrator.execute(
             prompt=prompt,
-            session_id="app",
             format="json"
         )
         
@@ -103,8 +117,7 @@ def run_cli_mode(args):
         orchestrator = get_orchestrator()
         result = orchestrator.execute(
             prompt=args.prompt, 
-            format=args.format, 
-            session_id=args.session_id
+            format=args.format
         )
         
         # Formata a saída de acordo com o formato especificado
@@ -114,13 +127,10 @@ def run_cli_mode(args):
         # Registra a execução no banco
         db = DatabaseManager()
         db.log_run(
-            prompt=args.prompt,
-            output=result.output,
-            output_type=args.format,
-            format=args.format,
-            raw_responses=result.raw_responses,
-            guardrails=result.guardrails,
-            items=result.items
+            args.session_id if hasattr(args, 'session_id') else str(uuid.uuid4()),
+            input=args.prompt,
+            final_output=result.output,
+            output_type=args.format
         )
             
         return 0
@@ -139,7 +149,10 @@ class MCPHandler:
         """Inicializa o manipulador MCP."""
         self.model_manager = ModelManager()
         self.db = DatabaseManager()
-        self.orchestrator = AgentOrchestrator(self.model_manager, self.db)
+        # Cria e configura orquestrador - apenas model_manager como parâmetro
+        self.orchestrator = AgentOrchestrator(self.model_manager)
+        # Define o db como atributo separado
+        self.orchestrator.db = self.db
         logger.info("MCPHandler inicializado")
         
     def process_message(self, message: Message) -> Response:
@@ -156,7 +169,6 @@ class MCPHandler:
             # Executa o orquestrador
             result = self.orchestrator.execute(
                 prompt=message.content,
-                session_id=message.metadata.get("session_id", "mcp"),
                 format=message.metadata.get("format", "json")
             )
             
@@ -249,10 +261,50 @@ def run_mcp_mode():
     handler = MCPHandler()
     handler.run()
 
+def check_model_availability():
+    """
+    Verifica se o modelo TinyLlama está disponível e tenta baixá-lo se necessário.
+    """
+    try:
+        # Verifica a variável de ambiente para determinar se deve usar modelo local
+        use_local_model = os.environ.get("USE_LOCAL_MODEL", "true").lower() == "true"
+        if not use_local_model:
+            logger.info("Configurado para não usar modelo local, pulando verificação de disponibilidade")
+            return
+            
+        # Verifica se o arquivo do modelo existe
+        base_dir = Path(__file__).resolve().parent.parent
+        model_path = os.path.join(base_dir, "models", "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf")
+        
+        if not os.path.exists(model_path) or os.path.getsize(model_path) < 1000000:  # Menos de 1MB
+            logger.warning(f"Modelo TinyLlama não encontrado ou incompleto em: {model_path}")
+            logger.info("Tentando baixar o modelo usando 'make download-model'...")
+            
+            # Executa o comando make para baixar o modelo
+            result = subprocess.run(["make", "download-model"], 
+                                   cwd=base_dir,
+                                   capture_output=True, 
+                                   text=True)
+            
+            if result.returncode == 0:
+                logger.info("Modelo baixado com sucesso!")
+            else:
+                logger.warning(f"Falha ao baixar o modelo: {result.stderr}")
+                logger.warning("O sistema usará um modelo de fallback.")
+        else:
+            logger.info(f"Modelo TinyLlama encontrado: {model_path}")
+            
+    except Exception as e:
+        logger.warning(f"Erro ao verificar/baixar modelo: {str(e)}")
+        logger.warning("O sistema usará um modelo de fallback.")
+
 # ----- Função principal -----
 
 def main():
     """Função principal que unifica todas as entradas."""
+    # Verifica a disponibilidade do modelo
+    check_model_availability()
+    
     parser = argparse.ArgumentParser(description="Prompt TDD - Sistema unificado")
     subparsers = parser.add_subparsers(dest="mode", help="Modo de execução")
     

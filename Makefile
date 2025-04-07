@@ -19,6 +19,12 @@ ifneq (,$(wildcard .env))
     export
 endif
 
+# Definição de variáveis com valores padrão
+prompt ?= Olá
+format ?= json
+session_id ?= cli
+mode ?= cli
+
 # Ajuda
 help:
 	@echo "Comandos disponíveis:"

@@ -6,7 +6,7 @@ import logging
 import os
 import sqlite3
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 logger = logging.getLogger(__name__)
 
@@ -222,7 +222,7 @@ class DatabaseManager:
         
     def log_guardrail_results(self, run_id: int, guardrail_type: str, results: Dict[str, Any]):
         """
-        Registra resultados de guardrails.
+        Registra resultados de guardrail.
         
         Args:
             run_id: ID da execução
@@ -239,24 +239,30 @@ class DatabaseManager:
         cursor.execute("""
         INSERT INTO raw_responses (run_id, response_id, content)
         VALUES (?, ?, ?)
-        """, (run_id, guardrail_type, json.dumps(results["results"])))
+        """, (run_id, guardrail_type, json.dumps(results)))
         
         self.conn.commit()
         
-    def log_raw_response(self, run_id: int, response: Dict[str, Any]):
+    def log_raw_response(self, run_id: int, response: Union[Dict[str, Any], str]):
         """
         Registra uma resposta bruta do modelo.
         
         Args:
             run_id: ID da execução
-            response: Resposta do modelo
+            response: Resposta do modelo (string ou dict)
         """
         cursor = self.conn.cursor()
         
+        # Se a resposta for uma string, converte para dict
+        if isinstance(response, str):
+            response_dict = {"text": response}
+        else:
+            response_dict = response
+            
         cursor.execute("""
         INSERT INTO raw_responses (run_id, response_id, content)
         VALUES (?, ?, ?)
-        """, (run_id, "output", json.dumps(response)))
+        """, (run_id, "output", json.dumps(response_dict)))
         
         self.conn.commit()
         

@@ -163,12 +163,30 @@ class ModelManager:
         try:
             from llama_cpp import Llama
             tinyllama_config = self.config['providers']['tinyllama']
-            self.tinyllama_model = Llama(
-                model_path=tinyllama_config['model_path'],
-                n_ctx=tinyllama_config['n_ctx'],
-                n_threads=tinyllama_config['n_threads']
-            )
-        except (ImportError, FileNotFoundError) as e:
+            model_path = tinyllama_config['model_path']
+            
+            # Verifica se o modelo existe
+            if os.path.exists(model_path) and os.path.getsize(model_path) > 1000000:  # Tamanho mínimo de 1MB
+                try:
+                    # Primeira tentativa - API mais recente
+                    self.tinyllama_model = Llama(
+                        model_path=model_path,
+                        n_ctx=tinyllama_config['n_ctx'],
+                        n_threads=tinyllama_config['n_threads']
+                    )
+                    logger.info(f"TinyLLaMA carregado com sucesso: {model_path}")
+                except TypeError as e:
+                    if "positional arguments but 3 were given" in str(e):
+                        # Segunda tentativa - API mais antiga
+                        # Passar apenas o caminho do modelo
+                        self.tinyllama_model = Llama(model_path)
+                        logger.info(f"TinyLLaMA carregado com API legada: {model_path}")
+                    else:
+                        raise
+            else:
+                logger.warning(f"Arquivo de modelo TinyLLaMA não encontrado ou muito pequeno: {model_path}")
+                self.tinyllama_model = None
+        except (ImportError, FileNotFoundError, ValueError) as e:
             logger.warning(f"TinyLLaMA não disponível: {str(e)}")
             self.tinyllama_model = None
         
@@ -342,15 +360,18 @@ class ModelManager:
                     full_prompt += f"<|system|>\n{system}</s>\n"
                 full_prompt += f"<|user|>\n{prompt}</s>\n<|assistant|>\n"
                 
-                # Gera resposta
+                # Parâmetros para geração
+                max_tokens = kwargs.get('max_tokens', self.max_tokens) or self.config['providers']['tinyllama'].get('default_max_tokens', 256)
+                temperature = kwargs.get('temperature', self.temperature)
+                stop = ["</s>", "<|user|>", "<|system|>", "<|assistant|>"]
+                
+                # Usa apenas a API direta, que funciona em todas as versões
                 response = self.tinyllama_model(
                     full_prompt,
-                    max_tokens=kwargs.get('max_tokens', self.max_tokens) or self.config['providers']['tinyllama'].get('default_max_tokens', 256),
-                    temperature=kwargs.get('temperature', self.temperature),
-                    stop=["</s>", "<|user|>", "<|system|>", "<|assistant|>"]
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    stop=stop
                 )
-                
-                # Extrai o texto da resposta
                 text = response["choices"][0]["text"].strip()
                 
                 # Tenta extrair JSON se presente
@@ -369,29 +390,14 @@ class ModelManager:
                         json_data = json.loads(json_str)
                         text = json.dumps(json_data, ensure_ascii=False)
                     else:
-                        # Se não encontrou JSON, retorna estrutura padrão
-                        text = json.dumps({
-                            "name": "Sistema Genérico",
-                            "description": "Sistema a ser especificado",
-                            "objectives": ["Definir objetivos específicos"],
-                            "requirements": ["Definir requisitos específicos"],
-                            "constraints": ["Definir restrições do sistema"]
-                        }, ensure_ascii=False)
+                        # Se não encontrou JSON, retorna texto normal
+                        text = text
                 except Exception as e:
                     logger.error(f"Erro ao processar resposta JSON: {str(e)}")
-                    # Retorna estrutura padrão em caso de erro
-                    text = json.dumps({
-                        "name": "Sistema Genérico",
-                        "description": "Sistema a ser especificado",
-                        "objectives": ["Definir objetivos específicos"],
-                        "requirements": ["Definir requisitos específicos"],
-                        "constraints": ["Definir restrições do sistema"]
-                    }, ensure_ascii=False)
+                    # Mantém o texto original em caso de erro
                 
                 return text, {
-                    "model": self.model_name,
-                    "provider": provider,
-                    "status": "success",
+                    "model": "tinyllama-1.1b",
                     "usage": {
                         "prompt_tokens": len(full_prompt.split()),
                         "completion_tokens": len(text.split()),
@@ -526,38 +532,66 @@ class ModelManager:
             
         return available_models 
 
-    def generate_response(self, prompt: str, **kwargs) -> str:
+    def generate_response(self, messages: list, **kwargs) -> str:
         """
-        Gera uma resposta usando o modelo.
+        Gera uma resposta usando o modelo para um conjunto de mensagens.
 
         Args:
-            prompt: Prompt para o modelo
+            messages: Lista de mensagens no formato [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}]
             **kwargs: Argumentos adicionais para o modelo
 
         Returns:
             Resposta gerada
         """
         try:
-            # Tenta gerar resposta
-            response = self.model.create_chat_completion(
-                messages=[
-                    {"role": "system", "content": kwargs.get("system_prompt", "")},
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            return response["choices"][0]["message"]["content"]
+            # Extrair o prompt do usuário e o prompt do sistema, se fornecidos
+            system_prompt = ""
+            user_prompt = ""
+            
+            for msg in messages:
+                if msg["role"] == "system":
+                    system_prompt = msg["content"]
+                elif msg["role"] == "user":
+                    user_prompt = msg["content"]
+            
+            # Usa o método interno que já está implementado corretamente
+            response = self._generate_with_model(system_prompt, user_prompt)
+            
+            if response is None:
+                raise ValueError("Falha ao gerar resposta com o modelo")
+                
+            return response
+            
         except Exception as e:
-            if self.config["fallback"]["enabled"]:
-                # Tenta novamente com fallback
+            if self.fallback_enabled:
+                # Tenta novamente com modelo de fallback
+                original_model = self.model_name
                 try:
-                    response = self.model.create_chat_completion(
-                        messages=[
-                            {"role": "system", "content": kwargs.get("system_prompt", "")},
-                            {"role": "user", "content": prompt}
-                        ]
-                    )
-                    return response["choices"][0]["message"]["content"]
+                    # Configura para usar o modelo de fallback
+                    self.model_name = self.elevation_model
+                    system_prompt = ""
+                    user_prompt = ""
+                    
+                    for msg in messages:
+                        if msg["role"] == "system":
+                            system_prompt = msg["content"]
+                        elif msg["role"] == "user":
+                            user_prompt = msg["content"]
+                    
+                    # Tenta com modelo de fallback
+                    response = self._generate_with_model(system_prompt, user_prompt)
+                    
+                    # Restaura o modelo original
+                    self.model_name = original_model
+                    
+                    if response is None:
+                        raise ValueError("Falha ao gerar resposta com modelo de fallback")
+                        
+                    return response
+                    
                 except Exception as e2:
+                    # Restaura o modelo original
+                    self.model_name = original_model
                     raise ValueError(f"Erro no fallback: {e2}") from e2
             else:
                 raise ValueError(f"Erro ao gerar resposta: {e}") from e
@@ -716,15 +750,18 @@ class ModelManager:
                 full_prompt += f"<|system|>\n{system}</s>\n"
             full_prompt += f"<|user|>\n{prompt}</s>\n<|assistant|>\n"
             
-            # Gera resposta
+            # Parâmetros para geração
+            max_tokens = kwargs.get('max_tokens', self.max_tokens) or self.config['providers']['tinyllama'].get('default_max_tokens', 256)
+            temperature = kwargs.get('temperature', self.temperature)
+            stop = ["</s>", "<|user|>", "<|system|>", "<|assistant|>"]
+            
+            # Usa apenas a API direta, que funciona em todas as versões
             response = self.tinyllama_model(
                 full_prompt,
-                max_tokens=kwargs.get('max_tokens', self.max_tokens) or self.config['providers']['tinyllama'].get('default_max_tokens', 256),
-                temperature=kwargs.get('temperature', self.temperature),
-                stop=["</s>", "<|user|>", "<|system|>", "<|assistant|>"]
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stop=stop
             )
-            
-            # Extrai o texto da resposta
             text = response["choices"][0]["text"].strip()
             
             # Tenta extrair JSON se presente
@@ -743,24 +780,11 @@ class ModelManager:
                     json_data = json.loads(json_str)
                     text = json.dumps(json_data, ensure_ascii=False)
                 else:
-                    # Se não encontrou JSON, retorna estrutura padrão
-                    text = json.dumps({
-                        "name": "Sistema Genérico",
-                        "description": "Sistema a ser especificado",
-                        "objectives": ["Definir objetivos específicos"],
-                        "requirements": ["Definir requisitos específicos"],
-                        "constraints": ["Definir restrições do sistema"]
-                    }, ensure_ascii=False)
+                    # Se não encontrou JSON, retorna texto normal
+                    text = text
             except Exception as e:
                 logger.error(f"Erro ao processar resposta JSON: {str(e)}")
-                # Retorna estrutura padrão em caso de erro
-                text = json.dumps({
-                    "name": "Sistema Genérico",
-                    "description": "Sistema a ser especificado",
-                    "objectives": ["Definir objetivos específicos"],
-                    "requirements": ["Definir requisitos específicos"],
-                    "constraints": ["Definir restrições do sistema"]
-                }, ensure_ascii=False)
+                # Mantém o texto original em caso de erro
             
             return text, {
                 "model": "tinyllama-1.1b",
@@ -770,7 +794,7 @@ class ModelManager:
                     "total_tokens": len(full_prompt.split()) + len(text.split())
                 }
             }
-                
+            
         except Exception as e:
             logger.error(f"Erro ao gerar resposta com TinyLLaMA: {str(e)}")
             # Retorna estrutura padrão em caso de erro
