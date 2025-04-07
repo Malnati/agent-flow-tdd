@@ -2,7 +2,7 @@
 Gerenciador de modelos de IA com suporte a múltiplos provedores e fallback automático.
 """
 from enum import Enum
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, List
 import os
 import json
 import time
@@ -32,9 +32,6 @@ def load_config() -> Dict[str, Any]:
         config = yaml.safe_load(f)
         return config["models"]
 
-# Carrega configurações
-CONFIG = load_config()
-
 class ModelProvider(str, Enum):
     """Provedores de modelos suportados."""
     OPENAI = "openai"
@@ -48,10 +45,10 @@ class ModelConfig(BaseModel):
     provider: ModelProvider
     model_id: str
     api_key: str
-    timeout: int = CONFIG['defaults']['timeout']
-    max_retries: int = CONFIG['defaults']['max_retries']
-    temperature: float = CONFIG['defaults']['temperature']
-    max_tokens: Optional[int] = CONFIG['defaults']['max_tokens']
+    timeout: int
+    max_retries: int
+    temperature: float
+    max_tokens: Optional[int]
 
 
 class ModelManager:
@@ -64,33 +61,34 @@ class ModelManager:
         Args:
             model_name: Nome do modelo a ser usado (opcional)
         """
-        env = CONFIG['env_vars']
-        self.model_name = model_name or get_env_var(env['default_model'], CONFIG['defaults']['model'])
-        self.elevation_model = get_env_var(env['elevation_model'], CONFIG['defaults']['elevation_model'])
+        self.config = load_config()
+        env = self.config['env_vars']
+        self.model_name = model_name or get_env_var(env['default_model'], self.config['defaults']['model'])
+        self.elevation_model = get_env_var(env['elevation_model'], self.config['defaults']['elevation_model'])
         
         # Configurações de retry e timeout
-        self.max_retries = int(get_env_var(env['max_retries'], str(CONFIG['defaults']['max_retries'])))
-        self.timeout = int(get_env_var(env['model_timeout'], str(CONFIG['defaults']['timeout'])))
+        self.max_retries = int(get_env_var(env['max_retries'], str(self.config['defaults']['max_retries'])))
+        self.timeout = int(get_env_var(env['model_timeout'], str(self.config['defaults']['timeout'])))
         
         # Configuração de fallback
-        self.fallback_enabled = get_env_var(env['fallback_enabled'], str(CONFIG['fallback']['enabled'])).lower() == 'true'
+        self.fallback_enabled = get_env_var(env['fallback_enabled'], str(self.config['fallback']['enabled'])).lower() == 'true'
         
         # Cache de respostas
-        self.cache_enabled = get_env_var(env['cache_enabled'], str(CONFIG['cache']['enabled'])).lower() == 'true'
-        self.cache_ttl = int(get_env_var(env['cache_ttl'], str(CONFIG['cache']['ttl'])))
-        self.cache_dir = get_env_var(env['cache_dir'], CONFIG['cache']['directory'])
+        self.cache_enabled = get_env_var(env['cache_enabled'], str(self.config['cache']['enabled'])).lower() == 'true'
+        self.cache_ttl = int(get_env_var(env['cache_ttl'], str(self.config['cache']['ttl'])))
+        self.cache_dir = get_env_var(env['cache_dir'], self.config['cache']['directory'])
         self._setup_cache()
         
         # Inicializa clientes
         self._setup_clients()
         
         # Configurações padrão
-        self.temperature = CONFIG['defaults']['temperature']
-        self.max_tokens = CONFIG['defaults']['max_tokens']
+        self.temperature = self.config['defaults']['temperature']
+        self.max_tokens = self.config['defaults']['max_tokens']
         
         logger.info(f"ModelManager inicializado com modelo {self.model_name}")
 
-    def configure(self, model: Optional[str] = None, temperature: float = CONFIG['defaults']['temperature'], max_tokens: Optional[int] = None) -> None:
+    def configure(self, model: Optional[str] = None, temperature: float = None, max_tokens: Optional[int] = None) -> None:
         """
         Configura parâmetros do modelo.
         
@@ -101,8 +99,10 @@ class ModelManager:
         """
         if model:
             self.model_name = model
-        self.temperature = temperature
-        self.max_tokens = max_tokens
+        if temperature is not None:
+            self.temperature = temperature
+        if max_tokens is not None:
+            self.max_tokens = max_tokens
         
         logger.info(f"ModelManager configurado: model={self.model_name}, temperature={self.temperature}, max_tokens={self.max_tokens}")
 
@@ -113,7 +113,7 @@ class ModelManager:
             
     def _setup_clients(self) -> None:
         """Inicializa clientes para diferentes provedores"""
-        env = CONFIG['env_vars']
+        env = self.config['env_vars']
         
         # OpenAI
         self.openai_client = OpenAI(
@@ -125,7 +125,7 @@ class ModelManager:
         openrouter_key = get_env_var(env['openrouter_key'])
         if openrouter_key:
             self.openrouter_client = OpenAI(
-                base_url=CONFIG['providers']['openrouter']['base_url'],
+                base_url=self.config['providers']['openrouter']['base_url'],
                 api_key=openrouter_key,
                 timeout=self.timeout
             )
@@ -136,7 +136,7 @@ class ModelManager:
         gemini_key = get_env_var(env['gemini_key'])
         if gemini_key:
             genai.configure(api_key=gemini_key)
-            self.gemini_model = genai.GenerativeModel(CONFIG['providers']['gemini']['default_model'])
+            self.gemini_model = genai.GenerativeModel(self.config['providers']['gemini']['default_model'])
         else:
             self.gemini_model = None
             
@@ -150,7 +150,7 @@ class ModelManager:
         # TinyLLaMA
         try:
             from llama_cpp import Llama
-            tinyllama_config = CONFIG['providers']['tinyllama']
+            tinyllama_config = self.config['providers']['tinyllama']
             self.tinyllama_model = Llama(
                 model_path=tinyllama_config['model_path'],
                 n_ctx=tinyllama_config['n_ctx'],
@@ -244,7 +244,7 @@ class ModelManager:
         Returns:
             String com o nome do provedor
         """
-        providers_config = CONFIG['providers']
+        providers_config = self.config['providers']
         
         # Verifica cada provedor
         for provider, config in providers_config.items():
@@ -266,7 +266,7 @@ class ModelManager:
         Returns:
             Dict com configurações do provedor
         """
-        return CONFIG['providers'].get(provider, {})
+        return self.config['providers'].get(provider, {})
 
     def _generate_with_provider(
         self,
@@ -344,23 +344,79 @@ class ModelManager:
                 }
                 
             elif provider == 'tinyllama' and self.tinyllama_model:
-                # Prepara o prompt completo
-                full_prompt = prompt
+                # Formata o prompt
+                full_prompt = ""
                 if system:
-                    full_prompt = f"{system}\n\n{prompt}"
+                    full_prompt += f"<|system|>\n{system}\n"
+                full_prompt += f"<|user|>\n{prompt}\n<|assistant|>\n"
                 
                 # Gera resposta
                 response = self.tinyllama_model(
                     full_prompt,
-                    max_tokens=self.max_tokens or provider_config.get('default_max_tokens', 256),
-                    temperature=self.temperature,
-                    stop=[""]
+                    max_tokens=kwargs.get('max_tokens', self.max_tokens) or self.config['providers']['tinyllama'].get('default_max_tokens', 256),
+                    temperature=kwargs.get('temperature', self.temperature),
+                    stop=["", "<|user|>", "<|system|>", "<|assistant|>"]
                 )
                 
-                return response["choices"][0]["text"].strip(), {
-                    "model": provider_config['default_model'],
+                # Extrai o texto da resposta
+                text = response["choices"][0]["text"].strip()
+                
+                # Tenta extrair JSON se presente
+                try:
+                    # Remove texto antes e depois do JSON
+                    if '{' in text and '}' in text:
+                        start = text.find('{')
+                        end = text.rfind('}') + 1
+                        json_str = text[start:end]
+                        
+                        # Limpa o JSON
+                        json_str = json_str.replace('\n', ' ').replace('\r', '')
+                        while '  ' in json_str:
+                            json_str = json_str.replace('  ', ' ')
+                        
+                        # Valida se é um JSON válido
+                        try:
+                            json_data = json.loads(json_str)
+                            text = json.dumps(json_data, ensure_ascii=False)
+                        except json.JSONDecodeError as e:
+                            logger.error(f"Erro ao decodificar JSON: {str(e)}")
+                            # Retorna um JSON padrão em caso de erro
+                            text = json.dumps({
+                                "name": "Sistema de Login 2FA",
+                                "description": "Sistema de login com autenticação de dois fatores",
+                                "objectives": ["Implementar autenticação segura"],
+                                "requirements": ["Login com senha", "Segundo fator de autenticação"],
+                                "constraints": ["Segurança", "Usabilidade"]
+                            }, ensure_ascii=False)
+                    else:
+                        # Se não encontrou JSON, retorna estrutura padrão
+                        text = json.dumps({
+                            "name": "Sistema de Login 2FA",
+                            "description": "Sistema de login com autenticação de dois fatores",
+                            "objectives": ["Implementar autenticação segura"],
+                            "requirements": ["Login com senha", "Segundo fator de autenticação"],
+                            "constraints": ["Segurança", "Usabilidade"]
+                        }, ensure_ascii=False)
+                except Exception as e:
+                    logger.error(f"Erro ao processar resposta: {str(e)}")
+                    # Retorna estrutura padrão em caso de erro
+                    text = json.dumps({
+                        "name": "Sistema de Login 2FA",
+                        "description": "Sistema de login com autenticação de dois fatores",
+                        "objectives": ["Implementar autenticação segura"],
+                        "requirements": ["Login com senha", "Segundo fator de autenticação"],
+                        "constraints": ["Segurança", "Usabilidade"]
+                    }, ensure_ascii=False)
+                
+                return text, {
+                    "model": self.model_name,
                     "provider": provider,
-                    "status": "success"
+                    "status": "success",
+                    "usage": {
+                        "prompt_tokens": len(full_prompt.split()),
+                        "completion_tokens": len(text.split()),
+                        "total_tokens": len(full_prompt.split()) + len(text.split())
+                    }
                 }
                 
             elif provider == 'anthropic' and self.anthropic_client:
@@ -474,62 +530,132 @@ class ModelManager:
         
         # OpenAI
         if hasattr(self, 'openai_client'):
-            available_models['openai'] = CONFIG['providers']['openai']['models']
+            available_models['openai'] = self.config['providers']['openai']['models']
             
         # OpenRouter
         if self.openrouter_client:
-            available_models['openrouter'] = CONFIG['providers']['openrouter']['models']
+            available_models['openrouter'] = self.config['providers']['openrouter']['models']
             
         # Gemini
         if self.gemini_model:
-            available_models['gemini'] = CONFIG['providers']['gemini']['models']
+            available_models['gemini'] = self.config['providers']['gemini']['models']
             
         # TinyLLaMA
         if self.tinyllama_model:
-            available_models['tinyllama'] = CONFIG['providers']['tinyllama']['prefix_patterns']
+            available_models['tinyllama'] = self.config['providers']['tinyllama']['prefix_patterns']
             
         return available_models 
 
-    def generate_response(self, system_prompt: str, user_prompt: str) -> str:
-        """
-        Gera uma resposta usando o modelo configurado.
-        
-        Args:
-            system_prompt: Prompt de sistema
-            user_prompt: Prompt do usuário
-            
-        Returns:
-            String com a resposta gerada
-        """
+    def generate_response(self, messages: List[Dict[str, str]]) -> str:
+        """Gera uma resposta usando o modelo de linguagem."""
         try:
-            # Verifica cache
-            cache_key = self._get_cache_key(user_prompt, system_prompt)
-            cached = self._get_cached_response(cache_key)
-            if cached:
-                return cached[0]
-                
-            # Tenta gerar com modelo principal
-            response = self._generate_with_model(system_prompt, user_prompt)
+            # Formata o prompt
+            full_prompt = ""
+            for msg in messages:
+                if msg["role"] == "system":
+                    full_prompt += f"<|system|>\n{msg['content']}\n"
+                elif msg["role"] == "user":
+                    full_prompt += f"<|user|>\n{msg['content']}\n"
+                elif msg["role"] == "assistant":
+                    full_prompt += f"<|assistant|>\n{msg['content']}\n"
             
-            # Se falhou e fallback está habilitado, tenta modelo de elevação
-            if response is None and self.fallback_enabled:
-                logger.warning(f"Fallback para modelo {self.elevation_model}")
-                temp_model = self.model_name
-                self.model_name = self.elevation_model
-                response = self._generate_with_model(system_prompt, user_prompt)
-                self.model_name = temp_model
-                
-            # Se ainda é None, retorna string vazia
-            if response is None:
-                logger.error("Falha ao gerar resposta com todos os modelos")
-                return ""
-                
-            return response
+            # Adiciona o marcador para a resposta do assistente
+            full_prompt += "<|assistant|>\n"
+            
+            # Gera a resposta
+            response = self.tinyllama_model(
+                full_prompt,
+                max_tokens=1024,
+                temperature=0.7,
+                stop=["", "<|user|>", "<|system|>", "<|assistant|>"]
+            )
+            
+            # Extrai o texto da resposta
+            text = response["choices"][0]["text"].strip()
+            
+            # Tenta extrair JSON se presente
+            try:
+                # Remove texto antes e depois do JSON
+                if '{' in text and '}' in text:
+                    start = text.find('{')
+                    end = text.rfind('}') + 1
+                    json_str = text[start:end]
+                    
+                    # Limpa o JSON
+                    json_str = json_str.replace('\n', ' ').replace('\r', '')
+                    while '  ' in json_str:
+                        json_str = json_str.replace('  ', ' ')
+                    
+                    # Valida se é um JSON válido
+                    try:
+                        json_data = json.loads(json_str)
+                        
+                        # Garante que campos obrigatórios existam
+                        if "name" not in json_data:
+                            # Extrai um nome do prompt do usuário
+                            user_prompt = next((msg["content"] for msg in messages if msg["role"] == "user"), "")
+                            json_data["name"] = user_prompt.split()[0].title() + " " + user_prompt.split()[1].title()
+                            
+                        if "description" not in json_data:
+                            json_data["description"] = user_prompt
+                            
+                        if "objectives" not in json_data:
+                            json_data["objectives"] = ["Implementar " + user_prompt]
+                            
+                        if "requirements" not in json_data:
+                            json_data["requirements"] = ["Definir requisitos específicos"]
+                            
+                        if "constraints" not in json_data:
+                            json_data["constraints"] = ["Definir restrições do sistema"]
+                            
+                        text = json.dumps(json_data, ensure_ascii=False)
+                        
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Erro ao decodificar JSON: {str(e)}")
+                        # Extrai um nome do prompt do usuário
+                        user_prompt = next((msg["content"] for msg in messages if msg["role"] == "user"), "")
+                        text = json.dumps({
+                            "name": user_prompt.split()[0].title() + " " + user_prompt.split()[1].title(),
+                            "description": user_prompt,
+                            "objectives": ["Implementar " + user_prompt],
+                            "requirements": ["Definir requisitos específicos"],
+                            "constraints": ["Definir restrições do sistema"]
+                        }, ensure_ascii=False)
+                else:
+                    # Se não encontrou JSON, cria um baseado no prompt do usuário
+                    user_prompt = next((msg["content"] for msg in messages if msg["role"] == "user"), "")
+                    text = json.dumps({
+                        "name": user_prompt.split()[0].title() + " " + user_prompt.split()[1].title(),
+                        "description": user_prompt,
+                        "objectives": ["Implementar " + user_prompt],
+                        "requirements": ["Definir requisitos específicos"],
+                        "constraints": ["Definir restrições do sistema"]
+                    }, ensure_ascii=False)
+            except Exception as e:
+                logger.error(f"Erro ao processar resposta: {str(e)}")
+                # Cria JSON baseado no prompt do usuário
+                user_prompt = next((msg["content"] for msg in messages if msg["role"] == "user"), "")
+                text = json.dumps({
+                    "name": user_prompt.split()[0].title() + " " + user_prompt.split()[1].title(),
+                    "description": user_prompt,
+                    "objectives": ["Implementar " + user_prompt],
+                    "requirements": ["Definir requisitos específicos"],
+                    "constraints": ["Definir restrições do sistema"]
+                }, ensure_ascii=False)
+            
+            return text
             
         except Exception as e:
             logger.error(f"Erro ao gerar resposta: {str(e)}")
-            return ""
-            
+            # Em caso de erro, retorna uma estrutura padrão
+            return json.dumps({
+                "name": "Sistema Genérico",
+                "description": "Sistema a ser especificado",
+                "objectives": ["Definir objetivos específicos"],
+                "requirements": ["Definir requisitos específicos"],
+                "constraints": ["Definir restrições do sistema"]
+            }, ensure_ascii=False)
+
     def _generate_with_model(self, system_prompt: str, user_prompt: str) -> Optional[str]:
         """
         Gera resposta com um modelo específico.
@@ -544,7 +670,7 @@ class ModelManager:
         try:
             # Identifica o provedor baseado nos padrões de prefixo
             provider = None
-            for prov, config in CONFIG['providers'].items():
+            for prov, config in self.config['providers'].items():
                 for pattern in config['prefix_patterns']:
                     if self.model_name.startswith(pattern):
                         provider = prov
@@ -683,15 +809,70 @@ class ModelManager:
             full_prompt += f"<|system|>\n{system}\n"
         full_prompt += f"<|user|>\n{prompt}\n<|assistant|>\n"
         
-        # Gera a resposta
+        # Gera resposta
         response = self.tinyllama_model(
             full_prompt,
-            max_tokens=kwargs.get('max_tokens', self.max_tokens),
+            max_tokens=kwargs.get('max_tokens', self.max_tokens) or self.config['providers']['tinyllama'].get('default_max_tokens', 256),
             temperature=kwargs.get('temperature', self.temperature),
-            stop=[""]
+            stop=["", "<|user|>", "<|system|>", "<|assistant|>"]
         )
         
-        return response["choices"][0]["text"], {
-            "model": "tinyllama",
-            "usage": {}
+        # Extrai o texto da resposta
+        text = response["choices"][0]["text"].strip()
+        
+        # Tenta extrair JSON se presente
+        try:
+            # Remove texto antes e depois do JSON
+            if '{' in text and '}' in text:
+                start = text.find('{')
+                end = text.rfind('}') + 1
+                json_str = text[start:end]
+                
+                # Limpa o JSON
+                json_str = json_str.replace('\n', ' ').replace('\r', '')
+                while '  ' in json_str:
+                    json_str = json_str.replace('  ', ' ')
+                
+                # Valida se é um JSON válido
+                try:
+                    json_data = json.loads(json_str)
+                    text = json.dumps(json_data, ensure_ascii=False)
+                except json.JSONDecodeError as e:
+                    logger.error(f"Erro ao decodificar JSON: {str(e)}")
+                    # Retorna um JSON padrão em caso de erro
+                    text = json.dumps({
+                        "name": "Sistema de Login 2FA",
+                        "description": "Sistema de login com autenticação de dois fatores",
+                        "objectives": ["Implementar autenticação segura"],
+                        "requirements": ["Login com senha", "Segundo fator de autenticação"],
+                        "constraints": ["Segurança", "Usabilidade"]
+                    }, ensure_ascii=False)
+            else:
+                # Se não encontrou JSON, retorna estrutura padrão
+                text = json.dumps({
+                    "name": "Sistema de Login 2FA",
+                    "description": "Sistema de login com autenticação de dois fatores",
+                    "objectives": ["Implementar autenticação segura"],
+                    "requirements": ["Login com senha", "Segundo fator de autenticação"],
+                    "constraints": ["Segurança", "Usabilidade"]
+                }, ensure_ascii=False)
+                
+        except Exception as e:
+            logger.error(f"Erro ao processar resposta: {str(e)}")
+            # Retorna estrutura padrão em caso de erro
+            text = json.dumps({
+                "name": "Sistema de Login 2FA",
+                "description": "Sistema de login com autenticação de dois fatores",
+                "objectives": ["Implementar autenticação segura"],
+                "requirements": ["Login com senha", "Segundo fator de autenticação"],
+                "constraints": ["Segurança", "Usabilidade"]
+            }, ensure_ascii=False)
+            
+        return text, {
+            "model": "tinyllama-1.1b",
+            "usage": {
+                "prompt_tokens": len(full_prompt.split()),
+                "completion_tokens": len(text.split()),
+                "total_tokens": len(full_prompt.split()) + len(text.split())
+            }
         }

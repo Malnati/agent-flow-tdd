@@ -215,8 +215,9 @@ models:
       model_path: "models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
       n_ctx: 2048
       n_threads: 4
-      models:
-        - "tinyllama-1.1b"
+      prefix_patterns: ["tinyllama-"]
+      default_model: "tinyllama-1.1b"
+      models: ["tinyllama-1.1b"]
 
 # Configurações de variáveis de ambiente por contexto
 
@@ -397,36 +398,56 @@ guardrails:
   # Guardrail de Saída
   output:
     required_fields:
-      - name: "content"
-        description: "Conteúdo da resposta"
+      - name: "name"
+        description: "Nome da funcionalidade"
         type: "string"
         required: true
-      - name: "metadata"
-        description: "Metadados da resposta"
-        type: "object"
+      - name: "description"
+        description: "Descrição detalhada da funcionalidade"
+        type: "string" 
+        required: true
+      - name: "objectives"
+        description: "Objetivos principais da funcionalidade"
+        type: "array"
+        required: true
+      - name: "requirements"
+        description: "Requisitos técnicos e funcionais"
+        type: "array"
+        required: true
+      - name: "constraints"
+        description: "Limitações e restrições"
+        type: "array"
         required: true
     validation:
       min_length:
-        content: 10
+        name: 3
+        description: 10
       max_length:
-        content: 10000
-      metadata_required_fields:
-        - type
-        - options
-    metadata_options:
-      type:
-        - feature
-        - bug
-        - enhancement
-        - documentation
-      options:
-        format:
-          - json
-          - markdown
-          - text
-        model:
-          - tinyllama-1.1b
-        temperature:
-          min: 0.0
-          max: 1.0
-          default: 0.7 
+        name: 100
+        description: 1000
+      array_limits:
+        objectives:
+          min: 1
+          max: 10
+        requirements:
+          min: 1
+          max: 20
+        constraints:
+          min: 1
+          max: 10
+    prompt_template: |
+      Analise o contexto fornecido e sugira valores para os campos ausentes.
+      
+      Contexto: {context}
+      
+      Campos ausentes: {missing_fields}
+      
+      Retorne APENAS um objeto JSON com os campos sugeridos, sem nenhum texto adicional.
+      Exemplo:
+      {
+          "name": "Nome sugerido",
+          "description": "Descrição sugerida",
+          "objectives": ["Objetivo 1", "Objetivo 2"],
+          "requirements": ["Requisito 1", "Requisito 2"],
+          "constraints": ["Restrição 1", "Restrição 2"]
+      } 

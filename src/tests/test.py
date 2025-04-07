@@ -16,6 +16,7 @@ import pytest
 from src.cli import app
 from src.app import AgentResult
 from src.core.db import DatabaseManager
+from src.core.models import ModelManager
 
 # Carrega configurações de teste
 def load_test_config() -> dict:
@@ -169,12 +170,15 @@ def mock_mcp_handler():
 
 @pytest.fixture
 def mock_model_manager():
-    """Mock do ModelManager."""
+    """Mock do ModelManager para testes."""
     with patch("src.core.models.ModelManager") as mock:
-        mock_instance = MagicMock()
-        mock_instance.get_available_models = Mock(return_value=["gpt-4", "gpt-3.5-turbo"])
-        mock.return_value = mock_instance
-        yield mock_instance
+        # Configura o mock do TinyLLaMA
+        mock._get_provider.return_value = "tinyllama"
+        mock.tinyllama_model = MagicMock()
+        mock.tinyllama_model.create_chat_completion.return_value = {
+            "choices": [{"message": {"content": "Resposta de teste"}}]
+        }
+        yield mock
 
 @pytest.fixture
 def db_manager():
@@ -539,3 +543,196 @@ def test_model_download_during_install(test_env, capfd):
     # Verifica as mensagens de log
     assert "📥 Baixando modelo TinyLLaMA..." in captured.out
     assert "✅ Download concluído" in captured.out or "✅ Modelo já existe" in captured.out 
+
+# Testes do ModelManager
+def test_tinyllama_provider_config():
+    """Testa a configuração do provedor TinyLLaMA."""
+    with patch("src.core.models.load_config") as mock_config, \
+         patch("llama_cpp.Llama") as mock_llama:
+        
+        mock_config.return_value = {
+            "providers": {
+                "tinyllama": {
+                    "model_path": "models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
+                    "n_ctx": 2048,
+                    "n_threads": 4,
+                    "prefix_patterns": ["tinyllama-"],
+                    "default_model": "tinyllama-1.1b",
+                    "models": ["tinyllama-1.1b"]
+                }
+            },
+            "defaults": {
+                "model": "tinyllama-1.1b",
+                "elevation_model": "tinyllama-1.1b",
+                "temperature": 0.7,
+                "max_tokens": None,
+                "max_retries": 3,
+                "timeout": 120
+            },
+            "env_vars": {
+                "openai_key": "OPENAI_API_KEY",
+                "openrouter_key": "OPENROUTER_API_KEY",
+                "gemini_key": "GEMINI_API_KEY",
+                "anthropic_key": "ANTHROPIC_API_KEY",
+                "default_model": "DEFAULT_MODEL",
+                "elevation_model": "ELEVATION_MODEL",
+                "max_retries": "MAX_RETRIES",
+                "model_timeout": "MODEL_TIMEOUT",
+                "fallback_enabled": "FALLBACK_ENABLED",
+                "cache_enabled": "CACHE_ENABLED",
+                "cache_ttl": "CACHE_TTL",
+                "cache_dir": "CACHE_DIR"
+            },
+            "cache": {
+                "enabled": False,
+                "ttl": 3600,
+                "directory": "/tmp/cache"
+            },
+            "fallback": {
+                "enabled": True
+            }
+        }
+        
+        # Mock do Llama
+        mock_llama.return_value = MagicMock()
+        
+        # Cria instância e testa
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test'}):
+            manager = ModelManager("tinyllama-1.1b")
+            provider = manager._get_provider("tinyllama-1.1b")
+            assert provider == "tinyllama"
+
+def test_tinyllama_generate_response():
+    """Testa a geração de resposta com TinyLLaMA."""
+    with patch("src.core.models.load_config") as mock_config, \
+         patch("llama_cpp.Llama") as mock_llama:
+        
+        mock_config.return_value = {
+            "providers": {
+                "tinyllama": {
+                    "model_path": "models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
+                    "n_ctx": 2048,
+                    "n_threads": 4,
+                    "prefix_patterns": ["tinyllama-"],
+                    "default_model": "tinyllama-1.1b",
+                    "models": ["tinyllama-1.1b"]
+                }
+            },
+            "defaults": {
+                "model": "tinyllama-1.1b",
+                "elevation_model": "tinyllama-1.1b",
+                "temperature": 0.7,
+                "max_tokens": None,
+                "max_retries": 3,
+                "timeout": 120
+            },
+            "env_vars": {
+                "openai_key": "OPENAI_API_KEY",
+                "openrouter_key": "OPENROUTER_API_KEY",
+                "gemini_key": "GEMINI_API_KEY",
+                "anthropic_key": "ANTHROPIC_API_KEY",
+                "default_model": "DEFAULT_MODEL",
+                "elevation_model": "ELEVATION_MODEL",
+                "max_retries": "MAX_RETRIES",
+                "model_timeout": "MODEL_TIMEOUT",
+                "fallback_enabled": "FALLBACK_ENABLED",
+                "cache_enabled": "CACHE_ENABLED",
+                "cache_ttl": "CACHE_TTL",
+                "cache_dir": "CACHE_DIR"
+            },
+            "cache": {
+                "enabled": False,
+                "ttl": 3600,
+                "directory": "/tmp/cache"
+            },
+            "fallback": {
+                "enabled": True
+            }
+        }
+        
+        # Mock do Llama
+        mock_instance = MagicMock()
+        mock_instance.create_chat_completion.return_value = {
+            "choices": [{"message": {"content": "Resposta de teste"}}]
+        }
+        mock_llama.return_value = mock_instance
+        
+        # Cria instância e testa
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test'}):
+            manager = ModelManager("tinyllama-1.1b")
+            response = manager.generate_response(
+                system_prompt="Sistema de teste",
+                user_prompt="Prompt de teste"
+            )
+            
+            # Verifica chamadas
+            mock_instance.create_chat_completion.assert_called_once()
+            assert response == "Resposta de teste"
+
+def test_tinyllama_fallback():
+    """Testa o fallback para TinyLLaMA."""
+    with patch("src.core.models.load_config") as mock_config, \
+         patch("llama_cpp.Llama") as mock_llama:
+        
+        mock_config.return_value = {
+            "providers": {
+                "tinyllama": {
+                    "model_path": "models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
+                    "n_ctx": 2048,
+                    "n_threads": 4,
+                    "prefix_patterns": ["tinyllama-"],
+                    "default_model": "tinyllama-1.1b",
+                    "models": ["tinyllama-1.1b"]
+                }
+            },
+            "defaults": {
+                "model": "tinyllama-1.1b",
+                "elevation_model": "tinyllama-1.1b",
+                "temperature": 0.7,
+                "max_tokens": None,
+                "max_retries": 3,
+                "timeout": 120
+            },
+            "env_vars": {
+                "openai_key": "OPENAI_API_KEY",
+                "openrouter_key": "OPENROUTER_API_KEY",
+                "gemini_key": "GEMINI_API_KEY",
+                "anthropic_key": "ANTHROPIC_API_KEY",
+                "default_model": "DEFAULT_MODEL",
+                "elevation_model": "ELEVATION_MODEL",
+                "max_retries": "MAX_RETRIES",
+                "model_timeout": "MODEL_TIMEOUT",
+                "fallback_enabled": "FALLBACK_ENABLED",
+                "cache_enabled": "CACHE_ENABLED",
+                "cache_ttl": "CACHE_TTL",
+                "cache_dir": "CACHE_DIR"
+            },
+            "cache": {
+                "enabled": False,
+                "ttl": 3600,
+                "directory": "/tmp/cache"
+            },
+            "fallback": {
+                "enabled": True
+            }
+        }
+        
+        # Mock do Llama
+        mock_instance = MagicMock()
+        mock_instance.create_chat_completion.side_effect = [
+            Exception("Erro de teste"),
+            {"choices": [{"message": {"content": "Resposta de fallback"}}]}
+        ]
+        mock_llama.return_value = mock_instance
+        
+        # Cria instância e testa
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test'}):
+            manager = ModelManager("tinyllama-1.1b")
+            response = manager.generate_response(
+                system_prompt="Sistema de teste",
+                user_prompt="Prompt de teste"
+            )
+            
+            # Verifica chamadas
+            assert mock_instance.create_chat_completion.call_count == 2
+            assert response == "Resposta de fallback" 
