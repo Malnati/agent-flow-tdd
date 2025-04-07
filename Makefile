@@ -1,6 +1,6 @@
 # Makefile para o projeto prompt-tdd
 
-.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs test-e2e publish download-model
+.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs test-e2e publish download-model docs-serve docs-build docs-deploy docs-generate
 
 # Configuração do ambiente virtual
 VENV = .venv
@@ -28,6 +28,12 @@ help:
 	@echo "  make dev          - Executa em modo desenvolvimento"
 	@echo "  make download-model - Baixa o modelo TinyLLaMA"
 	@echo ""
+	@echo "Documentação:"
+	@echo "  make docs-serve   - Inicia servidor local da documentação"
+	@echo "  make docs-build   - Gera documentação estática"
+	@echo "  make docs-deploy  - Faz deploy da documentação"
+	@echo "  make docs-generate - Gera documentação via IA"
+	@echo ""
 	@echo "Qualidade:"
 	@echo "  make test       - Executa testes unitários"
 	@echo "  make test-e2e   - Executa testes end-to-end"
@@ -52,7 +58,7 @@ help:
 install:
 	@echo "🔧 Instalando dependências..."
 	python -m venv $(VENV)
-	$(PIP) install -e ".[dev]"
+	$(PIP) install -e ".[dev,docs]"
 	@make download-model || exit 1
 	@echo "✅ Instalação concluída!"
 
@@ -188,3 +194,25 @@ download-model:
 		fi; \
 		echo "✅ Download concluído em $(MODEL_DIR)/$(MODEL_NAME)"; \
 	fi 
+
+# Comandos de documentação
+docs-serve:
+	@echo "🚀 Iniciando servidor de documentação..."
+	@$(PYTHON) -m mkdocs serve -f src/configs/mkdocs.yml
+
+docs-build:
+	@echo "📚 Gerando documentação estática..."
+	@$(PYTHON) -m mkdocs build -f src/configs/mkdocs.yml
+	@echo "✅ Documentação gerada em site/"
+
+docs-deploy:
+	@echo "🚀 Fazendo deploy da documentação..."
+	@$(PYTHON) -m mkdocs gh-deploy --force -f src/configs/mkdocs.yml
+	@echo "✅ Documentação publicada!"
+
+docs-generate:
+	@echo "🤖 Gerando documentação via IA..."
+	@mkdir -p docs
+	@echo '{"content": "Gerar documentação", "metadata": {"type": "docs", "options": {"model": "tinyllama-1.1b", "format": "markdown"}}}' > logs/mcp_pipe.log
+	@$(PYTHON) src/scripts/generate_docs.py
+	@echo "✅ Documentação gerada!" 

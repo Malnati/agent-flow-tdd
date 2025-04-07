@@ -76,6 +76,16 @@ dev_requires = [
     "twine>=4.0.2",
 ]
 
+# Dependências para documentação
+docs_requires = [
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.5.0",
+    "mkdocstrings>=0.24.0",
+    "mkdocstrings-python>=1.7.0",
+    "mkdocs-gen-files>=0.5.0",
+    "mkdocs-literate-nav>=0.6.0",
+]
+
 # Lê a versão do arquivo .version.json
 with open('.version.json', 'r', encoding='utf-8') as f:
     version_data = json.load(f)
@@ -87,14 +97,15 @@ setup(
     packages=find_packages(),
     package_data={
         '': ['.version.json'],  # Inclui arquivo de versão na raiz
-        'src': ['configs/*.yaml'],  # Inclui arquivos YAML do diretório configs
+        'src': ['configs/*.yaml', 'configs/mkdocs.yml'],  # Inclui arquivos YAML e mkdocs.yml do diretório configs
     },
     data_files=[
         ('', ['.version.json']),  # Copia arquivo de versão para a raiz do pacote instalado
     ],
     install_requires=install_requires,
     extras_require={
-        "dev": dev_requires
+        "dev": dev_requires,
+        "docs": docs_requires,
     },
     entry_points={
         "console_scripts": [
