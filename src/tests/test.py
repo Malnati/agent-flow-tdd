@@ -941,3 +941,4 @@ def test_docs_generator_orchestrator_integration(mock_orchestrator):
     call_args = mock_orchestrator.handle_input.call_args[0][0]
     assert mock_response["metadata"]["section"] in call_args
     assert mock_response["metadata"]["options"]["model"] in call_args 
+

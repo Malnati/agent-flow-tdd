@@ -110,3 +110,4 @@ docs:
       start: "🤖 Gerando documentação via IA..."
       success: "✅ Documentação gerada!"
       error: "❌ Erro ao gerar documentação: {error}"
+
