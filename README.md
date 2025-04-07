@@ -250,6 +250,15 @@ O projeto usa pytest para testes. Execute:
 make test
 ```
 
+### Testes Opcionais
+
+Alguns testes são desabilitados por padrão por serem muito lentos. Para executá-los:
+
+```bash
+# Executa testes de instalação
+pytest -v -m "install" src/tests/test_e2e.py
+```
+
 ## 📝 Logs
 
 Os logs são gerados automaticamente com:
