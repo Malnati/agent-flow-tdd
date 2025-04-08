@@ -30,7 +30,7 @@ class SimpleOrchestratorApp(App):
     # CSS_PATH = "agent_orchestrator.tcss"
     
     BINDINGS = [
-        Binding("meta+q", "quit", "Sair"),
+        Binding("ctrl+meta+q", "quit", "Sair"),
     ]
     
     def __init__(self, *args, **kwargs):
