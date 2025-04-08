@@ -24,6 +24,7 @@ prompt ?= Olá
 format ?= json
 session_id ?= cli
 mode ?= cli
+model ?=
 
 # Ajuda
 help:
@@ -79,11 +80,11 @@ tdd:
 	@echo "🖥️ Executando CLI..."
 	@if [ "$(mode)" = "mcp" ]; then \
 		rm -f logs/mcp_pipe.log && \
-		echo '{"content": "$(prompt)", "metadata": {"type": "feature", "options": {"format": "$(format)", "model": "gpt-3.5-turbo", "temperature": 0.7}}}' > logs/mcp_pipe.log && \
+		echo '{"content": "$(prompt)", "metadata": {"type": "feature", "options": {"format": "$(format)", "model": "$(model)", "temperature": 0.7}}}' > logs/mcp_pipe.log && \
 		$(PYTHON) -m src.prompt_tdd mcp > logs/mcp_server.log 2>&1 & \
 		echo "✅ Servidor MCP iniciado em background (PID: $$!)"; \
 	else \
-		$(PYTHON) -m src.prompt_tdd cli "$(prompt)" --format $(format) --session-id $(session_id); \
+		$(PYTHON) -m src.prompt_tdd cli "$(prompt)" --format $(format) --session-id $(session_id) $${model:+--model $(model)}; \
 	fi
 
 # Limpeza de código com autoflake

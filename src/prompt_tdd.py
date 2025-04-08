@@ -89,6 +89,11 @@ def run_cli_mode(args):
         # Imprime o cabeçalho
         print("🖥️ CLI do projeto prompt-tdd")
         
+        # Define o modelo via variável de ambiente se especificado
+        if hasattr(args, 'model') and args.model:
+            os.environ["DEFAULT_MODEL"] = args.model
+            print(f"🤖 Usando modelo: {args.model}")
+        
         # Executa o orquestrador
         orchestrator = get_orchestrator()
         result = orchestrator.execute(
@@ -293,6 +298,7 @@ def main():
     cli_parser.add_argument("--format", default="json", choices=["json", "markdown", "text"], 
                            help="Formato de saída")
     cli_parser.add_argument("--session-id", default="cli", help="ID da sessão")
+    cli_parser.add_argument("--model", help="Nome do modelo a ser usado (ex: gpt-4-turbo, gpt-3.5-turbo, tinyllama-1.1b)")
     
     # Subparser para o modo mcp
     mcp_parser = subparsers.add_parser("mcp", help="Executa no modo MCP")
