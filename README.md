@@ -1,7 +1,7 @@
 # Agent Flow TDD
 
 <p align="center">
-  <img src="assets/logo.png" alt="Agent Flow TDD Logo" width="400">
+  <img src="assets/flow.png" alt="Agent Flow TDD Logo" width="400">
 </p>
 
 Framework para desenvolvimento orientado a testes usando agentes de IA.
