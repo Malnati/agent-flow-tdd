@@ -206,40 +206,46 @@ Especifique o modelo nas options:
 
 ### Modelos Suportados
 
-Atualmente:
-- OpenAI GPT-3.5 Turbo
-- OpenAI GPT-4 Turbo
-- Anthropic Claude (via MCP)
-- TinyLLaMA 1.1B (local, via llama.cpp)
-- Outros modelos compatíveis com MCP
+O sistema suporta vários modelos de IA que podem ser especificados no parâmetro `model`:
 
-### Configuração do TinyLLaMA
+#### Modelos Locais:
+- `tinyllama-1.1b` - Modelo local TinyLLaMA, leve e rápido
+- `phi-1` - Modelo local Phi-1 da Microsoft
+- `deepseek-coder-6.7b` - Modelo local DeepSeek Coder especializado em código
+- `phi3-mini` - Modelo local Phi-3 Mini da Microsoft
 
-Para usar o TinyLLaMA:
+#### Modelos Remotos:
+- `gpt-3.5-turbo` - OpenAI GPT-3.5 Turbo (requer chave OpenAI)
+- `gpt-4` - OpenAI GPT-4 (requer chave OpenAI)
+- `gemini-pro` - Google Gemini Pro (requer chave Gemini)
+- `claude-3-opus` - Anthropic Claude 3 Opus (requer chave Anthropic)
 
-1. O modelo será baixado automaticamente durante a instalação (`make install`). 
-   Alternativamente, você pode baixá-lo manualmente:
+### Exemplo de uso com modelo específico:
+
 ```bash
+# Usando modelo local
+make tdd prompt="Cadastro de pessoas" format=json model="deepseek-coder-6.7b"
+
+# Usando modelo remoto
+make tdd prompt="Cadastro de pessoas" format=markdown model="gpt-4"
+```
+
+### Configuração de Modelos Adicionais
+
+Cada modelo pode ser baixado separadamente:
+
+```bash
+# Baixar TinyLLaMA
 make download-model
-```
 
-2. Use o modelo via CLI:
-```bash
-prompt-tdd feature "Criar API" --model tinyllama-1.1b
-```
+# Baixar Phi-1
+make download-phi1
 
-3. Ou via MCP:
-```json
-{
-  "content": "Criar API REST",
-  "metadata": {
-    "type": "feature",
-    "options": {
-      "model": "tinyllama-1.1b",
-      "temperature": 0.7
-    }
-  }
-}
+# Baixar DeepSeek Coder
+make download-deepseek
+
+# Baixar Phi-3 Mini
+make download-phi3
 ```
 
 ## 🧪 Testes
@@ -360,274 +366,92 @@ make clean
 
 # Agent Flow TDD
 
-Framework para desenvolvimento orientado a testes com agentes de IA.
+<p align="center">
+  <img src="assets/logo.png" alt="Agent Flow TDD Logo" width="400">
+</p>
 
-## Recursos
+Framework para desenvolvimento orientado a testes usando agentes de IA.
 
-- Desenvolvimento orientado a testes para agentes de IA
-- Integração com OpenAI Agent SDK
-- Logging estruturado em SQLite
-- Suporte a múltiplos provedores de LLM
-- Sistema de tracing e monitoramento
-- Interface MCP (Model Context Protocol)
+## 🚀 Visão Geral
 
-## Instalação
+O Agent Flow TDD é um framework que utiliza agentes de IA para auxiliar no desenvolvimento orientado a testes (TDD). Ele fornece uma estrutura para criar, testar e implantar aplicações usando prompts de IA.
 
-```bash
-# Instalação básica
-pip install agent-flow-tdd
+## 📋 Principais Funcionalidades
 
-# Instalação com dependências de desenvolvimento
-pip install agent-flow-tdd[dev]
-```
+- **Desenvolvimento orientado a testes** para agentes de IA
+- **Múltiplos modelos** suportados (locais e remotos)
+- **Interface CLI** com modo interativo
+- **Protocolo MCP** (Model Context Protocol) para integração padronizada
+- **Guardrails** para validação de entradas e saídas
+- **Logging estruturado** em SQLite
 
-## Uso Básico
-
-```python
-from src.core.agents import AgentOrchestrator
-from src.core.models import ModelManager
-from src.core.db import DatabaseManager
-
-# Inicializa componentes
-model_manager = ModelManager()
-db = DatabaseManager()
-
-# Cria orquestrador
-orchestrator = AgentOrchestrator(model_manager, db)
-
-# Executa
-result = orchestrator.execute(
-    prompt="Criar sistema de login",
-    session_id="exemplo",
-    format="json"
-)
-
-# Processa resultado
-print(f"Saída: {result.output}")
-print(f"Items: {len(result.items)}")
-print(f"Guardrails: {len(result.guardrails)}")
-print(f"Respostas: {len(result.raw_responses)}")
-```
-
-## Logging Estruturado
-
-O framework inclui um sistema de logging estruturado que armazena todas as interações em SQLite:
-
-### Dados Armazenados
-
-- **Execuções de Agentes**
-  - Session ID
-  - Input/Output
-  - Último agente executado
-  - Tipo de saída
-  - Timestamp
-
-- **Itens Gerados**
-  - MessageOutput
-  - HandoffCall/HandoffOutput
-  - ToolCall/ToolCallOutput
-  - ReasoningItem
-
-- **Guardrails**
-  - Resultados de input/output
-  - Mensagens de validação
-
-- **Respostas Brutas**
-  - Respostas do LLM
-  - Metadados de execução
-
-### Consulta de Logs
-
-```python
-from src.core.db import DatabaseManager
-
-# Inicializa o gerenciador
-db = DatabaseManager()
-
-# Busca histórico de execuções
-history = db.get_run_history(limit=10)
-
-# Exemplo de processamento
-for run in history:
-    print(f"Execução {run['id']}:")
-    print(f"- Input: {run['input']}")
-    print(f"- Agente: {run['last_agent']}")
-    print(f"- Items gerados: {len(run['items'])}")
-    print(f"- Guardrails: {len(run['guardrails'])}")
-    print(f"- Respostas: {len(run['raw_responses'])}")
-```
-
-### Schema SQL
-
-```sql
--- Tabela principal de execuções
-CREATE TABLE agent_runs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    session_id TEXT NOT NULL,
-    input TEXT NOT NULL,
-    last_agent TEXT,
-    output_type TEXT,
-    final_output TEXT
-);
-
--- Tabela de itens gerados
-CREATE TABLE run_items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    run_id INTEGER NOT NULL,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    item_type TEXT NOT NULL,
-    raw_item TEXT NOT NULL,
-    source_agent TEXT,
-    target_agent TEXT,
-    FOREIGN KEY(run_id) REFERENCES agent_runs(id)
-);
-
--- Tabela de resultados de guardrails
-CREATE TABLE guardrail_results (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    run_id INTEGER NOT NULL,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    guardrail_type TEXT CHECK(guardrail_type IN ('input', 'output')),
-    results TEXT NOT NULL,
-    FOREIGN KEY(run_id) REFERENCES agent_runs(id)
-);
-
--- Tabela de respostas brutas do LLM
-CREATE TABLE raw_responses (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    run_id INTEGER NOT NULL,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    response TEXT NOT NULL,
-    FOREIGN KEY(run_id) REFERENCES agent_runs(id)
-);
-```
-
-## Desenvolvimento
-
-### Configuração do Ambiente
+## 🚀 Início Rápido
 
 ```bash
 # Clone o repositório
-git clone https://github.com/seu-usuario/agent-flow-tdd.git
+git clone https://github.com/Malnati/agent-flow-tdd.git
 cd agent-flow-tdd
 
-# Crie um ambiente virtual
-python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-.venv\Scripts\activate     # Windows
+# Instale as dependências
+make install
 
-# Instale em modo desenvolvimento
-pip install -e ".[dev]"
+# Execute o comando principal
+make tdd prompt="Criar API REST" format=json
 ```
 
-### Executando Testes
+## 📖 Documentação
+
+A documentação completa está disponível no diretório [docs/](docs/):
+
+- [Visão Geral](docs/overview/README.md) - Objetivos, arquitetura e tecnologias
+- [Instalação](docs/installation/README.md) - Como instalar e configurar
+- [Uso](docs/usage/README.md) - Como usar a CLI e o modo MCP
+- [Banco de Dados](docs/database/README.md) - Estrutura e gerenciamento do banco de dados
+- [Logs](docs/logs/README.md) - Sistema de logging e monitoramento
+- [Troubleshooting](docs/troubleshooting/README.md) - Resolução de problemas comuns
+
+## 💻 Modelos Suportados
+
+O sistema suporta diversos modelos de IA que podem ser utilizados através do parâmetro `model`:
+
+### Modelos Locais
+- `tinyllama-1.1b` - Modelo local TinyLLaMA (1.1B)
+- `phi1` - Modelo local Phi-1 da Microsoft (1.3B)
+- `phi2` - Modelo local Phi-2 da Microsoft (2.7B)
+- `deepseek_local` - Modelo local DeepSeek Coder (6.7B)
+- `phi3` - Modelo local Phi-3 Mini da Microsoft
+
+### Modelos Remotos (API)
+- `gpt-3.5-turbo` e `gpt-4-turbo` - OpenAI
+- `claude-3-opus`, `claude-3-sonnet` - Anthropic
+- `gemini-pro` - Google
+
+## 🛠️ Comandos Principais
 
 ```bash
-# Executa todos os testes
+# Executar o comando principal
+make tdd prompt="Criar um sistema de login" format=json
+
+# Especificar um modelo
+make tdd prompt="Criar API REST" model=deepseek_local
+
+# Verificar status do ambiente
+make status
+
+# Executar testes
 make test
 
-# Executa testes com cobertura
-pytest --cov=src tests/
-
-# Executa testes específicos
-pytest tests/test_db.py -v
-```
-
-### Linting e Formatação
-
-```bash
-# Formata o código
-make format
-
-# Executa linters
-make lint
-
-# Limpa imports não utilizados
-make autoflake
-```
-
-## Contribuindo
-
-1. Fork o projeto
-2. Crie uma branch para sua feature (`git checkout -b feature/nova-feature`)
-3. Commit suas mudanças (`git commit -am 'Adiciona nova feature'`)
-4. Push para a branch (`git push origin feature/nova-feature`)
-5. Crie um Pull Request
-
-## Licença
-
-Este projeto está licenciado sob a licença MIT - veja o arquivo [LICENSE](LICENSE) para detalhes.
-
-## Visualização de Logs
-
-O framework inclui um visualizador de logs que permite consultar o histórico de execuções dos agentes. Para usar:
-
-```bash
-# Lista as últimas 10 execuções
+# Visualizar logs
 make logs
-
-# Lista as últimas N execuções
-make logs ARGS="--limit 20"
-
-# Filtra por session ID
-make logs ARGS="--session abc123"
-
-# Filtra por agente
-make logs ARGS="--agent CodeReviewer"
-
-# Mostra detalhes de uma execução específica
-make logs ARGS="--id 42"
 ```
 
-O visualizador mostra:
-- Lista resumida de execuções com timestamp, session, agente e contadores
-- Detalhes completos de uma execução específica incluindo:
-  - Input/output
-  - Itens gerados entre agentes
-  - Resultados de guardrails
-  - Respostas brutas do LLM
+## 🤝 Contribuição
 
-## Comandos Disponíveis
+Contribuições são bem-vindas! Consulte [docs/development/README.md](docs/development/README.md) para instruções sobre como contribuir para o projeto.
 
-Para ver todos os comandos disponíveis:
+## 📝 Licença
 
-```bash
-make help
-```
-
-### Ambiente
-
-- `make install` - Instala dependências do projeto
-- `make clean` - Remove arquivos temporários
-- `make dev` - Executa em modo desenvolvimento
-
-### Qualidade
-
-- `make test` - Executa testes
-- `make coverage` - Gera relatório de cobertura
-- `make lint` - Executa linters
-- `make format` - Formata código
-
-### Banco de Dados
-
-- `make db-init` - Inicializa banco de dados
-- `make db-clean` - Remove banco de dados
-- `make db-backup` - Faz backup do banco
-- `make logs` - Visualiza logs do banco
-
-### Exemplos
-
-```bash
-# Executa o agente com um prompt
-make dev prompt-tdd="Cadastro de pessoas" mode=mcp format=markdown
-
-# Visualiza os últimos 20 logs de uma sessão
-make logs ARGS="--limit 20 --session abc123"
-
-# Visualiza detalhes de uma execução específica
-make logs ARGS="--id 42"
-```
+Este projeto está licenciado sob a licença MIT - veja o arquivo LICENSE para mais detalhes.
 
 ## 🐳 Usando com Docker
 

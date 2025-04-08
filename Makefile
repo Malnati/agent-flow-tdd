@@ -60,6 +60,21 @@ help:
 	@echo "Exemplos:"
 	@echo "  make tdd prompt=\"Cadastro de pessoas\" format=json"
 	@echo "  make logs ARGS=\"--limit 20 --session abc123\""
+	@echo ""
+	@echo "Modelos Disponíveis:"
+	@echo "  Modelos Locais:"
+	@echo "    - tinyllama-1.1b          - Modelo local TinyLLaMA"
+	@echo "    - phi-1                   - Modelo local Phi-1"
+	@echo "    - deepseek-coder-6.7b     - Modelo local DeepSeek Coder"
+	@echo "    - phi3-mini               - Modelo local Phi-3 Mini"
+	@echo "  Modelos Remotos:"
+	@echo "    - gpt-3.5-turbo           - OpenAI GPT-3.5 Turbo"
+	@echo "    - gpt-4                   - OpenAI GPT-4"
+	@echo "    - gemini-pro              - Google Gemini Pro"
+	@echo "    - claude-3-opus           - Anthropic Claude 3 Opus"
+	@echo ""
+	@echo "Exemplo de uso com modelo específico:"
+	@echo "  make tdd prompt=\"Cadastro de pessoas\" format=json model=\"deepseek-coder-6.7b\""
 
 # Instalação e setup
 install:
