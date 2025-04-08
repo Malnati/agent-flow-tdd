@@ -60,6 +60,7 @@ install_requires = [
     "anthropic>=0.18.0",
     "PyYAML>=6.0.1",
     "llama-cpp-python>=0.2.10",
+    "textual>=0.44.0",
 ]
 
 # Dependências de desenvolvimento
