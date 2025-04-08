@@ -21,10 +21,36 @@ def load_config() -> Dict[str, Any]:
     Returns:
         Dict com configurações
     """
-    agents_config_path = os.path.join(os.path.dirname(__file__), "..", "configs", "agents.json")
-    with open(agents_config_path, "r") as f:
-        config = json.load(f)
-    return config
+    try:
+        # Tenta carregar o arquivo JSON
+        agents_config_path = os.path.join(os.path.dirname(__file__), "..", "configs", "agents.json")
+        if os.path.exists(agents_config_path):
+            with open(agents_config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+                logger.info(f"Configurações carregadas com sucesso de: {agents_config_path}")
+                return config
+        else:
+            # Fallback para o arquivo YAML se o JSON não existir
+            yaml_config_path = os.path.join(os.path.dirname(__file__), "..", "configs", "agents.yaml")
+            if os.path.exists(yaml_config_path):
+                with open(yaml_config_path, "r", encoding="utf-8") as f:
+                    config = yaml.safe_load(f)
+                    logger.warning(f"Arquivo JSON não encontrado, usando YAML: {yaml_config_path}")
+                    return config
+            else:
+                raise FileNotFoundError("Nenhum arquivo de configuração encontrado (JSON ou YAML)")
+    except Exception as e:
+        logger.error(f"FALHA - load_config | Erro: {str(e)}")
+        # Retorna uma configuração mínima padrão como fallback
+        return {
+            "GuardRails": {
+                "Input": {},
+                "Output": {}
+            },
+            "prompts": {
+                "system": "Você é um assistente especializado em análise e desenvolvimento de software."
+            }
+        }
 
 # Configurações globais
 CONFIG = load_config()
@@ -532,10 +558,11 @@ class InputGuardrail:
             # Extrai informações do prompt
             info = self._extract_info_from_prompt(prompt)
             
-            # Valida campos obrigatórios
+            # Valida campos básicos de acordo com requisitos
             missing_fields = []
-            for field, required in self.requirements.items():
-                if required and field not in info:
+            required_fields = ["name", "description"]
+            for field in required_fields:
+                if field not in info or not info[field]:
                     missing_fields.append(field)
                     
             if missing_fields:
@@ -595,11 +622,19 @@ class OutputGuardrail:
             Lista de campos ausentes
         """
         # Como requirements agora é texto, realizamos uma validação básica
-        # A implementação atual apenas verifica se é um dicionário não vazio
-        # Em versões futuras, esta lógica será mais inteligente
+        # A implementação atual apenas verifica se é um dicionário com campos básicos
         missing_fields = []
+        
         if not data or not isinstance(data, dict):
             missing_fields.append("formato_json_valido")
+            return missing_fields
+            
+        # Validação básica de campos obrigatórios
+        required_fields = ["Nome da funcionalidade", "Descrição detalhada"]
+        for field in required_fields:
+            if field not in data or not data[field]:
+                missing_fields.append(field)
+                
         return missing_fields
         
     def _suggest_missing_fields(self, data: Dict[str, Any], missing_fields: List[str], context: str) -> Dict[str, Any]:
@@ -663,16 +698,26 @@ class OutputGuardrail:
             Dict com resultado do processamento
         """
         try:
+            # Limpa a resposta de marcadores de código markdown se existirem
+            cleaned_output = output
+            if cleaned_output.startswith("```") and "```" in cleaned_output[3:]:
+                # Remove os delimitadores de código markdown (```json e ```)
+                first_delimiter_end = cleaned_output.find("\n", 3)
+                if first_delimiter_end != -1:
+                    last_delimiter_start = cleaned_output.rfind("```")
+                    if last_delimiter_start > first_delimiter_end:
+                        cleaned_output = cleaned_output[first_delimiter_end+1:last_delimiter_start].strip()
+            
             # Tenta fazer parse do JSON ou YAML
             try:
                 # Tenta primeiro como JSON
                 try:
-                    data = json.loads(output)
+                    data = json.loads(cleaned_output)
                     if not isinstance(data, dict):
                         raise ValueError("Saída não é um dicionário")
                 except json.JSONDecodeError:
                     # Tenta depois como YAML
-                    data = yaml.safe_load(output)
+                    data = yaml.safe_load(cleaned_output)
                     if not isinstance(data, dict):
                         raise ValueError("Saída não é um dicionário")
             except Exception as e:
@@ -703,9 +748,8 @@ class OutputGuardrail:
                 except Exception:
                     logger.warning("Não foi possível usar dados do contexto")
                 
-                # Tenta extrair informações do texto original
-                # Se chegarmos aqui, já extraímos as informações no InputGuardrail
-                # então podemos usar o output como está
+                # Se ainda não conseguimos extrair informações, tenta usar 
+                # o próprio output como um bloco de texto não-estruturado
                 return {
                     "status": "success",
                     "output": output,
