@@ -6,6 +6,8 @@ Orquestrador de Agentes - Interface TUI para execução de prompts e visualizaç
 import logging
 import json
 import os
+import uuid
+from datetime import datetime
 from textual.app import App, ComposeResult
 from textual.containers import Container
 from textual.widgets import Button, Footer, Header, Input, Static, RadioSet, RadioButton
@@ -14,6 +16,8 @@ from textual.binding import Binding
 from textual.css.query import NoMatches
 
 from src.core.models import ModelManager
+from src.core.agents import AgentOrchestrator
+from src.core.db import DatabaseManager
 
 # Configuração de logging
 logger = logging.getLogger(__name__)
@@ -30,7 +34,11 @@ class SimpleOrchestratorApp(App):
     # CSS_PATH = "agent_orchestrator.tcss"
     
     BINDINGS = [
+        # Múltiplas alternativas para sair do aplicativo
         Binding("ctrl+meta+q", "quit", "Sair"),
+        Binding("ctrl+q", "quit", "Sair"),
+        Binding("meta+q", "quit", "Sair"),
+        Binding("q", "quit", "Sair"),
     ]
     
     def __init__(self, *args, **kwargs):
@@ -38,6 +46,12 @@ class SimpleOrchestratorApp(App):
         # Inicializa o ModelManager para obter a lista de modelos disponíveis
         self.model_manager = ModelManager()
         self.available_models = self._get_available_models()
+        # Inicializa o DatabaseManager para registrar execuções
+        self.db = DatabaseManager()
+        # Inicializa o orquestrador
+        self.orchestrator = None
+        # ID de sessão para registrar logs
+        self.session_id = f"tui_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
     
     def _get_available_models(self):
         """Obtém a lista de modelos disponíveis no sistema."""
@@ -93,8 +107,31 @@ class SimpleOrchestratorApp(App):
         """Ação quando o ENTER é pressionado em um campo de input."""
         self.gerar_conteudo()
     
+    def _get_orchestrator(self, modelo):
+        """
+        Obtém uma instância do orquestrador de agentes com o modelo selecionado.
+        
+        Args:
+            modelo: Nome do modelo a ser usado
+            
+        Returns:
+            AgentOrchestrator configurado
+        """
+        try:
+            # Configura o modelo via variável de ambiente
+            os.environ["DEFAULT_MODEL"] = modelo
+            
+            # Inicializa o orquestrador com o modelo selecionado
+            orchestrator = AgentOrchestrator(model_name=modelo)
+            logger.info(f"Orquestrador inicializado com modelo {modelo}")
+            
+            return orchestrator
+        except Exception as e:
+            logger.error(f"Erro ao criar orquestrador: {str(e)}")
+            raise
+    
     def gerar_conteudo(self) -> None:
-        """Gera conteúdo com base no prompt."""
+        """Gera conteúdo com base no prompt usando o orquestrador de agentes."""
         self.notify("Gerando conteúdo...")
         prompt = self.query_one("#prompt-input", Input).value
         
@@ -108,23 +145,45 @@ class SimpleOrchestratorApp(App):
         # Obtém o modelo selecionado
         modelo = str(self.query_one("#model-select").pressed_button.label)
         
-        # Atualiza o modelo no ModelManager (apenas simulação nesta fase)
-        # self.model_manager.configure(model=modelo)
-        
-        # Simulação de resposta
-        if formato == "json":
-            conteudo = {
-                "prompt": prompt,
-                "modelo": modelo,
-                "resposta": "Esta é uma resposta simulada em JSON",
-                "timestamp": "2023-06-15 10:30:00"
-            }
-            resultado = f"[bold green]Resposta JSON:[/]\n\n[yellow]{json.dumps(conteudo, indent=2)}[/]"
-        else:
-            resultado = f"[bold green]Resposta Markdown:[/]\n\n[yellow]# Resposta para: {prompt}\n\n## Usando modelo: {modelo}\n\nEsta é uma resposta simulada em Markdown.[/]"
-        
-        self.query_one("#output", Static).update(resultado)
-        self.notify(f"Conteúdo gerado com sucesso usando {modelo} em formato {formato.upper()}!", severity="success")
+        try:
+            # Inicializa o orquestrador com o modelo selecionado
+            orchestrator = self._get_orchestrator(modelo)
+            
+            # Executa o orquestrador com o prompt e formato especificados
+            result = orchestrator.execute(
+                prompt=prompt,
+                format=formato
+            )
+            
+            # Formata a saída de acordo com o formato especificado
+            if formato == "json":
+                try:
+                    # Tenta converter para um objeto Python se a resposta for um JSON como string
+                    output_content = json.loads(result.output) if isinstance(result.output, str) else result.output
+                    resultado = f"[bold green]Resposta JSON:[/]\n\n[yellow]{json.dumps(output_content, indent=2, ensure_ascii=False)}[/]"
+                except (json.JSONDecodeError, TypeError):
+                    # Se não for um JSON válido, mostra como texto
+                    resultado = f"[bold green]Resposta:[/]\n\n[yellow]{result.output}[/]"
+            else:
+                resultado = f"[bold green]Resposta Markdown:[/]\n\n[yellow]{result.output}[/]"
+            
+            # Atualiza a interface com o resultado
+            self.query_one("#output", Static).update(resultado)
+            self.notify(f"Conteúdo gerado com sucesso usando {modelo} em formato {formato.upper()}!", severity="success")
+            
+            # Registra a execução no banco de dados
+            self.db.log_run(
+                self.session_id,
+                input=prompt,
+                final_output=result.output,
+                output_type=formato
+            )
+            
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"Erro ao executar orquestrador: {error_msg}")
+            self.query_one("#output", Static).update(f"[bold red]Erro:[/]\n\n{error_msg}")
+            self.notify(f"Erro ao gerar conteúdo: {error_msg}", severity="error")
 
     def on_mount(self) -> None:
         """Evento disparado quando o aplicativo é montado."""
