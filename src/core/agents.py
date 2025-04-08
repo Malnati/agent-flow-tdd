@@ -5,10 +5,8 @@ from typing import Any, Dict, List, Optional
 import json
 import os
 from pydantic import BaseModel
-import uuid
 
 from src.core import ModelManager
-from src.core.db import DatabaseManager
 from src.core.logger import get_logger
 
 logger = get_logger(__name__)

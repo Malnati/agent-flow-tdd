@@ -366,4 +366,4 @@ env_vars:
 
 # Referências a outros arquivos de configuração
 external_configs:
-  agents: "src/configs/agents.yaml"  # Configurações de guardrails e prompts 
+  agents: "src/configs/agents.json"  # Configurações de guardrails e prompts 
