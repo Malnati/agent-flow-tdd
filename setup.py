@@ -60,6 +60,9 @@ install_requires = [
     "anthropic>=0.18.0",
     "PyYAML>=6.0.1",
     "llama-cpp-python>=0.2.10",
+    "transformers>=4.41.2",
+    "torch>=2.3.1",
+    "accelerate>=0.31.0",
 ]
 
 # Dependências de desenvolvimento
