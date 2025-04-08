@@ -1,6 +1,6 @@
 # Makefile para o projeto prompt-tdd
 
-.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs test-e2e publish download-model docs-serve docs-build docs-deploy docs-generate status edit-prompts orchestrator simple-tui
+.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs test-e2e publish download-model docs-serve docs-build docs-deploy docs-generate status edit-prompts orchestrator
 
 # Configuração do ambiente virtual
 VENV = .venv
@@ -278,12 +278,6 @@ orchestrator:
 	@echo "🖥️ Iniciando orquestrador de agentes..."
 	@bash -c "source $(VENV)/bin/activate && cd src/ui && $(PYTHON) agent_orchestrator.py"
 	@echo "✅ Orquestrador de agentes finalizado!"
-
-# TUI simples
-simple-tui:
-	@echo "🖥️ Iniciando TUI simples..."
-	@bash -c "source $(VENV)/bin/activate && cd src/ui && $(PYTHON) simple_tui.py"
-	@echo "✅ TUI simples finalizado!"
 
 # Permite argumentos extras para o comando run
 %:

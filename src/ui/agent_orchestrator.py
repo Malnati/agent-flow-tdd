@@ -9,6 +9,8 @@ from textual.app import App, ComposeResult
 from textual.containers import Container
 from textual.widgets import Button, Footer, Header, Input, Static
 from textual import on
+from textual.binding import Binding
+from textual.css.query import NoMatches
 
 # Configuração de logging
 logger = logging.getLogger(__name__)
@@ -22,7 +24,11 @@ class SimpleOrchestratorApp(App):
     """Aplicativo simples para orquestrar prompts."""
     
     TITLE = "Orquestrador de Prompts"
-    CSS_PATH = "agent_orchestrator.tcss"
+    # CSS_PATH = "agent_orchestrator.tcss"
+    
+    BINDINGS = [
+        Binding("ctrl+q", "quit", "Sair"),
+    ]
     
     def compose(self) -> ComposeResult:
         """Compõe a interface principal."""
@@ -37,21 +43,38 @@ class SimpleOrchestratorApp(App):
     @on(Button.Pressed, "#gen-button")
     def on_button_pressed(self) -> None:
         """Ação quando o botão é pressionado."""
+        self.gerar_conteudo()
+    
+    @on(Input.Submitted)
+    def on_input_submitted(self) -> None:
+        """Ação quando o ENTER é pressionado em um campo de input."""
+        self.gerar_conteudo()
+    
+    def gerar_conteudo(self) -> None:
+        """Gera conteúdo com base no prompt."""
         self.notify("Gerando conteúdo...")
-        input_field = self.query_one("#prompt-input", Input)
-        prompt = input_field.value
+        prompt = self.query_one("#prompt-input", Input).value
         
         if not prompt:
             self.notify("Por favor, digite um prompt", severity="error")
             return
         
-        # Efeito visual para mostrar que o prompt foi recebido
-        input_field.styles.border = ("solid", "green")
-        
         # Simulação de resposta
         resultado = f"[bold green]Resposta para:[/] [yellow]{prompt}[/]\n\n[white]Esta é uma resposta simulada.[/]"
         self.query_one("#output", Static).update(resultado)
         self.notify("Conteúdo gerado com sucesso!", severity="success")
+
+    def on_mount(self) -> None:
+        """Evento disparado quando o aplicativo é montado."""
+        # Coloca o foco no campo de input automaticamente
+        try:
+            self.query_one("#prompt-input").focus()
+        except NoMatches:
+            pass
+
+    def action_quit(self) -> None:
+        """Ação para sair do aplicativo."""
+        self.exit()
 
 def main():
     """Função principal para executar o aplicativo."""

@@ -50,7 +50,7 @@ TabPane {
     min-height: 3;
     border: solid $accent;
     background: $surface;
-    color: $text-highlight;
+    color: $text;
     padding: 1;
     margin-bottom: 1;
 }
