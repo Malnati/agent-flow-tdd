@@ -3,6 +3,7 @@ Módulo de agentes e guardrails do sistema.
 """
 from typing import Any, Dict, List, Optional
 import yaml
+import json
 import os
 from pydantic import BaseModel
 import uuid
@@ -20,9 +21,9 @@ def load_config() -> Dict[str, Any]:
     Returns:
         Dict com configurações
     """
-    agents_config_path = os.path.join(os.path.dirname(__file__), "..", "configs", "agents.yaml")
+    agents_config_path = os.path.join(os.path.dirname(__file__), "..", "configs", "agents.json")
     with open(agents_config_path, "r") as f:
-        config = yaml.safe_load(f)
+        config = json.load(f)
     return config
 
 # Configurações globais
@@ -225,16 +226,24 @@ class InputGuardrail:
             response = self.model_manager.generate_response(messages)
             logger.debug(f"Resposta do modelo: {response}")
             
-            # Tenta fazer parse do YAML
+            # Tenta fazer parse do JSON ou YAML
             try:
-                info = yaml.safe_load(response)
-                if isinstance(info, dict):
-                    logger.debug(f"Informações extraídas via YAML: {info}")
-                    return info
-                else:
-                    logger.warning("Resposta não é um dicionário YAML válido, tentando extração manual")
+                # Tenta primeiro como JSON
+                try:
+                    info = json.loads(response)
+                    if isinstance(info, dict):
+                        logger.debug(f"Informações extraídas via JSON: {info}")
+                        return info
+                except json.JSONDecodeError:
+                    # Tenta depois como YAML 
+                    info = yaml.safe_load(response)
+                    if isinstance(info, dict):
+                        logger.debug(f"Informações extraídas via YAML: {info}")
+                        return info
+                    else:
+                        logger.warning("Resposta não é um dicionário válido, tentando extração manual")
             except Exception as e:
-                logger.warning(f"Erro ao fazer parse YAML: {str(e)}, tentando extração manual")
+                logger.warning(f"Erro ao fazer parse: {str(e)}, tentando extração manual")
             
             # Fallback: Extração manual dos campos
             logger.info("Tentando extração manual de campos do texto")
@@ -441,11 +450,18 @@ class InputGuardrail:
             Dict com informações extraídas
         """
         try:
-            # Tentativa de parse YAML simples do prompt original
-            info = yaml.safe_load(prompt)
-            if isinstance(info, dict):
-                logger.info("Extraindo informações diretamente do prompt no formato YAML")
-                return info
+            # Tentativa de parse JSON do prompt original
+            try:
+                info = json.loads(prompt)
+                if isinstance(info, dict):
+                    logger.info("Extraindo informações diretamente do prompt no formato JSON")
+                    return info
+            except json.JSONDecodeError:
+                # Tentativa de parse YAML do prompt original
+                info = yaml.safe_load(prompt)
+                if isinstance(info, dict):
+                    logger.info("Extraindo informações diretamente do prompt no formato YAML")
+                    return info
         except:
             pass
             
@@ -607,11 +623,18 @@ class OutputGuardrail:
             
             response = self.model_manager.generate_response(messages)
             
-            # Tenta fazer parse do JSON
+            # Tenta fazer parse do JSON ou YAML
             try:
-                suggestions = yaml.safe_load(response)
-                if not isinstance(suggestions, dict):
-                    raise ValueError("Resposta não é um dicionário")
+                # Tenta primeiro como JSON
+                try:
+                    suggestions = json.loads(response)
+                    if not isinstance(suggestions, dict):
+                        raise ValueError("Resposta não é um dicionário")
+                except json.JSONDecodeError:
+                    # Tenta depois como YAML
+                    suggestions = yaml.safe_load(response)
+                    if not isinstance(suggestions, dict):
+                        raise ValueError("Resposta não é um dicionário")
                     
                 # Atualiza dados com sugestões
                 for field in missing_fields:
@@ -640,26 +663,43 @@ class OutputGuardrail:
             Dict com resultado do processamento
         """
         try:
-            # Tenta fazer parse do JSON
+            # Tenta fazer parse do JSON ou YAML
             try:
-                data = yaml.safe_load(output)
-                if not isinstance(data, dict):
-                    raise ValueError("Saída não é um dicionário")
+                # Tenta primeiro como JSON
+                try:
+                    data = json.loads(output)
+                    if not isinstance(data, dict):
+                        raise ValueError("Saída não é um dicionário")
+                except json.JSONDecodeError:
+                    # Tenta depois como YAML
+                    data = yaml.safe_load(output)
+                    if not isinstance(data, dict):
+                        raise ValueError("Saída não é um dicionário")
             except Exception as e:
                 logger.warning(f"Erro ao fazer parse da saída: {str(e)}, usando dados do contexto")
                 
                 # Como não conseguimos parsear a saída, vamos usar 
                 # os dados do contexto que já foram validados
                 try:
-                    # Tenta fazer parse do contexto como YAML
-                    context_data = yaml.safe_load(context)
-                    if isinstance(context_data, dict):
-                        logger.info("Usando dados extraídos do contexto original")
-                        return {
-                            "status": "success",
-                            "output": output,
-                            "data": context_data
-                        }
+                    # Tenta fazer parse do contexto como JSON ou YAML
+                    try:
+                        context_data = json.loads(context)
+                        if isinstance(context_data, dict):
+                            logger.info("Usando dados extraídos do contexto original (JSON)")
+                            return {
+                                "status": "success",
+                                "output": output,
+                                "data": context_data
+                            }
+                    except json.JSONDecodeError:
+                        context_data = yaml.safe_load(context)
+                        if isinstance(context_data, dict):
+                            logger.info("Usando dados extraídos do contexto original (YAML)")
+                            return {
+                                "status": "success",
+                                "output": output,
+                                "data": context_data
+                            }
                 except Exception:
                     logger.warning("Não foi possível usar dados do contexto")
                 
