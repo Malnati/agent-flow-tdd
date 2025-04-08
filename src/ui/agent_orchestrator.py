@@ -60,8 +60,8 @@ class SimpleOrchestratorApp(App):
         # Modelos locais
         modelos.append("tinyllama-1.1b")
         modelos.append("phi-1")
-        modelos.append("deepseek-coder-6.7b")
-        modelos.append("phi3-mini")
+        modelos.append("deepseek-coder-6.7b")  # Nome correto para o modelo DeepSeek
+        modelos.append("phi3-mini")  # Nome correto para o modelo Phi-3
         
         # Modelos remotos (sempre incluídos como opções)
         modelos.append("gpt-3.5-turbo")
@@ -121,13 +121,56 @@ class SimpleOrchestratorApp(App):
             # Configura o modelo via variável de ambiente
             os.environ["DEFAULT_MODEL"] = modelo
             
-            # Inicializa o orquestrador com o modelo selecionado
-            orchestrator = AgentOrchestrator(model_name=modelo)
-            logger.info(f"Orquestrador inicializado com modelo {modelo}")
+            # Inicializa componentes
+            model_manager = ModelManager(model_name=modelo)
             
+            # Verifica disponibilidade do modelo local selecionado
+            # Se for tinyllama e não estiver disponível, usa fallback
+            if modelo.startswith("tinyllama-") and not model_manager.tinyllama_model:
+                logger.warning("Modelo TinyLlama não disponível. Usando modelo alternativo.")
+                self.notify("Modelo TinyLlama não disponível, usando modelo alternativo.", severity="warning")
+                os.environ["DEFAULT_MODEL"] = "gpt-3.5-turbo"
+                model_manager = ModelManager(model_name="gpt-3.5-turbo")
+            
+            # Se for phi-1 e não estiver disponível, usa fallback
+            elif modelo == "phi-1" and not model_manager.phi1_model:
+                logger.warning("Modelo Phi-1 não disponível. Usando modelo alternativo.")
+                self.notify("Modelo Phi-1 não disponível, usando modelo alternativo.", severity="warning")
+                os.environ["DEFAULT_MODEL"] = "gpt-3.5-turbo"
+                model_manager = ModelManager(model_name="gpt-3.5-turbo")
+            
+            # Se for deepseek e não estiver disponível, usa fallback
+            elif modelo == "deepseek-coder-6.7b" and not model_manager.deepseek_model:
+                logger.warning("Modelo DeepSeek não disponível. Usando modelo alternativo.")
+                self.notify("Modelo DeepSeek não disponível, usando modelo alternativo.", severity="warning")
+                os.environ["DEFAULT_MODEL"] = "gpt-3.5-turbo"
+                model_manager = ModelManager(model_name="gpt-3.5-turbo")
+            
+            # Se for phi3 e não estiver disponível, usa fallback
+            elif modelo == "phi3-mini" and not model_manager.phi3_model:
+                logger.warning("Modelo Phi-3 Mini não disponível. Usando modelo alternativo.")
+                self.notify("Modelo Phi-3 Mini não disponível, usando modelo alternativo.", severity="warning")
+                os.environ["DEFAULT_MODEL"] = "gpt-3.5-turbo"
+                model_manager = ModelManager(model_name="gpt-3.5-turbo")
+                
+            # Inicializa o DatabaseManager
+            db = DatabaseManager()
+            
+            # Cria o orquestrador com o modelo selecionado
+            orchestrator = AgentOrchestrator(model_manager.model_name)
+            
+            # Atribui o model_manager como atributo
+            orchestrator.model_manager = model_manager
+            
+            # Define o db como atributo separado
+            orchestrator.db = db
+            
+            logger.info(f"Orquestrador inicializado com modelo {model_manager.model_name}")
             return orchestrator
+            
         except Exception as e:
             logger.error(f"Erro ao criar orquestrador: {str(e)}")
+            self.notify(f"Erro ao inicializar o modelo: {str(e)}", severity="error")
             raise
     
     def gerar_conteudo(self) -> None:
