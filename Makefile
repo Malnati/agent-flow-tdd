@@ -34,6 +34,7 @@ help:
 	@echo "  make install      - Instala dependências do projeto"
 	@echo "  make clean        - Remove arquivos temporários"
 	@echo "  make download-model - Baixa o modelo TinyLLaMA"
+	@echo "  make download-phi1  - Baixa o modelo Phi-1"
 	@echo ""
 	@echo "Documentação:"
 	@echo "  make docs-serve   - Inicia servidor local da documentação"
@@ -66,6 +67,7 @@ install:
 	python -m venv $(VENV)
 	$(PIP) install -e ".[dev,docs]"
 	@make download-model || exit 1
+	@make download-phi1 || exit 1
 	@echo "✅ Instalação concluída!"
 
 # Testes
@@ -169,7 +171,23 @@ download-model:
 			exit 1; \
 		fi; \
 		echo "✅ Download concluído em $(MODEL_DIR)/$(MODEL_NAME)"; \
-	fi 
+	fi
+
+# Download do modelo Phi-1
+download-phi1:
+	@echo "📥 Baixando modelo Phi-1..."
+	@mkdir -p $(MODEL_DIR)
+	@if [ -f "$(MODEL_DIR)/phi-1.Q4_K_M.gguf" ]; then \
+		echo "✅ Modelo já existe em $(MODEL_DIR)/phi-1.Q4_K_M.gguf"; \
+	else \
+		echo "🔄 Iniciando download..."; \
+		if ! curl -L -f https://huggingface.co/professorf/phi-1-gguf/resolve/main/phi-1-f16.gguf -o $(MODEL_DIR)/phi-1.Q4_K_M.gguf; then \
+			echo "❌ Falha no download do modelo"; \
+			rm -f $(MODEL_DIR)/phi-1.Q4_K_M.gguf; \
+			exit 1; \
+		fi; \
+		echo "✅ Download concluído em $(MODEL_DIR)/phi-1.Q4_K_M.gguf"; \
+	fi
 
 # Comandos de documentação
 docs-serve:
