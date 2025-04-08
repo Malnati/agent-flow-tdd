@@ -33,6 +33,45 @@ class SimpleOrchestratorApp(App):
     TITLE = "Orquestrador de Prompts"
     # CSS_PATH = "agent_orchestrator.tcss"
     
+    # Estilos CSS embutidos
+    DEFAULT_CSS = """
+    /* Estilo para o botão de geração */
+    #gen-button {
+        min-width: 15;
+        padding: 1 2;
+        margin: 1;
+        background: $success;
+        color: $text;
+        border: tall $success-lighten-2;
+        text-style: bold;
+    }
+
+    #gen-button:hover {
+        background: $success-darken-1;
+        border: tall $success-lighten-1;
+    }
+
+    /* Estilos para os RadioButtons */
+    RadioButton {
+        background: $surface;
+        color: $text-muted;
+        border: none;
+        padding: 0 1;
+        height: 1;
+    }
+
+    RadioButton:hover {
+        color: $text;
+        text-style: italic;
+    }
+
+    RadioButton.-selected {
+        color: $success;
+        text-style: bold;
+        background: $surface;
+    }
+    """
+    
     BINDINGS = [
         # Múltiplas alternativas para sair do aplicativo
         Binding("ctrl+meta+q", "quit", "Sair"),
