@@ -61,8 +61,10 @@ def get_orchestrator() -> AgentOrchestrator:
             
         db = DatabaseManager()
         
-        # Cria e configura orquestrador - apenas model_manager como parâmetro
-        orchestrator = AgentOrchestrator(model_manager)
+        # Cria e configura orquestrador - apenas nome do modelo como parâmetro
+        orchestrator = AgentOrchestrator(model_manager.model_name)
+        # Atribui o model_manager como atributo
+        orchestrator.model_manager = model_manager
         # Define o db como atributo separado
         orchestrator.db = db
         
@@ -130,8 +132,10 @@ class MCPHandler:
         """Inicializa o manipulador MCP."""
         self.model_manager = ModelManager()
         self.db = DatabaseManager()
-        # Cria e configura orquestrador - apenas model_manager como parâmetro
-        self.orchestrator = AgentOrchestrator(self.model_manager)
+        # Cria e configura orquestrador - apenas nome do modelo como parâmetro
+        self.orchestrator = AgentOrchestrator(self.model_manager.model_name)
+        # Atribui o model_manager como atributo
+        self.orchestrator.model_manager = self.model_manager
         # Define o db como atributo separado
         self.orchestrator.db = self.db
         logger.info("MCPHandler inicializado")
