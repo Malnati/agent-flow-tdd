@@ -24,21 +24,24 @@ GuardRails:
             format: ...
             required: true
 
-      requirements: Os campos devem ser compatíveis com o objetivo do sistema e descrever claramente as entradas esperadas.
+      requirements: Os campos devem ser listados inline, por exemplo: fields: nome, tipo, formato, obrigatório. Isso evita a necessidade de parseamento de estruturas complexas.
 
   Output:
     gerar_prompt_tdd:
       completion_prompt: |
-        Com base nas informações coletadas anteriormente (título, descrição e campos), gere um prompt no formato TDD. Inclua critérios de aceite claros, objetivos e verificáveis. Utilize o seguinte modelo:
+        Com base nas informações coletadas anteriormente (título, descrição e campos), gere um prompt no formato TDD. Utilize critérios de aceite no estilo BDD, seguindo o padrão:
 
-        Nome: <...>
-        Descrição: <...>
+        Nome: <nome da funcionalidade>
+        Descrição: <descrição detalhada>
         Critérios de Aceite:
-          - <critério 1>
-          - <critério 2>
-          - ...
+          - Dado que <condição inicial>
+            Quando <ação do usuário>
+            Então <resultado esperado>
+          - Dado que <outra condição>
+            Quando <ação>
+            Então <resultado>
 
-      requirements: O prompt gerado deve estar completo, coeso, e adequado para ser utilizado em um sistema de geração de código por TDD.
+      requirements: O prompt deve ser gerado em formato TDD com critérios de aceite estruturados como em BDD, claros, objetivos e verificáveis.
 
     verificar_coerencia:
       completion_prompt: |
