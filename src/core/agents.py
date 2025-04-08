@@ -2,7 +2,6 @@
 Módulo de agentes e guardrails do sistema.
 """
 from typing import Any, Dict, List, Optional
-import yaml
 import json
 import os
 from pydantic import BaseModel
@@ -29,16 +28,7 @@ def load_config() -> Dict[str, Any]:
                 config = json.load(f)
                 logger.info(f"Configurações carregadas com sucesso de: {agents_config_path}")
                 return config
-        else:
-            # Fallback para o arquivo YAML se o JSON não existir
-            yaml_config_path = os.path.join(os.path.dirname(__file__), "..", "configs", "agents.yaml")
-            if os.path.exists(yaml_config_path):
-                with open(yaml_config_path, "r", encoding="utf-8") as f:
-                    config = yaml.safe_load(f)
-                    logger.warning(f"Arquivo JSON não encontrado, usando YAML: {yaml_config_path}")
-                    return config
-            else:
-                raise FileNotFoundError("Nenhum arquivo de configuração encontrado (JSON ou YAML)")
+                
     except Exception as e:
         logger.error(f"FALHA - load_config | Erro: {str(e)}")
         # Retorna uma configuração mínima padrão como fallback
@@ -70,155 +60,204 @@ class AgentResult(BaseModel):
     raw_responses: List[Dict[str, Any]] = []
 
 class AgentOrchestrator:
-    """Orquestrador de agentes do sistema."""
-
-    def __init__(self, model_manager: Optional[ModelManager] = None):
+    """
+    Classe responsável por orquestrar o fluxo completo de processamento.
+    """
+    
+    def __init__(self, model_name=None):
         """
         Inicializa o orquestrador.
         
         Args:
-            model_manager: Gerenciador de modelos opcional
+            model_name: Nome do modelo a ser usado
         """
-        self.model_manager = model_manager or ModelManager()
-        self.input_guardrails = [
-            InputGuardrail(self.model_manager, config)
-            for config in CONFIG.get("GuardRails", {}).get("Input", {}).values()
-        ]
-        self.output_guardrails = [
-            OutputGuardrail(self.model_manager, config)
-            for config in CONFIG.get("GuardRails", {}).get("Output", {}).values()
-        ]
-        self.db = DatabaseManager()
-        logger.info("AgentOrchestrator inicializado")
-
+        self.config = self.load_config()
+        self.model_manager = ModelManager(model_name)
+        self.input_guardrails = {}
+        self.output_guardrails = {}
+        self.initialize()
+        
+    def load_config(self):
+        """
+        Carrega as configurações do agente, tentando primeiro o JSON.
+        
+        Returns:
+            Configurações carregadas
+        """
+        try:
+            # Tenta carregar do arquivo JSON primeiro
+            config_path_json = os.path.join(os.path.dirname(__file__), "../configs/agents.json")
+            if os.path.exists(config_path_json):
+                with open(config_path_json, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    logger.info(f"Configurações carregadas com sucesso de: {os.path.abspath(config_path_json)}")
+                    return config
+                    
+            # Se nenhum arquivo for encontrado
+            raise FileNotFoundError("Arquivos de configuração configs/agents.json não encontrados")
+            
+        except Exception as e:
+            logger.error(f"Erro ao carregar configurações: {str(e)}")
+            raise
+        
     def execute(self, prompt: str, format: str = "json") -> AgentResult:
         """
-        Executa o fluxo do agente.
+        Executa o fluxo completo de processamento.
         
         Args:
             prompt: Prompt do usuário
-            format: Formato de saída (json/markdown)
+            format: Formato de saída desejado
             
         Returns:
-            Resultado da execução
+            Resultado do processamento
         """
         try:
-            # Registra execução
-            run_id = self.db.log_run(
-                str(uuid.uuid4()),
-                input=prompt,
-                output_type=format
-            )
-
-            # Valida entrada
-            input_results = []
-            has_critical_input_error = False
+            logger.info(f"Iniciando execução para prompt: {prompt[:50]}...")
             
-            for guardrail in self.input_guardrails:
-                try:
-                    result = guardrail.process(prompt)
-                    input_results.append(result)
-                    self.db.log_guardrail_results(
-                        run_id=run_id,
-                        guardrail_type="input",
-                        results={
-                            "prompt": prompt,
-                            "info": result.get("info", {}),
-                            "status": result.get("status", "error"),
-                            "passed": result.get("status") == "success"
-                        }
-                    )
-                    
-                    if result.get("status") != "success":
-                        # Falha lógica: continuamos a execução, apenas logamos alerta
-                        logger.warning(f"Guardrail de entrada falhou: {result.get('error', 'Erro desconhecido')}")
-                except Exception as e:
-                    # Falha sistêmica: registramos e consideramos crítico
-                    logger.error(f"Erro sistêmico no guardrail de entrada: {str(e)}")
-                    has_critical_input_error = True
-                    input_results.append({
-                        "status": "error",
-                        "error": f"Erro sistêmico: {str(e)}",
-                        "prompt": prompt
-                    })
-
-            if has_critical_input_error:
-                # Interrompe apenas em caso de erro sistêmico
-                raise ValueError("Erro crítico na validação de entrada")
-
-            # Gera resposta
-            messages = [
-                {"role": "system", "content": CONFIG["prompts"]["system"]},
-                {"role": "user", "content": prompt}
-            ]
-            response = self.model_manager.generate_response(messages)
-
-            # Valida saída
-            output_results = []
-            has_critical_output_error = False
-            
-            for guardrail in self.output_guardrails:
-                try:
-                    result = guardrail.process(response, prompt)
-                    output_results.append(result)
-                    self.db.log_guardrail_results(
-                        run_id=run_id,
-                        guardrail_type="output",
-                        results={
-                            "response": response,
-                            "info": result.get("info", {}),
-                            "status": result.get("status", "error"),
-                            "passed": result.get("status") == "success"
-                        }
-                    )
-                    
-                    if result.get("status") != "success":
-                        # Falha lógica: continuamos a execução, apenas logamos alerta
-                        logger.warning(f"Guardrail de saída falhou: {result.get('error', 'Erro desconhecido')}")
-                except Exception as e:
-                    # Falha sistêmica: registramos e consideramos crítico
-                    logger.error(f"Erro sistêmico no guardrail de saída: {str(e)}")
-                    has_critical_output_error = True
-                    output_results.append({
-                        "status": "error",
-                        "error": f"Erro sistêmico: {str(e)}",
-                        "response": response
-                    })
-
-            if has_critical_output_error:
-                # Interrompe apenas em caso de erro sistêmico
-                raise ValueError("Erro crítico na validação de saída")
-
-            # Registra resposta
-            self.db.log_raw_response(run_id, response)
-
-            # Retorna resultado
-            return AgentResult(
-                output=response,
-                items=[{"type": "response", "content": response}],
-                guardrails=input_results + output_results,
-                raw_responses=[{"id": "response", "response": response}]
-            )
-
+            # Extrai informações do prompt usando guardrail de identificação de título
+            try:
+                info = self.input_guardrails["identificar_titulo"].process(prompt)
+                logger.debug(f"Informações de título extraídas: {info}")
+            except Exception as e:
+                logger.error(f"Erro no guardrail identificar_titulo: {str(e)}")
+                return AgentResult(
+                    output=f"Erro na extração de título: {str(e)}",
+                    items=[],
+                    guardrails=[],
+                    raw_responses=[]
+                )
+                
+            # Extrai descrição detalhada
+            try:
+                description_info = self.input_guardrails["identificar_descricao"].process(prompt)
+                logger.debug(f"Informações de descrição extraídas: {description_info}")
+                
+                # Combina informações
+                if "description" in description_info:
+                    info["description"] = description_info["description"]
+            except Exception as e:
+                logger.error(f"Erro no guardrail identificar_descricao: {str(e)}")
+                # Continua mesmo se falhar
+                
+            # Extrai campos
+            try:
+                fields_info = self.input_guardrails["identificar_campos"].process(prompt)
+                logger.debug(f"Informações de campos extraídas: {fields_info}")
+                
+                # Combina informações
+                if "fields" in fields_info:
+                    info["fields"] = fields_info["fields"]
+            except Exception as e:
+                logger.error(f"Erro no guardrail identificar_campos: {str(e)}")
+                # Continua mesmo se falhar
+                
+            # Gera prompt TDD
+            try:
+                # Prepara as informações para o guardrail
+                title = info.get("name", "")
+                description = info.get("description", "")
+                fields = info.get("fields", [])
+                
+                prompt_context = {
+                    "title": title,
+                    "description": description,
+                    "fields": fields
+                }
+                
+                # Formata o prompt para o guardrail
+                prompt_for_guardrail = f"""
+                Título: {title}
+                Descrição: {description}
+                Campos: {fields}
+                """
+                
+                # Processa com o guardrail de saída
+                result = self.output_guardrails["gerar_prompt_tdd"].process(prompt_for_guardrail, prompt_context)
+                
+                # Verifica coerência (opcional)
+                coherence_result = None
+                if "verificar_coerencia" in self.output_guardrails:
+                    try:
+                        coherence_result = self.output_guardrails["verificar_coerencia"].process(
+                            f"Resultado: {result}\nPrompt original: {prompt}", 
+                            {"original": prompt, "result": result}
+                        )
+                        logger.debug(f"Resultado da verificação de coerência: {coherence_result}")
+                    except Exception as e:
+                        logger.error(f"Erro na verificação de coerência: {str(e)}")
+                
+                return AgentResult(
+                    output=result,
+                    items=[prompt_context],
+                    guardrails=[
+                        {"name": "gerar_prompt_tdd", "result": result},
+                        {"name": "verificar_coerencia", "result": coherence_result} if coherence_result else {}
+                    ],
+                    raw_responses=[
+                        {"guardrail": "identificar_titulo", "response": info},
+                        {"guardrail": "identificar_descricao", "response": description_info},
+                        {"guardrail": "identificar_campos", "response": fields_info}
+                    ]
+                )
+                
+            except Exception as e:
+                logger.error(f"Erro no guardrail de saída: {str(e)}")
+                return AgentResult(
+                    output=f"Erro na geração do resultado: {str(e)}",
+                    items=[],
+                    guardrails=[],
+                    raw_responses=[]
+                )
+                
         except Exception as e:
             logger.error(f"FALHA - execute | Erro: {str(e)}")
-            raise
+            raise Exception(f"Erro crítico na validação de saída")
+
+    def initialize(self):
+        """
+        Inicializa os componentes do agente.
+        """
+        # Inicializa os guardrails de entrada
+        input_guardrails = {}
+        for guardrail_id, guardrail_config in self.config["GuardRails"]["Input"].items():
+            input_guardrails[guardrail_id] = InputGuardrail(
+                guardrail_id=guardrail_id,
+                config=guardrail_config,
+                model_manager=self.model_manager
+            )
+            logger.info("InputGuardrail inicializado")
+        
+        # Inicializa os guardrails de saída
+        output_guardrails = {}
+        for guardrail_id, guardrail_config in self.config["GuardRails"]["Output"].items():
+            output_guardrails[guardrail_id] = OutputGuardrail(
+                guardrail_name=guardrail_id,
+                config=guardrail_config,
+                model_manager=self.model_manager
+            )
+            logger.info("OutputGuardrail inicializado")
+            
+        self.input_guardrails = input_guardrails
+        self.output_guardrails = output_guardrails
+        
+        logger.info("AgentOrchestrator inicializado")
 
 class InputGuardrail:
     """Guardrail para validação e estruturação de entrada."""
     
-    def __init__(self, model_manager: ModelManager, config: Dict[str, Any]):
+    def __init__(self, guardrail_id: str, config: dict, model_manager):
         """
         Inicializa o guardrail.
         
         Args:
+            guardrail_id: ID do guardrail
+            config: Configuração do guardrail
             model_manager: Gerenciador de modelos
-            config: Configurações do guardrail
         """
-        self.model_manager = model_manager
+        self.guardrail_id = guardrail_id
         self.config = config
-        # Requisitos agora é texto plano, não um dicionário de chaves
-        self.requirements = self.config.get("requirements", "")
+        self.model_manager = model_manager
+        self.requirements = config.get("requirements", "")
         logger.info("InputGuardrail inicializado")
         
     def _load_config(self) -> Dict[str, Any]:
@@ -252,24 +291,25 @@ class InputGuardrail:
             response = self.model_manager.generate_response(messages)
             logger.debug(f"Resposta do modelo: {response}")
             
-            # Tenta fazer parse do JSON ou YAML
+            # Tenta fazer parse do JSON, removendo blocos de código se necessário
+            cleaned_response = response
+            if cleaned_response.startswith("```") and "```" in cleaned_response[3:]:
+                # Remove os delimitadores de código markdown (```json e ```)
+                first_delimiter_end = cleaned_response.find("\n", 3)
+                if first_delimiter_end != -1:
+                    last_delimiter_start = cleaned_response.rfind("```")
+                    if last_delimiter_start > first_delimiter_end:
+                        cleaned_response = cleaned_response[first_delimiter_end+1:last_delimiter_start].strip()
+            
+            # Tenta primeiro como JSON
             try:
-                # Tenta primeiro como JSON
-                try:
-                    info = json.loads(response)
-                    if isinstance(info, dict):
-                        logger.debug(f"Informações extraídas via JSON: {info}")
-                        return info
-                except json.JSONDecodeError:
-                    # Tenta depois como YAML 
-                    info = yaml.safe_load(response)
-                    if isinstance(info, dict):
-                        logger.debug(f"Informações extraídas via YAML: {info}")
-                        return info
-                    else:
-                        logger.warning("Resposta não é um dicionário válido, tentando extração manual")
-            except Exception as e:
-                logger.warning(f"Erro ao fazer parse: {str(e)}, tentando extração manual")
+                info = json.loads(cleaned_response)
+                if isinstance(info, dict):
+                    logger.debug(f"Informações extraídas via JSON: {info}")
+                    return info
+            except json.JSONDecodeError:
+                # Se não for JSON válido, vai para extração manual
+                logger.warning(f"Erro ao fazer parse JSON, tentando extração manual")
             
             # Fallback: Extração manual dos campos
             logger.info("Tentando extração manual de campos do texto")
@@ -478,16 +518,23 @@ class InputGuardrail:
         try:
             # Tentativa de parse JSON do prompt original
             try:
-                info = json.loads(prompt)
+                # Limpa o prompt de marcadores de código markdown se necessário
+                cleaned_prompt = prompt
+                if cleaned_prompt.startswith("```") and "```" in cleaned_prompt[3:]:
+                    # Remove os delimitadores de código markdown
+                    first_delimiter_end = cleaned_prompt.find("\n", 3)
+                    if first_delimiter_end != -1:
+                        last_delimiter_start = cleaned_prompt.rfind("```")
+                        if last_delimiter_start > first_delimiter_end:
+                            cleaned_prompt = cleaned_prompt[first_delimiter_end+1:last_delimiter_start].strip()
+                
+                info = json.loads(cleaned_prompt)
                 if isinstance(info, dict):
                     logger.info("Extraindo informações diretamente do prompt no formato JSON")
                     return info
             except json.JSONDecodeError:
-                # Tentativa de parse YAML do prompt original
-                info = yaml.safe_load(prompt)
-                if isinstance(info, dict):
-                    logger.info("Extraindo informações diretamente do prompt no formato YAML")
-                    return info
+                # Se não for JSON válido, continua para extração manual
+                pass
         except:
             pass
             
@@ -587,21 +634,24 @@ class InputGuardrail:
             }
 
 class OutputGuardrail:
-    """Guardrail para validação e estruturação de saída."""
+    """
+    Classe que implementa o guardrail para verificação da saída.
+    """
     
-    def __init__(self, model_manager: ModelManager, config: Dict[str, Any]):
+    def __init__(self, guardrail_name: str, config: dict, model_manager):
         """
         Inicializa o guardrail.
         
         Args:
+            guardrail_name: Nome do guardrail
+            config: Configuração do guardrail
             model_manager: Gerenciador de modelos
-            config: Configurações do guardrail
         """
-        self.model_manager = model_manager
+        self.name = guardrail_name
         self.config = config
-        # Requisitos agora é texto plano, não um dicionário de chaves
-        self.requirements = self.config.get("requirements", "")
-        logger.info("OutputGuardrail inicializado")
+        self.model_manager = model_manager
+        self.format = config.get("format", "text")
+        self.requirements = config.get("requirements", "")
         
     def _load_config(self) -> Dict[str, Any]:
         """Carrega configurações do guardrail."""
@@ -611,178 +661,93 @@ class OutputGuardrail:
         """Carrega requisitos da saída."""
         return self.config["requirements"]
         
-    def _validate_json(self, data: Dict[str, Any]) -> List[str]:
+    def _validate_json(self, data):
         """
-        Valida campos obrigatórios no JSON.
+        Valida se o JSON tem os campos necessários baseado nos requisitos.
         
         Args:
-            data: Dados a serem validados
+            data: Dados JSON a serem validados
             
         Returns:
-            Lista de campos ausentes
+            Dicionário com resultado da validação
         """
-        # Como requirements agora é texto, realizamos uma validação básica
-        # A implementação atual apenas verifica se é um dicionário com campos básicos
-        missing_fields = []
+        # Campos obrigatórios específicos para TDD
+        required_fields = [
+            "Nome da funcionalidade",
+            "Descrição detalhada",
+            "Objetivos principais",
+            "Requisitos técnico",
+            "Restrições do sistema"
+        ]
         
-        if not data or not isinstance(data, dict):
-            missing_fields.append("formato_json_valido")
-            return missing_fields
-            
-        # Validação básica de campos obrigatórios
-        required_fields = ["Nome da funcionalidade", "Descrição detalhada"]
+        missing_fields = []
         for field in required_fields:
             if field not in data or not data[field]:
                 missing_fields.append(field)
-                
-        return missing_fields
         
-    def _suggest_missing_fields(self, data: Dict[str, Any], missing_fields: List[str], context: str) -> Dict[str, Any]:
+        if missing_fields:
+            return {
+                "valid": False,
+                "errors": f"Campos obrigatórios ausentes: {', '.join(missing_fields)}"
+            }
+            
+        return {"valid": True}
+        
+    def process(self, prompt, context: dict = None) -> str:
         """
-        Sugere valores para campos ausentes.
+        Processa o prompt e aplica o guardrail.
         
         Args:
-            data: Dados existentes
-            missing_fields: Campos ausentes
-            context: Contexto para geração
+            prompt: Prompt do usuário
+            context: Contexto adicional com dados para o guardrail
             
         Returns:
-            Dict com sugestões
+            Resposta validada
         """
+        if not context:
+            context = {}
+        
         try:
+            logger.debug(f"Processando guardrail output {self.name}")
+            
             # Gera resposta com o modelo
             messages = [
                 {"role": "system", "content": self.config["completion_prompt"]},
-                {"role": "user", "content": f"Contexto: {context}\nCampos ausentes: {', '.join(missing_fields)}"}
+                {"role": "user", "content": prompt}
             ]
             
-            response = self.model_manager.generate_response(messages)
+            output = self.model_manager.generate_response(messages)
+            logger.debug(f"Saída do modelo: {output}")
             
-            # Tenta fazer parse do JSON ou YAML
-            try:
-                # Tenta primeiro como JSON
-                try:
-                    suggestions = json.loads(response)
-                    if not isinstance(suggestions, dict):
-                        raise ValueError("Resposta não é um dicionário")
-                except json.JSONDecodeError:
-                    # Tenta depois como YAML
-                    suggestions = yaml.safe_load(response)
-                    if not isinstance(suggestions, dict):
-                        raise ValueError("Resposta não é um dicionário")
-                    
-                # Atualiza dados com sugestões
-                for field in missing_fields:
-                    if field in suggestions:
-                        data[field] = suggestions[field]
-                        
-                return data
-                
-            except Exception as e:
-                logger.error(f"FALHA - _suggest_missing_fields | Erro ao fazer parse: {str(e)}")
-                return data
-                
-        except Exception as e:
-            logger.error(f"FALHA - _suggest_missing_fields | Erro: {str(e)}")
-            return data
-            
-    def process(self, output: str, context: str) -> Dict[str, Any]:
-        """
-        Processa e valida a saída.
-        
-        Args:
-            output: Saída do modelo
-            context: Contexto da geração
-            
-        Returns:
-            Dict com resultado do processamento
-        """
-        try:
-            # Limpa a resposta de marcadores de código markdown se existirem
+            # Limpa o output se estiver em formato de bloco de código
             cleaned_output = output
             if cleaned_output.startswith("```") and "```" in cleaned_output[3:]:
-                # Remove os delimitadores de código markdown (```json e ```)
                 first_delimiter_end = cleaned_output.find("\n", 3)
                 if first_delimiter_end != -1:
                     last_delimiter_start = cleaned_output.rfind("```")
                     if last_delimiter_start > first_delimiter_end:
                         cleaned_output = cleaned_output[first_delimiter_end+1:last_delimiter_start].strip()
+                        logger.debug(f"Output limpo de marcadores de código: {cleaned_output}")
             
-            # Tenta fazer parse do JSON ou YAML
-            try:
-                # Tenta primeiro como JSON
+            # Validação baseada no formato
+            if self.format == "json":
                 try:
                     data = json.loads(cleaned_output)
-                    if not isinstance(data, dict):
-                        raise ValueError("Saída não é um dicionário")
-                except json.JSONDecodeError:
-                    # Tenta depois como YAML
-                    data = yaml.safe_load(cleaned_output)
-                    if not isinstance(data, dict):
-                        raise ValueError("Saída não é um dicionário")
-            except Exception as e:
-                logger.warning(f"Erro ao fazer parse da saída: {str(e)}, usando dados do contexto")
+                    validation_result = self._validate_json(data)
+                    if validation_result["valid"]:
+                        return json.dumps(data, indent=2, ensure_ascii=False)
+                    else:
+                        logger.warning(f"Validação JSON falhou: {validation_result['errors']}, usando dados do contexto")
+                        if context:
+                            return json.dumps(context, indent=2, ensure_ascii=False)
+                        return output
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Erro ao fazer parse da saída JSON: {str(e)}, usando dados do contexto")
+                    return output
+            else:
+                # Para formatos não suportados, apenas retorna a saída
+                return output
                 
-                # Como não conseguimos parsear a saída, vamos usar 
-                # os dados do contexto que já foram validados
-                try:
-                    # Tenta fazer parse do contexto como JSON ou YAML
-                    try:
-                        context_data = json.loads(context)
-                        if isinstance(context_data, dict):
-                            logger.info("Usando dados extraídos do contexto original (JSON)")
-                            return {
-                                "status": "success",
-                                "output": output,
-                                "data": context_data
-                            }
-                    except json.JSONDecodeError:
-                        context_data = yaml.safe_load(context)
-                        if isinstance(context_data, dict):
-                            logger.info("Usando dados extraídos do contexto original (YAML)")
-                            return {
-                                "status": "success",
-                                "output": output,
-                                "data": context_data
-                            }
-                except Exception:
-                    logger.warning("Não foi possível usar dados do contexto")
-                
-                # Se ainda não conseguimos extrair informações, tenta usar 
-                # o próprio output como um bloco de texto não-estruturado
-                return {
-                    "status": "success",
-                    "output": output,
-                    "data": {"text": output}
-                }
-                
-            # Valida campos obrigatórios
-            missing_fields = self._validate_json(data)
-            
-            if missing_fields:
-                # Tenta sugerir valores para campos ausentes
-                data = self._suggest_missing_fields(data, missing_fields, context)
-                
-                # Valida novamente
-                missing_fields = self._validate_json(data)
-                
-                if missing_fields:
-                    return {
-                        "status": "error",
-                        "error": f"Campos obrigatórios ausentes: {', '.join(missing_fields)}",
-                        "output": output
-                    }
-                    
-            return {
-                "status": "success",
-                "output": output,
-                "data": data
-            }
-            
         except Exception as e:
             logger.error(f"FALHA - process | Erro: {str(e)}")
-            return {
-                "status": "error",
-                "error": str(e),
-                "output": output
-            }
+            return "Erro ao processar o guardrail de saída"

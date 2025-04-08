@@ -563,6 +563,7 @@ class ModelManager:
             return response
             
         except Exception as e:
+            logger.error(f"Erro ao gerar com {self.model_name}: {str(e)}")
             if self.fallback_enabled:
                 # Tenta novamente com modelo de fallback
                 original_model = self.model_name
@@ -612,7 +613,7 @@ class ModelManager:
             provider = None
             for prov, config in self.config['providers'].items():
                 for pattern in config['prefix_patterns']:
-                    if self.model_name.startswith(pattern):
+                    if isinstance(self.model_name, str) and self.model_name.startswith(pattern):
                         provider = prov
                         break
                 if provider:
