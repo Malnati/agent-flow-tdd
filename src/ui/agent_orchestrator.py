@@ -106,7 +106,7 @@ class SimpleOrchestratorApp(App):
         formato = "json" if self.query_one("#format-select").pressed_button.label == "JSON" else "markdown"
         
         # Obtém o modelo selecionado
-        modelo = self.query_one("#model-select").pressed_button.label
+        modelo = str(self.query_one("#model-select").pressed_button.label)
         
         # Atualiza o modelo no ModelManager (apenas simulação nesta fase)
         # self.model_manager.configure(model=modelo)
