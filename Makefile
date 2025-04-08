@@ -216,13 +216,17 @@ download-phi3:
 	@if [ -f "$(MODEL_DIR)/phi-3-mini-4k-instruct.gguf" ]; then \
 		echo "✅ Modelo já existe em $(MODEL_DIR)/phi-3-mini-4k-instruct.gguf"; \
 	else \
-		echo "🔄 Iniciando download..."; \
-		if ! curl -L -f https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/phi-3-mini-4k-instruct.gguf -o $(MODEL_DIR)/phi-3-mini-4k-instruct.gguf; then \
+		echo "🔄 Instalando huggingface-cli se necessário..."; \
+		pip install -q huggingface-hub; \
+		echo "🔄 Iniciando download do modelo Phi-3..."; \
+		huggingface-cli download microsoft/Phi-3-mini-4k-instruct-gguf Phi-3-mini-4k-instruct-q4.gguf --local-dir $(MODEL_DIR) --local-dir-use-symlinks False; \
+		if [ -f "$(MODEL_DIR)/Phi-3-mini-4k-instruct-q4.gguf" ]; then \
+			mv $(MODEL_DIR)/Phi-3-mini-4k-instruct-q4.gguf $(MODEL_DIR)/phi-3-mini-4k-instruct.gguf; \
+			echo "✅ Download concluído e renomeado em $(MODEL_DIR)/phi-3-mini-4k-instruct.gguf"; \
+		else \
 			echo "❌ Falha no download do modelo"; \
-			rm -f $(MODEL_DIR)/phi-3-mini-4k-instruct.gguf; \
 			exit 1; \
 		fi; \
-		echo "✅ Download concluído em $(MODEL_DIR)/phi-3-mini-4k-instruct.gguf"; \
 	fi
 
 # Comandos de documentação

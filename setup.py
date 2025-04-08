@@ -60,9 +60,6 @@ install_requires = [
     "anthropic>=0.18.0",
     "PyYAML>=6.0.1",
     "llama-cpp-python>=0.2.10",
-    "transformers>=4.41.2",
-    "torch>=2.3.1",
-    "accelerate>=0.31.0",
 ]
 
 # Dependências de desenvolvimento
@@ -89,6 +86,13 @@ docs_requires = [
     "mkdocs-literate-nav>=0.6.0",
 ]
 
+# Dependências opcionais para modelos mais avançados
+ml_requires = [
+    "transformers>=4.34.0",
+    "torch>=2.0.0",
+    "accelerate>=0.20.0",
+]
+
 # Lê a versão do arquivo .version.json
 with open('.version.json', 'r', encoding='utf-8') as f:
     version_data = json.load(f)
@@ -109,6 +113,7 @@ setup(
     extras_require={
         "dev": dev_requires,
         "docs": docs_requires,
+        "ml": ml_requires,
     },
     entry_points={
         "console_scripts": [
