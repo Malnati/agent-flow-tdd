@@ -50,6 +50,8 @@ class ModelProvider(str, Enum):
     GEMINI = "gemini"
     TINYLLAMA = "tinyllama"
     PHI1 = "phi1"
+    DEEPSEEK_LOCAL = "deepseek_local"
+    PHI3 = "phi3"
 
 
 class ModelConfig(BaseModel):
@@ -222,6 +224,68 @@ class ModelManager:
             logger.warning(f"Phi-1 não disponível: {str(e)}")
             self.phi1_model = None
         
+        # DeepSeek Coder
+        try:
+            from llama_cpp import Llama
+            deepseek_config = self.config['providers']['deepseek_local']
+            model_path = deepseek_config['model_path']
+            
+            # Verifica se o modelo existe
+            if os.path.exists(model_path) and os.path.getsize(model_path) > 1000000:  # Tamanho mínimo de 1MB
+                try:
+                    # Primeira tentativa - API mais recente
+                    self.deepseek_model = Llama(
+                        model_path=model_path,
+                        n_ctx=deepseek_config['n_ctx'],
+                        n_threads=deepseek_config['n_threads']
+                    )
+                    logger.info(f"DeepSeek Coder carregado com sucesso: {model_path}")
+                except TypeError as e:
+                    if "positional arguments but 3 were given" in str(e):
+                        # Segunda tentativa - API mais antiga
+                        # Passar apenas o caminho do modelo
+                        self.deepseek_model = Llama(model_path)
+                        logger.info(f"DeepSeek Coder carregado com API legada: {model_path}")
+                    else:
+                        raise
+            else:
+                logger.warning(f"Arquivo de modelo DeepSeek Coder não encontrado ou muito pequeno: {model_path}")
+                self.deepseek_model = None
+        except (ImportError, FileNotFoundError, ValueError) as e:
+            logger.warning(f"DeepSeek Coder não disponível: {str(e)}")
+            self.deepseek_model = None
+            
+        # Phi-3 Mini
+        try:
+            from llama_cpp import Llama
+            phi3_config = self.config['providers']['phi3']
+            model_path = phi3_config['model_path']
+            
+            # Verifica se o modelo existe
+            if os.path.exists(model_path) and os.path.getsize(model_path) > 1000000:  # Tamanho mínimo de 1MB
+                try:
+                    # Primeira tentativa - API mais recente
+                    self.phi3_model = Llama(
+                        model_path=model_path,
+                        n_ctx=phi3_config['n_ctx'],
+                        n_threads=phi3_config['n_threads']
+                    )
+                    logger.info(f"Phi-3 Mini carregado com sucesso: {model_path}")
+                except TypeError as e:
+                    if "positional arguments but 3 were given" in str(e):
+                        # Segunda tentativa - API mais antiga
+                        # Passar apenas o caminho do modelo
+                        self.phi3_model = Llama(model_path)
+                        logger.info(f"Phi-3 Mini carregado com API legada: {model_path}")
+                    else:
+                        raise
+            else:
+                logger.warning(f"Arquivo de modelo Phi-3 Mini não encontrado ou muito pequeno: {model_path}")
+                self.phi3_model = None
+        except (ImportError, FileNotFoundError, ValueError) as e:
+            logger.warning(f"Phi-3 Mini não disponível: {str(e)}")
+            self.phi3_model = None
+
     def _get_cache_key(self, prompt: str, system: Optional[str] = None, **kwargs) -> str:
         """
         Gera chave de cache para um prompt.
@@ -298,6 +362,10 @@ class ModelManager:
             return "tinyllama"
         elif model.startswith("phi-"):
             return "phi1"
+        elif model.startswith("deepseek-local-"):
+            return "deepseek_local"
+        elif model.startswith("phi3-"):
+            return "phi3"
         else:
             # Busca nas configurações para determinar provider
             config = self.config
@@ -383,6 +451,20 @@ class ModelManager:
                 else:
                     return self._generate_openai(prompt, system, **kwargs)
             return self._generate_phi1(prompt, system, **kwargs)
+        elif provider == 'deepseek_local':
+            if not self.deepseek_model:
+                if not self.fallback_enabled:
+                    raise ValueError("DeepSeek Coder não configurado")
+                else:
+                    return self._generate_openai(prompt, system, **kwargs)
+            return self._generate_deepseek(prompt, system, **kwargs)
+        elif provider == 'phi3':
+            if not self.phi3_model:
+                if not self.fallback_enabled:
+                    raise ValueError("Phi-3 Mini não configurado")
+                else:
+                    return self._generate_openai(prompt, system, **kwargs)
+            return self._generate_phi3(prompt, system, **kwargs)
         else:
             raise ValueError(f"Provedor {provider} não suportado")
 
@@ -480,7 +562,19 @@ class ModelManager:
         if self.tinyllama_model:
             available_models['tinyllama'] = self.config['providers']['tinyllama']['prefix_patterns']
             
-        return available_models 
+        # Phi-1
+        if self.phi1_model:
+            available_models['phi1'] = self.config['providers']['phi1']['prefix_patterns']
+            
+        # DeepSeek
+        if self.deepseek_model:
+            available_models['deepseek_local'] = self.config['providers']['deepseek_local']['prefix_patterns']
+            
+        # Phi-3
+        if self.phi3_model:
+            available_models['phi3'] = self.config['providers']['phi3']['prefix_patterns']
+            
+        return available_models
 
     def generate_response(self, messages: list, **kwargs) -> str:
         """
@@ -837,6 +931,162 @@ class ModelManager:
             
             return text, {
                 "model": "phi-1",
+                "error": str(e),
+                "usage": {
+                    "prompt_tokens": len(prompt.split()),
+                    "completion_tokens": len(text.split()),
+                    "total_tokens": len(prompt.split()) + len(text.split())
+                }
+            }
+
+    def _generate_deepseek(self, prompt: str, system: Optional[str] = None, **kwargs) -> Tuple[str, Dict[str, Any]]:
+        """Gera resposta usando DeepSeek Coder."""
+        if not self.deepseek_model:
+            raise ValueError("DeepSeek Coder não configurado")
+            
+        try:
+            # Formata o prompt para DeepSeek Coder
+            full_prompt = ""
+            if system:
+                full_prompt += f"<system>\n{system}\n</system>\n"
+            full_prompt += f"<user>\n{prompt}\n</user>\n<assistant>\n"
+            
+            # Parâmetros para geração
+            max_tokens = kwargs.get('max_tokens', self.max_tokens) or self.config['providers']['deepseek_local'].get('default_max_tokens', 512)
+            temperature = kwargs.get('temperature', self.temperature)
+            stop = ["</assistant>", "<user>", "<system>", "</user>", "</system>"]
+            
+            # Usa apenas a API direta, que funciona em todas as versões
+            response = self.deepseek_model(
+                full_prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stop=stop
+            )
+            text = response["choices"][0]["text"].strip()
+            
+            # Tenta extrair JSON se presente
+            try:
+                if '{' in text and '}' in text:
+                    start = text.find('{')
+                    end = text.rfind('}') + 1
+                    json_str = text[start:end]
+                    
+                    # Limpa o JSON
+                    json_str = json_str.replace('\n', ' ').replace('\r', '')
+                    while '  ' in json_str:
+                        json_str = json_str.replace('  ', ' ')
+                    
+                    # Valida se é um JSON válido
+                    json_data = json.loads(json_str)
+                    text = json.dumps(json_data, ensure_ascii=False)
+                else:
+                    # Se não encontrou JSON, retorna texto normal
+                    text = text
+            except Exception as e:
+                logger.error(f"Erro ao processar resposta JSON: {str(e)}")
+                # Mantém o texto original em caso de erro
+            
+            return text, {
+                "model": "deepseek-coder-6.7b",
+                "usage": {
+                    "prompt_tokens": len(full_prompt.split()),
+                    "completion_tokens": len(text.split()),
+                    "total_tokens": len(full_prompt.split()) + len(text.split())
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Erro ao gerar resposta com DeepSeek Coder: {str(e)}")
+            # Retorna estrutura padrão em caso de erro
+            text = json.dumps({
+                "name": "Sistema Genérico",
+                "description": "Sistema a ser especificado",
+                "objectives": ["Definir objetivos específicos"],
+                "requirements": ["Definir requisitos específicos"],
+                "constraints": ["Definir restrições do sistema"]
+            }, ensure_ascii=False)
+            
+            return text, {
+                "model": "deepseek-coder-6.7b",
+                "error": str(e),
+                "usage": {
+                    "prompt_tokens": len(prompt.split()),
+                    "completion_tokens": len(text.split()),
+                    "total_tokens": len(prompt.split()) + len(text.split())
+                }
+            }
+
+    def _generate_phi3(self, prompt: str, system: Optional[str] = None, **kwargs) -> Tuple[str, Dict[str, Any]]:
+        """Gera resposta usando Phi-3 Mini."""
+        if not self.phi3_model:
+            raise ValueError("Phi-3 Mini não configurado")
+            
+        try:
+            # Formata o prompt para Phi-3 Mini
+            full_prompt = ""
+            if system:
+                full_prompt += f"<|system|>\n{system}\n"
+            full_prompt += f"<|user|>\n{prompt}\n<|assistant|>\n"
+            
+            # Parâmetros para geração
+            max_tokens = kwargs.get('max_tokens', self.max_tokens) or self.config['providers']['phi3'].get('default_max_tokens', 512)
+            temperature = kwargs.get('temperature', self.temperature)
+            stop = ["<|user|>", "<|system|>", "<|assistant|>"]
+            
+            # Usa apenas a API direta, que funciona em todas as versões
+            response = self.phi3_model(
+                full_prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stop=stop
+            )
+            text = response["choices"][0]["text"].strip()
+            
+            # Tenta extrair JSON se presente
+            try:
+                if '{' in text and '}' in text:
+                    start = text.find('{')
+                    end = text.rfind('}') + 1
+                    json_str = text[start:end]
+                    
+                    # Limpa o JSON
+                    json_str = json_str.replace('\n', ' ').replace('\r', '')
+                    while '  ' in json_str:
+                        json_str = json_str.replace('  ', ' ')
+                    
+                    # Valida se é um JSON válido
+                    json_data = json.loads(json_str)
+                    text = json.dumps(json_data, ensure_ascii=False)
+                else:
+                    # Se não encontrou JSON, retorna texto normal
+                    text = text
+            except Exception as e:
+                logger.error(f"Erro ao processar resposta JSON: {str(e)}")
+                # Mantém o texto original em caso de erro
+            
+            return text, {
+                "model": "phi-3-mini",
+                "usage": {
+                    "prompt_tokens": len(full_prompt.split()),
+                    "completion_tokens": len(text.split()),
+                    "total_tokens": len(full_prompt.split()) + len(text.split())
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Erro ao gerar resposta com Phi-3 Mini: {str(e)}")
+            # Retorna estrutura padrão em caso de erro
+            text = json.dumps({
+                "name": "Sistema Genérico",
+                "description": "Sistema a ser especificado",
+                "objectives": ["Definir objetivos específicos"],
+                "requirements": ["Definir requisitos específicos"],
+                "constraints": ["Definir restrições do sistema"]
+            }, ensure_ascii=False)
+            
+            return text, {
+                "model": "phi-3-mini",
                 "error": str(e),
                 "usage": {
                     "prompt_tokens": len(prompt.split()),

@@ -69,6 +69,8 @@ install:
 	@bash -c "source $(VENV)/bin/activate && $(PYTHON) -m pip install --upgrade pip && $(PYTHON) -m pip install -e \".[dev,docs]\""
 	@make download-model || exit 1
 	@make download-phi1 || exit 1
+	@make download-deepseek || exit 1
+	@make download-phi3 || exit 1
 	@echo "✅ Instalação concluída!"
 
 # Testes
@@ -189,6 +191,38 @@ download-phi1:
 			exit 1; \
 		fi; \
 		echo "✅ Download concluído em $(MODEL_DIR)/phi-1.Q4_K_M.gguf"; \
+	fi
+
+# Download do modelo DeepSeek Coder
+download-deepseek:
+	@echo "📥 Baixando modelo DeepSeek Coder..."
+	@mkdir -p $(MODEL_DIR)
+	@if [ -f "$(MODEL_DIR)/deepseek-coder-6.7b.Q4_K_M.gguf" ]; then \
+		echo "✅ Modelo já existe em $(MODEL_DIR)/deepseek-coder-6.7b.Q4_K_M.gguf"; \
+	else \
+		echo "🔄 Iniciando download..."; \
+		if ! curl -L -f https://huggingface.co/TheBloke/deepseek-coder-6.7B-instruct-GGUF/resolve/main/deepseek-coder-6.7b-instruct.Q4_K_M.gguf -o $(MODEL_DIR)/deepseek-coder-6.7b.Q4_K_M.gguf; then \
+			echo "❌ Falha no download do modelo"; \
+			rm -f $(MODEL_DIR)/deepseek-coder-6.7b.Q4_K_M.gguf; \
+			exit 1; \
+		fi; \
+		echo "✅ Download concluído em $(MODEL_DIR)/deepseek-coder-6.7b.Q4_K_M.gguf"; \
+	fi
+
+# Download do modelo Phi-3 Mini
+download-phi3:
+	@echo "📥 Baixando modelo Phi-3 Mini..."
+	@mkdir -p $(MODEL_DIR)
+	@if [ -f "$(MODEL_DIR)/phi-3-mini-4k-instruct.gguf" ]; then \
+		echo "✅ Modelo já existe em $(MODEL_DIR)/phi-3-mini-4k-instruct.gguf"; \
+	else \
+		echo "🔄 Iniciando download..."; \
+		if ! curl -L -f https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/phi-3-mini-4k-instruct.gguf -o $(MODEL_DIR)/phi-3-mini-4k-instruct.gguf; then \
+			echo "❌ Falha no download do modelo"; \
+			rm -f $(MODEL_DIR)/phi-3-mini-4k-instruct.gguf; \
+			exit 1; \
+		fi; \
+		echo "✅ Download concluído em $(MODEL_DIR)/phi-3-mini-4k-instruct.gguf"; \
 	fi
 
 # Comandos de documentação

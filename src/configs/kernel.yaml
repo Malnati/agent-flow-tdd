@@ -245,6 +245,20 @@ models:
       prefix_patterns: ["phi-"]
       default_model: "phi-1"
       models: ["phi-1"]
+    deepseek_local:
+      model_path: "models/deepseek-coder-6.7b.Q4_K_M.gguf"
+      n_ctx: 2048
+      n_threads: 4
+      prefix_patterns: ["deepseek-local-"]
+      default_model: "deepseek-coder-6.7b"
+      models: ["deepseek-coder-6.7b"]
+    phi3:
+      model_path: "models/phi-3-mini-4k-instruct.gguf"
+      n_ctx: 2048
+      n_threads: 4
+      prefix_patterns: ["phi3-"]
+      default_model: "phi-3-mini"
+      models: ["phi-3-mini"]
 
 # Configurações de variáveis de ambiente por contexto
 
