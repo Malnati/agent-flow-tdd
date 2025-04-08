@@ -238,6 +238,13 @@ models:
       prefix_patterns: ["tinyllama-"]
       default_model: "tinyllama-1.1b"
       models: ["tinyllama-1.1b"]
+    phi1:
+      model_path: "models/phi-1.Q4_K_M.gguf"
+      n_ctx: 256
+      n_threads: 4
+      prefix_patterns: ["phi-"]
+      default_model: "phi-1"
+      models: ["phi-1"]
 
 # Configurações de variáveis de ambiente por contexto
 

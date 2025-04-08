@@ -49,6 +49,7 @@ class ModelProvider(str, Enum):
     OPENROUTER = "openrouter"
     GEMINI = "gemini"
     TINYLLAMA = "tinyllama"
+    PHI1 = "phi1"
 
 
 class ModelConfig(BaseModel):
@@ -189,6 +190,37 @@ class ModelManager:
         except (ImportError, FileNotFoundError, ValueError) as e:
             logger.warning(f"TinyLLaMA não disponível: {str(e)}")
             self.tinyllama_model = None
+            
+        # Phi-1
+        try:
+            from llama_cpp import Llama
+            phi1_config = self.config['providers']['phi1']
+            model_path = phi1_config['model_path']
+            
+            # Verifica se o modelo existe
+            if os.path.exists(model_path) and os.path.getsize(model_path) > 1000000:  # Tamanho mínimo de 1MB
+                try:
+                    # Primeira tentativa - API mais recente
+                    self.phi1_model = Llama(
+                        model_path=model_path,
+                        n_ctx=phi1_config['n_ctx'],
+                        n_threads=phi1_config['n_threads']
+                    )
+                    logger.info(f"Phi-1 carregado com sucesso: {model_path}")
+                except TypeError as e:
+                    if "positional arguments but 3 were given" in str(e):
+                        # Segunda tentativa - API mais antiga
+                        # Passar apenas o caminho do modelo
+                        self.phi1_model = Llama(model_path)
+                        logger.info(f"Phi-1 carregado com API legada: {model_path}")
+                    else:
+                        raise
+            else:
+                logger.warning(f"Arquivo de modelo Phi-1 não encontrado ou muito pequeno: {model_path}")
+                self.phi1_model = None
+        except (ImportError, FileNotFoundError, ValueError) as e:
+            logger.warning(f"Phi-1 não disponível: {str(e)}")
+            self.phi1_model = None
         
     def _get_cache_key(self, prompt: str, system: Optional[str] = None, **kwargs) -> str:
         """
@@ -254,17 +286,29 @@ class ModelManager:
         Returns:
             String com o nome do provedor
         """
-        providers_config = self.config['providers']
-        
-        # Verifica cada provedor
-        for provider, config in providers_config.items():
-            if 'prefix_patterns' in config:
-                for prefix in config['prefix_patterns']:
-                    if model.startswith(prefix):
-                        return provider
-                        
-        # Retorna OpenAI como default
-        return 'openai'
+        if model.startswith("gpt-") or model.startswith("text-"):
+            return "openai"
+        elif model.startswith("deepseek-") or model.startswith("anthropic/") or model.startswith("meta-llama/"):
+            return "openrouter"
+        elif model.startswith("gemini-"):
+            return "gemini"
+        elif model.startswith("claude-"):
+            return "anthropic"
+        elif model.startswith("tinyllama-"):
+            return "tinyllama"
+        elif model.startswith("phi-"):
+            return "phi1"
+        else:
+            # Busca nas configurações para determinar provider
+            config = self.config
+            for provider_name, provider_config in config["providers"].items():
+                prefix_patterns = provider_config.get("prefix_patterns", [])
+                for pattern in prefix_patterns:
+                    if model.startswith(pattern):
+                        return provider_name
+            
+            # Fallback para openai se não encontrado
+            return "openai"
 
     def _get_provider_config(self, provider: str) -> Dict[str, Any]:
         """
@@ -296,145 +340,51 @@ class ModelManager:
             
         Returns:
             Tupla (resposta, metadados)
+            
+        Raises:
+            ValueError: Se o provedor não estiver disponível
         """
-        provider_config = self._get_provider_config(provider)
+        logger.info(f"Gerando resposta com provedor: {provider}")
         
-        try:
-            if provider == 'openai':
-                messages = []
-                if system:
-                    messages.append({"role": "system", "content": system})
-                messages.append({"role": "user", "content": prompt})
-                
-                response = self.openai_client.chat.completions.create(
-                    model=self.model_name,
-                    messages=messages,
-                    temperature=self.temperature,
-                    max_tokens=self.max_tokens,
-                    **kwargs
-                )
-                return response.choices[0].message.content, {
-                    "model": self.model_name,
-                    "provider": provider,
-                    "status": "success"
-                }
-                
-            elif provider == 'openrouter' and self.openrouter_client:
-                messages = []
-                if system:
-                    messages.append({"role": "system", "content": system})
-                messages.append({"role": "user", "content": prompt})
-                
-                response = self.openrouter_client.chat.completions.create(
-                    model=self.model_name,
-                    messages=messages,
-                    temperature=self.temperature,
-                    max_tokens=self.max_tokens,
-                    **kwargs
-                )
-                return response.choices[0].message.content, {
-                    "model": self.model_name,
-                    "provider": provider,
-                    "status": "success"
-                }
-                
-            elif provider == 'gemini' and self.gemini_model:
-                response = self.gemini_model.generate_content(
-                    prompt,
-                    generation_config=genai.types.GenerationConfig(
-                        temperature=self.temperature,
-                        max_output_tokens=self.max_tokens or provider_config.get('default_max_tokens', 1024),
-                        **kwargs
-                    )
-                )
-                return response.text, {
-                    "model": provider_config['default_model'],
-                    "provider": provider,
-                    "status": "success"
-                }
-                
-            elif provider == 'tinyllama' and self.tinyllama_model:
-                # Formata o prompt
-                full_prompt = ""
-                if system:
-                    full_prompt += f"<|system|>\n{system}</s>\n"
-                full_prompt += f"<|user|>\n{prompt}</s>\n<|assistant|>\n"
-                
-                # Parâmetros para geração
-                max_tokens = kwargs.get('max_tokens', self.max_tokens) or self.config['providers']['tinyllama'].get('default_max_tokens', 256)
-                temperature = kwargs.get('temperature', self.temperature)
-                stop = ["</s>", "<|user|>", "<|system|>", "<|assistant|>"]
-                
-                # Usa apenas a API direta, que funciona em todas as versões
-                response = self.tinyllama_model(
-                    full_prompt,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    stop=stop
-                )
-                text = response["choices"][0]["text"].strip()
-                
-                # Tenta extrair JSON se presente
-                try:
-                    if '{' in text and '}' in text:
-                        start = text.find('{')
-                        end = text.rfind('}') + 1
-                        json_str = text[start:end]
-                        
-                        # Limpa o JSON
-                        json_str = json_str.replace('\n', ' ').replace('\r', '')
-                        while '  ' in json_str:
-                            json_str = json_str.replace('  ', ' ')
-                        
-                        # Valida se é um JSON válido
-                        json_data = json.loads(json_str)
-                        text = json.dumps(json_data, ensure_ascii=False)
-                    else:
-                        # Se não encontrou JSON, retorna texto normal
-                        text = text
-                except Exception as e:
-                    logger.error(f"Erro ao processar resposta JSON: {str(e)}")
-                    # Mantém o texto original em caso de erro
-                
-                return text, {
-                    "model": "tinyllama-1.1b",
-                    "usage": {
-                        "prompt_tokens": len(full_prompt.split()),
-                        "completion_tokens": len(text.split()),
-                        "total_tokens": len(full_prompt.split()) + len(text.split())
-                    }
-                }
-                
-            elif provider == 'anthropic' and self.anthropic_client:
-                messages = []
-                if system:
-                    messages.append({"role": "system", "content": system})
-                messages.append({"role": "user", "content": prompt})
-                
-                response = self.anthropic_client.messages.create(
-                    model=self.model_name,
-                    messages=messages,
-                    temperature=self.temperature,
-                    max_tokens=self.max_tokens or provider_config.get('default_max_tokens', 1024),
-                    **kwargs
-                )
-                return response.content[0].text, {
-                    "model": self.model_name,
-                    "provider": provider,
-                    "status": "success"
-                }
-                
-            else:
-                raise ValueError(f"Provedor {provider} não disponível")
-                
-        except Exception as e:
-            logger.error(f"Erro ao gerar com provedor {provider}: {str(e)}")
-            return "", {
-                "error": str(e),
-                "model": self.model_name,
-                "provider": provider,
-                "status": "error"
-            }
+        if provider == 'openai':
+            return self._generate_openai(prompt, system, **kwargs)
+        elif provider == 'openrouter':
+            if not self.openrouter_client:
+                if not self.fallback_enabled:
+                    raise ValueError("OpenRouter não configurado")
+                else:
+                    return self._generate_openai(prompt, system, **kwargs)
+            return self._generate_openai(prompt, system, **kwargs)
+        elif provider == 'gemini':
+            if not self.gemini_model:
+                if not self.fallback_enabled:
+                    raise ValueError("Gemini não configurado")
+                else:
+                    return self._generate_openai(prompt, system, **kwargs)
+            return self._generate_gemini(prompt, system, **kwargs)
+        elif provider == 'anthropic':
+            if not self.anthropic_client:
+                if not self.fallback_enabled:
+                    raise ValueError("Anthropic não configurado")
+                else:
+                    return self._generate_openai(prompt, system, **kwargs)
+            return self._generate_anthropic(prompt, system, **kwargs)
+        elif provider == 'tinyllama':
+            if not self.tinyllama_model:
+                if not self.fallback_enabled:
+                    raise ValueError("TinyLLaMA não configurado")
+                else:
+                    return self._generate_openai(prompt, system, **kwargs)
+            return self._generate_tinyllama(prompt, system, **kwargs)
+        elif provider == 'phi1':
+            if not self.phi1_model:
+                if not self.fallback_enabled:
+                    raise ValueError("Phi-1 não configurado")
+                else:
+                    return self._generate_openai(prompt, system, **kwargs)
+            return self._generate_phi1(prompt, system, **kwargs)
+        else:
+            raise ValueError(f"Provedor {provider} não suportado")
 
     def generate(
         self,
@@ -809,6 +759,84 @@ class ModelManager:
             
             return text, {
                 "model": "tinyllama-1.1b",
+                "error": str(e),
+                "usage": {
+                    "prompt_tokens": len(prompt.split()),
+                    "completion_tokens": len(text.split()),
+                    "total_tokens": len(prompt.split()) + len(text.split())
+                }
+            }
+
+    def _generate_phi1(self, prompt: str, system: Optional[str] = None, **kwargs) -> Tuple[str, Dict[str, Any]]:
+        """Gera resposta usando Phi-1."""
+        if not self.phi1_model:
+            raise ValueError("Phi-1 não configurado")
+            
+        try:
+            # Formata o prompt
+            full_prompt = ""
+            if system:
+                full_prompt += f"<|system|>\n{system}</s>\n"
+            full_prompt += f"<|user|>\n{prompt}</s>\n<|assistant|>\n"
+            
+            # Parâmetros para geração
+            max_tokens = kwargs.get('max_tokens', self.max_tokens) or self.config['providers']['phi1'].get('default_max_tokens', 100)
+            temperature = kwargs.get('temperature', self.temperature)
+            stop = ["</s>", "<|user|>", "<|system|>", "<|assistant|>"]
+            
+            # Usa apenas a API direta, que funciona em todas as versões
+            response = self.phi1_model(
+                full_prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stop=stop
+            )
+            text = response["choices"][0]["text"].strip()
+            
+            # Tenta extrair JSON se presente
+            try:
+                if '{' in text and '}' in text:
+                    start = text.find('{')
+                    end = text.rfind('}') + 1
+                    json_str = text[start:end]
+                    
+                    # Limpa o JSON
+                    json_str = json_str.replace('\n', ' ').replace('\r', '')
+                    while '  ' in json_str:
+                        json_str = json_str.replace('  ', ' ')
+                    
+                    # Valida se é um JSON válido
+                    json_data = json.loads(json_str)
+                    text = json.dumps(json_data, ensure_ascii=False)
+                else:
+                    # Se não encontrou JSON, retorna texto normal
+                    text = text
+            except Exception as e:
+                logger.error(f"Erro ao processar resposta JSON: {str(e)}")
+                # Mantém o texto original em caso de erro
+            
+            return text, {
+                "model": "phi-1",
+                "usage": {
+                    "prompt_tokens": len(full_prompt.split()),
+                    "completion_tokens": len(text.split()),
+                    "total_tokens": len(full_prompt.split()) + len(text.split())
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Erro ao gerar resposta com Phi-1: {str(e)}")
+            # Retorna estrutura padrão em caso de erro
+            text = json.dumps({
+                "name": "Sistema Genérico",
+                "description": "Sistema a ser especificado",
+                "objectives": ["Definir objetivos específicos"],
+                "requirements": ["Definir requisitos específicos"],
+                "constraints": ["Definir restrições do sistema"]
+            }, ensure_ascii=False)
+            
+            return text, {
+                "model": "phi-1",
                 "error": str(e),
                 "usage": {
                     "prompt_tokens": len(prompt.split()),
