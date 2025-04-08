@@ -4,8 +4,8 @@
 
 # Configuração do ambiente virtual
 VENV = .venv
-PYTHON = $(VENV)/bin/python
-PIP = $(VENV)/bin/pip
+PYTHON = python3
+PIP = $(PYTHON) -m pip
 PYTEST = $(VENV)/bin/pytest
 
 # URL e nome do modelo TinyLLaMA
@@ -64,8 +64,9 @@ help:
 # Instalação e setup
 install:
 	@echo "🔧 Instalando dependências..."
-	python -m venv $(VENV)
-	$(PIP) install -e ".[dev,docs]"
+	$(PYTHON) -m venv $(VENV)
+	@echo "Ativando ambiente virtual e instalando dependências..."
+	@bash -c "source $(VENV)/bin/activate && $(PYTHON) -m pip install --upgrade pip && $(PYTHON) -m pip install -e \".[dev,docs]\""
 	@make download-model || exit 1
 	@make download-phi1 || exit 1
 	@echo "✅ Instalação concluída!"
