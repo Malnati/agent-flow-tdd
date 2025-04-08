@@ -5,52 +5,31 @@ GuardRails:
       system_prompt: |
         Você é um especialista em análise de sistemas. Dado um pedido sucinto como "cadastro de endereço", identifique o título mais apropriado para o sistema solicitado. Seja conciso e direto. Retorne apenas:
         name: <título do sistema>
-
       requirements: O título deve refletir o propósito principal do sistema ou funcionalidade descrita no pedido.
 
     identificar_descricao:
       system_prompt: |
         Dado o pedido e o título já identificado, forneça uma descrição detalhada da funcionalidade solicitada. Considere o contexto de sistemas de informação. Retorne apenas:
         description: <descrição detalhada>
-
       requirements: A descrição deve incluir o escopo geral do sistema e seu objetivo principal, com clareza e sem ambiguidade.
 
     identificar_campos:
       system_prompt: |
-        Com base na funcionalidade descrita, identifique os principais campos de entrada necessários. Inclua nome do campo, tipo, formato esperado e se é obrigatório. Retorne no formato YAML:
-        fields:
-          - name: ...
-            type: ...
-            format: ...
-            required: true
-
-      requirements: Os campos devem ser listados inline, por exemplo: fields: nome, tipo, formato, obrigatório. Isso evita a necessidade de parseamento de estruturas complexas.
+        Com base na funcionalidade descrita, identifique os principais campos de entrada necessários. Inclua nome do campo, tipo, formato esperado e se é obrigatório. Retorne no formato texto:
+        fields: nome, tipo, formato, obrigatório
+      requirements: Os campos devem ser retornados como texto inline, separados por vírgulas. Exemplo: fields: nome, tipo, formato, obrigatório. Isso evita a necessidade de parseamento de estruturas complexas.
 
   Output:
     gerar_prompt_tdd:
       completion_prompt: |
-        Com base nas informações coletadas anteriormente (título, descrição e campos), gere um prompt no formato TDD. Utilize critérios de aceite no estilo BDD, seguindo o padrão:
-
-        Nome: <nome da funcionalidade>
-        Descrição: <descrição detalhada>
-        Critérios de Aceite:
-          - Dado que <condição inicial>
-            Quando <ação do usuário>
-            Então <resultado esperado>
-          - Dado que <outra condição>
-            Quando <ação>
-            Então <resultado>
-
+        Com base nas informações coletadas anteriormente (título, descrição e campos), gere um prompt no formato TDD. Utilize critérios de aceite no estilo BDD. Retorne em formato texto corrido como no exemplo:
+        Nome: <nome da funcionalidade>; Descrição: <descrição detalhada>; Critérios de Aceite: Dado que <condição inicial>, Quando <ação do usuário>, Então <resultado esperado>; Dado que <outra condição>, Quando <ação>, Então <resultado>.
       requirements: O prompt deve ser gerado em formato TDD com critérios de aceite estruturados como em BDD, claros, objetivos e verificáveis.
 
     verificar_coerencia:
       completion_prompt: |
         Verifique se as informações extraídas (nome, descrição e campos) são coerentes entre si e com o pedido original. Identifique quaisquer inconsistências ou contradições. Retorne no formato YAML:
-        coerencia: true/false
-        problemas:
-          - <descrição do problema 1>
-          - <descrição do problema 2>
-
+        coerencia: true/false; problemas: <descrição do problema 1>, <descrição do problema 2>
       requirements: A análise deve verificar se todos os elementos são compatíveis entre si e representam adequadamente o sistema solicitado.
 
 # Configurações de Prompts do Sistema
