@@ -165,15 +165,17 @@ publish:
 		echo "❌ Erro: Variável PYPI_TOKEN não definida"; \
 		exit 1; \
 	fi
+	@echo "🔄 Verificando dependências necessárias..."
+	@bash -c "source $(VENV)/bin/activate && pip install PyYAML"
 	@echo "🔄 Incrementando versão..."
-	@PUBLISHING=true $(PYTHON) -c "from src.core.kernel import VersionAnalyzer; v = VersionAnalyzer(); v.smart_bump()"
+	@bash -c "source $(VENV)/bin/activate && PUBLISHING=true $(PYTHON) -c \"from src.core.kernel import VersionAnalyzer; v = VersionAnalyzer(); v.smart_bump()\""
 	@make clean
 	@echo "📥 Instalando dependências de build..."
-	@$(PIP) install --upgrade pip build twine
+	@bash -c "source $(VENV)/bin/activate && $(PIP) install --upgrade pip build twine"
 	@echo "🔨 Construindo distribuição..."
-	@$(PYTHON) -m build
+	@bash -c "source $(VENV)/bin/activate && $(PYTHON) -m build"
 	@echo "🚀 Publicando no PyPI..."
-	@PUBLISHING=true $(PYTHON) -m twine upload dist/* --username __token__ --password $(PYPI_TOKEN)
+	@bash -c "source $(VENV)/bin/activate && PUBLISHING=true $(PYTHON) -m twine upload dist/* --username __token__ --password $(PYPI_TOKEN)"
 	@echo "✅ Pacote publicado com sucesso!"
 
 # Download do modelo TinyLLaMA
