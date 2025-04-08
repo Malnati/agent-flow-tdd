@@ -298,8 +298,16 @@ class PromptsEditorApp(App):
 
     def on_mount(self) -> None:
         """Ação ao montar o aplicativo."""
-        self.load_data()
-        self.populate_tree()
+        try:
+            self.load_data()
+            self.populate_tree()
+            
+            # Exibe informações iniciais
+            self.notify("Editor de prompts iniciado. Use as teclas: s (salvar), a (adicionar), d (excluir), e (editar), r (recarregar), q (sair)", severity="information")
+            logger.info("Interface iniciada com sucesso")
+        except Exception as e:
+            logger.error(f"Erro ao iniciar interface: {str(e)}", exc_info=True)
+            self.notify(f"Erro ao iniciar: {str(e)}", severity="error")
     
     def compose(self) -> ComposeResult:
         """Compõe a interface principal."""
@@ -321,13 +329,40 @@ class PromptsEditorApp(App):
         """Carrega os dados do arquivo JSON."""
         try:
             logger.info(f"INÍCIO - load_data | Carregando dados de {AGENTS_JSON_PATH}")
+            
+            if not AGENTS_JSON_PATH.exists():
+                self.notify(f"Arquivo não encontrado: {AGENTS_JSON_PATH}", severity="error")
+                self.json_data = {}
+                return
+                
             with open(AGENTS_JSON_PATH, "r", encoding="utf-8") as file:
                 self.json_data = json.load(file)
+                
+            # Verifica se os dados estão no formato esperado
+            if not isinstance(self.json_data, dict):
+                self.notify("Formato de JSON inválido: não é um dicionário", severity="error")
+                self.json_data = {}
+                return
+                
+            # Verifica se as seções esperadas existem
+            if "GuardRails" not in self.json_data:
+                self.json_data["GuardRails"] = {}
+            if "Input" not in self.json_data["GuardRails"]:
+                self.json_data["GuardRails"]["Input"] = {}
+            if "Output" not in self.json_data["GuardRails"]:
+                self.json_data["GuardRails"]["Output"] = {}
+            if "prompts" not in self.json_data:
+                self.json_data["prompts"] = {}
+                
             logger.info("FIM - load_data | Dados carregados com sucesso")
-        except (FileNotFoundError, json.JSONDecodeError) as e:
+        except json.JSONDecodeError as e:
+            logger.error(f"FALHA - load_data | Erro ao decodificar JSON: {str(e)}")
+            self.notify(f"Erro de formato no arquivo JSON: {str(e)}", severity="error")
+            self.json_data = {"GuardRails": {"Input": {}, "Output": {}}, "prompts": {}}
+        except Exception as e:
             logger.error(f"FALHA - load_data | Erro ao carregar arquivo JSON: {str(e)}")
             self.notify(f"Erro ao carregar arquivo: {str(e)}", severity="error")
-            self.json_data = {}
+            self.json_data = {"GuardRails": {"Input": {}, "Output": {}}, "prompts": {}}
     
     def save_data(self) -> None:
         """Salva os dados no arquivo JSON."""
@@ -362,12 +397,17 @@ class PromptsEditorApp(App):
             
             # Adiciona nós para cada entrada na seção atual
             root = tree.root
-            root.label = self.current_section
+            # Garantimos que a label da raiz seja string
+            root.label = str(self.current_section)
             
             if isinstance(current_data, dict):
                 for key, value in current_data.items():
-                    node = root.add(key)
-                    node.data = {"path": path_parts + [key], "data": value}
+                    node = root.add(str(key))
+                    # Convertemos cada parte do caminho para string para evitar problemas com objetos Content
+                    node.data = {
+                        "path": [str(part) for part in path_parts] + [str(key)], 
+                        "data": value
+                    }
             
             tree.root.expand()
             logger.debug("FIM - populate_tree")
@@ -382,7 +422,7 @@ class PromptsEditorApp(App):
             node: Nó da árvore selecionado.
         """
         try:
-            logger.debug(f"INÍCIO - display_prompt | Nó: {node.label}")
+            logger.debug(f"INÍCIO - display_prompt | Nó: {str(node.label)}")
             detail_panel = self.query_one("#detail-content", Container)
             detail_panel.remove_children()
             
@@ -394,7 +434,7 @@ class PromptsEditorApp(App):
             if isinstance(data, dict):
                 for key, value in data.items():
                     with Container(classes="field-container"):
-                        detail_panel.mount(Label(f"{key}:", classes="field-label"))
+                        detail_panel.mount(Label(f"{str(key)}:", classes="field-label"))
                         
                         if isinstance(value, dict):
                             # Para dicionários, mostramos como JSON formatado
@@ -426,6 +466,9 @@ class PromptsEditorApp(App):
         last_key = None
         
         for i, part in enumerate(path_parts):
+            # Garantimos que a parte do caminho seja uma string
+            part = str(part)
+            
             if i == len(path_parts) - 1:
                 parent = current
                 last_key = part
@@ -451,7 +494,7 @@ class PromptsEditorApp(App):
             
             if is_new:
                 # Para um novo item, navegamos até o pai
-                parent_path = path
+                parent_path = [str(p) for p in path]  # Garantimos que todas as partes sejam strings
                 current = self.json_data
                 
                 # Navega até o nível parente
@@ -461,11 +504,13 @@ class PromptsEditorApp(App):
                     current = current[part]
                 
                 # Adiciona o novo item
-                current[key_name] = updated_data
+                current[str(key_name)] = updated_data
                 self.notify(f"Prompt '{key_name}' adicionado com sucesso", severity="information")
             else:
                 # Para atualização, usamos o caminho completo
-                parent, last_key, _ = self.get_node_data_path(path)
+                # Convertemos o caminho para string para evitar problemas
+                string_path = [str(p) for p in path]
+                parent, last_key, _ = self.get_node_data_path(string_path)
                 
                 if parent is not None and last_key is not None:
                     parent[last_key] = updated_data
@@ -489,7 +534,9 @@ class PromptsEditorApp(App):
         """
         try:
             logger.info(f"INÍCIO - delete_node | Caminho: {path}")
-            parent, last_key, _ = self.get_node_data_path(path)
+            # Convertemos o caminho para string para evitar problemas
+            string_path = [str(p) for p in path]
+            parent, last_key, _ = self.get_node_data_path(string_path)
             
             if parent is not None and last_key is not None:
                 del parent[last_key]
@@ -513,7 +560,7 @@ class PromptsEditorApp(App):
     @on(RadioSet.Changed)
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         """Ação quando a seleção de seção é alterada."""
-        self.current_section = event.pressed.label
+        self.current_section = str(event.pressed.label)
         self.populate_tree()
     
     def action_save_data(self) -> None:
