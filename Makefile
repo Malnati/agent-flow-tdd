@@ -276,7 +276,7 @@ edit-prompts:
 # Orquestrador de agentes TUI
 orchestrator:
 	@echo "🖥️ Iniciando orquestrador de agentes..."
-	@bash -c "source $(VENV)/bin/activate && cd src/ui && $(PYTHON) agent_orchestrator.py"
+	@bash -c "source $(VENV)/bin/activate && $(PYTHON) src/ui/agent_orchestrator.py"
 	@echo "✅ Orquestrador de agentes finalizado!"
 
 # Permite argumentos extras para o comando run

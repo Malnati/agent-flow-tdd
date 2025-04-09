@@ -8,6 +8,7 @@ import json
 import os
 import uuid
 from datetime import datetime
+from pathlib import Path
 from textual.app import App, ComposeResult
 from textual.containers import Container
 from textual.widgets import Footer, Header, Input, Static, RadioSet, RadioButton
@@ -19,6 +20,16 @@ from textual.reactive import reactive
 from src.core.models import ModelManager
 from src.core.agents import AgentOrchestrator
 from src.core.db import DatabaseManager
+from src.core.logger import get_logger
+
+# Obter caminho da raiz do projeto
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+LOG_DIR = BASE_DIR / "logs"
+DATA_DIR = BASE_DIR / "data"
+
+# Garantir que os diretórios existem
+os.makedirs(LOG_DIR, exist_ok=True)
+os.makedirs(DATA_DIR, exist_ok=True)
 
 # Modelos disponíveis para seleção
 MODEL_OPTIONS = [
@@ -31,12 +42,7 @@ MODEL_OPTIONS = [
 ]
 
 # Configuração de logging
-logger = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    filename="logs/agent_orchestrator.log"
-)
+logger = get_logger(__name__)
 
 class PromptGenTab(Vertical):
     def compose(self) -> ComposeResult:
@@ -150,7 +156,7 @@ class TDDPromptApp(App):
                 model_manager = ModelManager(model_name="gpt-3.5-turbo")
                 
             # Inicializa o DatabaseManager
-            db = DatabaseManager()
+            db = DatabaseManager(db_path=str(DATA_DIR / "agent_logs.db"))
             
             # Cria o orquestrador com o modelo selecionado
             orchestrator = AgentOrchestrator(model_manager.model_name)
@@ -180,7 +186,7 @@ class TDDPromptApp(App):
         self.model_manager = ModelManager()
         self.available_models = self._get_available_models()
         # Inicializa o DatabaseManager para registrar execuções
-        self.db = DatabaseManager()
+        self.db = DatabaseManager(db_path=str(DATA_DIR / "agent_logs.db"))
         # Inicializa o orquestrador
         self.orchestrator = None
         # ID de sessão para registrar logs
