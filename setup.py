@@ -10,6 +10,7 @@ from setuptools.command.develop import develop
 from setuptools.command.install import install
 import pkg_resources
 import os
+from src.core.models import ModelDownloader
 
 class PreInstallCommand:
     """Classe base para executar comandos antes da instalação."""
@@ -33,32 +34,6 @@ class PreInstallCommand:
             print("✅ Pacote removido com sucesso!")
         except subprocess.CalledProcessError as e:
             print(f"⚠️  Erro ao remover pacote: {e}")
-
-# Função para verificar e baixar modelos
-class ModelDownloader:
-    MODEL_URLS = {
-        "tinyllama": "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
-        "phi1": "https://huggingface.co/professorf/phi-1-gguf/resolve/main/phi-1-f16.gguf",
-        "deepseek": "https://huggingface.co/TheBloke/deepseek-coder-6.7B-instruct-GGUF/resolve/main/deepseek-coder-6.7b-instruct.Q4_K_M.gguf",
-        "phi3": "https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/Phi-3-mini-4k-instruct-q4.gguf"
-    }
-    MODEL_DIR = "models"
-
-    @staticmethod
-    def download_model(model_name, url):
-        model_path = os.path.join(ModelDownloader.MODEL_DIR, f"{model_name}.gguf")
-        if not os.path.exists(model_path) or os.path.getsize(model_path) < 1024:
-            print(f"📥 Baixando modelo {model_name}...")
-            os.makedirs(ModelDownloader.MODEL_DIR, exist_ok=True)
-            subprocess.run(["curl", "-L", "-f", url, "-o", model_path], check=True)
-            print(f"✅ Modelo {model_name} baixado com sucesso!")
-        else:
-            print(f"✅ Modelo {model_name} já está disponível.")
-
-    @staticmethod
-    def verify_and_download_models():
-        for model_name, url in ModelDownloader.MODEL_URLS.items():
-            ModelDownloader.download_model(model_name, url)
 
 class CustomInstallCommand(install, PreInstallCommand):
     """Comando customizado para instalação normal."""
