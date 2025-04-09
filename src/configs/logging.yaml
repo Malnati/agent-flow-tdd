@@ -1,0 +1,40 @@
+# Configuração de diretórios do sistema
+directories:
+  logs: "logs"                              # Diretório para armazenamento de logs
+  data: "data"                              # Diretório para armazenamento de dados
+  cache: "cache"                            # Diretório para armazenamento de cache
+  models: "models"                          # Diretório para armazenamento de modelos locais
+  temp: "temp"                              # Diretório temporário
+
+# Configuração de logging
+logging:
+  levels:
+    map:
+      DEBUG: 10
+      INFO: 20
+      WARNING: 30
+      ERROR: 40
+      CRITICAL: 50
+    default: "INFO"
+  format:
+    default: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    detailed: "%(asctime)s - %(name)s - %(levelname)s - %(message)s - [%(filename)s:%(lineno)d]"
+  security:
+    sensitive_keywords: ["password", "token", "secret", "key", "credential", "api_key"]
+    token_patterns: ["[A-Za-z0-9-_]{20,}"]
+    masking:
+      default_mask: "***"
+      min_length_for_masking: 8
+      min_length_for_partial: 16
+      prefix_length: 4
+      suffix_length: 4
+  trace:
+    default_workflow_name: "default"
+    default_span_type: "operation"
+    tracing_disabled: false
+    trace_include_sensitive_data: false
+    prefixes:
+      trace: "trace-"
+      span: "span-"
+    file_processor:
+      default_file: "logs/traces.jsonl" 

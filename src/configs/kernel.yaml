@@ -33,9 +33,9 @@ models:
       models: ["gpt-3.5-turbo", "gpt-4"]
 
     - name: openrouter                      # Provedor OpenRouter via API
-      prefix_patterns: ["meta-llama/", "mistral/"]
+      prefix_patterns: ["meta-llama/", "mistral/", "deepseek-coder:"]
       base_url: "https://openrouter.ai/api/v1"
-      models: ["meta-llama/llama-3-8b"]
+      models: ["meta-llama/llama-3-8b", "deepseek-coder:7b-instruct-q4"]
 
     - name: gemini                          # Provedor Gemini
       prefix_patterns: ["gemini-"]

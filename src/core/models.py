@@ -1090,8 +1090,23 @@ class ModelRegistry:
         return None
 
     def get_provider_name(self, model_id: str) -> str:
-        provider = self.get_provider_by_model_id(model_id)
-        return provider['name'] if provider else 'unknown'
+        """
+        Obtém o nome do provedor com base no ID do modelo.
+        
+        Args:
+            model_id: ID do modelo
+            
+        Returns:
+            Nome do provedor ou 'openai' como fallback
+        """
+        for provider in self.providers:
+            name = provider.get('name')
+            for pattern in provider.get('prefix_patterns', []):
+                if model_id.startswith(pattern):
+                    return name
+        
+        # Se não encontrou correspondência, retorna openai como fallback
+        return 'openai'
 
     def get_provider_config(self, provider_name: str) -> Dict[str, Any]:
         for p in self.providers:
