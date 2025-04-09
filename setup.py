@@ -12,6 +12,13 @@ import pkg_resources
 import os
 from src.core.models import ModelDownloader
 
+def ensure_yaml_installed():
+    try:
+        import yaml
+    except ImportError:
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'PyYAML'])
+        import yaml
+
 class PreInstallCommand:
     """Classe base para executar comandos antes da instalação."""
     def check_if_installed(self):
@@ -40,6 +47,7 @@ class CustomInstallCommand(install, PreInstallCommand):
     def run(self):
         self.run_pre_install()
         install.run(self)
+        ensure_yaml_installed()
         ModelDownloader.verify_and_download_models()
 
 class CustomDevelopCommand(develop, PreInstallCommand):
@@ -47,6 +55,7 @@ class CustomDevelopCommand(develop, PreInstallCommand):
     def run(self):
         self.run_pre_install()
         develop.run(self)
+        ensure_yaml_installed()
         ModelDownloader.verify_and_download_models()
 
 # Dependências principais
