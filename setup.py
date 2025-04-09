@@ -15,7 +15,6 @@ from src.core.models import ModelDownloader
 def ensure_yaml_installed():
     try:
         subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'PyYAML'])
-        import yaml
     except ImportError:
         print("⚠️ PyYAML não está instalado. Por favor, instale o PyYAML para continuar.")
 
