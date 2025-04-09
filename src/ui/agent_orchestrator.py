@@ -10,10 +10,11 @@ import uuid
 from datetime import datetime
 from textual.app import App, ComposeResult
 from textual.containers import Container
-from textual.widgets import Button, Footer, Header, Input, Static, RadioSet, RadioButton
+from textual.widgets import Footer, Header, Input, Static, RadioSet, RadioButton
 from textual import on
 from textual.binding import Binding
 from textual.css.query import NoMatches
+from textual.reactive import reactive
 
 from src.core.models import ModelManager
 from src.core.agents import AgentOrchestrator
@@ -24,61 +25,14 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()]
+    filename="logs/agent_orchestrator.log"
 )
 
 class SimpleOrchestratorApp(App):
-    """Aplicativo simples para orquestrar prompts."""
+    """Aplicativo simples para orquestração de prompts."""
     
     TITLE = "Orquestrador de Prompts"
-    # CSS_PATH = "agent_orchestrator.tcss"
-    
-    # Estilos CSS embutidos
-    DEFAULT_CSS = """
-    /* Estilo para o botão de geração */
-    #gen-button {
-        min-width: 15;
-        padding: 1 2;
-        margin: 1;
-        background: $success;
-        color: $text;
-        border: tall $success-lighten-2;
-        text-style: bold;
-    }
-
-    #gen-button:hover {
-        background: $success-darken-1;
-        border: tall $success-lighten-1;
-    }
-
-    /* Estilos para os RadioButtons */
-    RadioButton {
-        background: $surface;
-        color: $text-muted;
-        border: none;
-        padding: 0 1;
-        height: 1;
-    }
-
-    RadioButton:hover {
-        color: $text;
-        text-style: italic;
-    }
-
-    RadioButton.-selected {
-        color: $success;
-        text-style: bold;
-        background: $surface;
-    }
-    """
-    
-    BINDINGS = [
-        # Múltiplas alternativas para sair do aplicativo
-        Binding("ctrl+meta+q", "quit", "Sair"),
-        Binding("ctrl+q", "quit", "Sair"),
-        Binding("meta+q", "quit", "Sair"),
-        Binding("q", "quit", "Sair"),
-    ]
+    CSS_PATH = "agent_orchestrator.tcss"
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -111,35 +65,16 @@ class SimpleOrchestratorApp(App):
         return modelos
     
     def compose(self) -> ComposeResult:
-        """Compõe a interface principal."""
+        """Compõe a interface gráfica da aplicação."""
         yield Header()
-        yield Footer()
         
-        with Container(id="gen-panel"):
-            yield Input(placeholder="Digite seu prompt aqui...", id="prompt-input")
+        with Container(id="main"):
+            with Container(id="input-line"):
+                yield Input(placeholder="Digite seu prompt aqui...", id="prompt-input")
             
-            with Container(id="options-container"):
-                # Seleção de formato de saída
-                with Container(id="format-container"):
-                    yield Static("Formato de saída:", id="format-label")
-                    with RadioSet(id="format-select"):
-                        yield RadioButton("JSON", value=True)
-                        yield RadioButton("Markdown")
-                
-                # Seleção de modelo
-                with Container(id="model-container"):
-                    yield Static("Modelo:", id="model-label")
-                    with RadioSet(id="model-select"):
-                        for i, modelo in enumerate(self.available_models):
-                            yield RadioButton(modelo, value=(i == 0))  # Seleciona o primeiro por padrão
-                
-            yield Button("Gerar", variant="success", id="gen-button")
             yield Static("[b]Aguardando entrada...[/b]", id="output")
-    
-    @on(Button.Pressed, "#gen-button")
-    def on_button_pressed(self) -> None:
-        """Ação quando o botão é pressionado."""
-        self.gerar_conteudo()
+        
+        yield Footer()
     
     @on(Input.Submitted)
     def on_input_submitted(self) -> None:
@@ -221,11 +156,9 @@ class SimpleOrchestratorApp(App):
             self.notify("Por favor, digite um prompt", severity="error")
             return
         
-        # Obtém o formato selecionado
-        formato = "json" if self.query_one("#format-select").pressed_button.label == "JSON" else "markdown"
-        
-        # Obtém o modelo selecionado
-        modelo = str(self.query_one("#model-select").pressed_button.label)
+        # Define valores padrão para formato e modelo
+        formato = "json"  # Padrão: JSON
+        modelo = "gpt-3.5-turbo"  # Padrão: GPT-3.5
         
         try:
             # Inicializa o orquestrador com o modelo selecionado
