@@ -13,6 +13,9 @@ MODEL_URL = https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolv
 MODEL_NAME = tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
 MODEL_DIR = models
 
+# Define um dir	para cache do Python
+export PYTHONPYCACHEPREFIX=cache
+
 # Carrega variáveis de ambiente do arquivo .env se existir
 ifneq (,$(wildcard .env))
     include .env

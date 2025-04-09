@@ -389,6 +389,14 @@ class ModelManager:
         """
         logger.info(f"Gerando resposta com provedor: {provider}")
         
+        # Verifica se o modelo está disponível
+        if provider == 'deepseek_local' and not self.deepseek_model:
+            logger.error("Modelo DeepSeek Coder não está disponível.")
+            raise ValueError("Modelo DeepSeek Coder não está disponível. Verifique se o arquivo do modelo está presente e acessível.")
+        elif provider == 'phi3' and not self.phi3_model:
+            logger.error("Modelo Phi-3 Mini não está disponível.")
+            raise ValueError("Modelo Phi-3 Mini não está disponível. Verifique se o arquivo do modelo está presente e acessível.")
+        
         if provider == 'openai':
             return self._generate_openai(prompt, system, **kwargs)
         elif provider == 'openrouter':
@@ -397,7 +405,24 @@ class ModelManager:
                     raise ValueError("OpenRouter não configurado")
                 else:
                     return self._generate_openai(prompt, system, **kwargs)
-            return self._generate_openai(prompt, system, **kwargs)
+            # Usar o cliente OpenRouter diretamente (não chamar _generate_openai)
+            messages = []
+            if system:
+                messages.append({"role": "system", "content": system})
+            messages.append({"role": "user", "content": prompt})
+            
+            response = self.openrouter_client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+                temperature=kwargs.get('temperature', self.temperature),
+                max_tokens=kwargs.get('max_tokens', self.max_tokens)
+            )
+            
+            return response.choices[0].message.content, {
+                "model": response.model,
+                "usage": response.usage.model_dump(),
+                "status": "success"
+            }
         elif provider == 'gemini':
             if not self.gemini_model:
                 if not self.fallback_enabled:
@@ -644,6 +669,67 @@ class ModelManager:
                 )
                 return response['choices'][0]['message']['content']
                 
+            elif provider == 'phi1' and self.phi1_model:
+                # Formata o prompt para Phi-1
+                full_prompt = ""
+                if system_prompt:
+                    full_prompt += f"<|system|>\n{system_prompt}</s>\n"
+                full_prompt += f"<|user|>\n{user_prompt}</s>\n<|assistant|>\n"
+                
+                # Parâmetros para geração
+                phi1_config = self.registry.get_provider_config('phi1')
+                max_tokens = self.max_tokens or phi1_config.get('default_max_tokens', 100)
+                stop = ["</s>", "<|user|>", "<|system|>", "<|assistant|>"]
+                
+                response = self.phi1_model(
+                    full_prompt,
+                    max_tokens=max_tokens,
+                    temperature=self.temperature,
+                    stop=stop
+                )
+                return response["choices"][0]["text"].strip()
+                
+            elif provider == 'deepseek_local' and self.deepseek_model:
+                # Formata o prompt para DeepSeek Coder
+                full_prompt = ""
+                if system_prompt:
+                    full_prompt += f"<s>\n{system_prompt}\n</s>\n"
+                full_prompt += f"<user>\n{user_prompt}\n</user>\n<assistant>\n"
+                
+                # Parâmetros para geração
+                deepseek_config = self.registry.get_provider_config('deepseek_local')
+                max_tokens = self.max_tokens or deepseek_config.get('default_max_tokens', 512)
+                stop = ["</assistant>", "<user>", "<s>", "</user>", "</s>"]
+                
+                response = self.deepseek_model(
+                    full_prompt,
+                    max_tokens=max_tokens,
+                    temperature=self.temperature,
+                    stop=stop
+                )
+                return response["choices"][0]["text"].strip()
+                
+            elif provider == 'phi3' and self.phi3_model:
+                # Formata o prompt para Phi-3 Mini
+                full_prompt = ""
+                if system_prompt:
+                    full_prompt += f"<|system|>\n{system_prompt}\n"
+                full_prompt += f"<|user|>\n{user_prompt}\n<|assistant|>\n"
+                
+                # Parâmetros para geração
+                phi3_config = self.registry.get_provider_config('phi3')
+                max_tokens = self.max_tokens or phi3_config.get('default_max_tokens', 512)
+                stop = ["<|user|>", "<|system|>", "<|assistant|>"]
+                
+                response = self.phi3_model(
+                    full_prompt,
+                    max_tokens=max_tokens,
+                    temperature=self.temperature,
+                    stop=stop
+                )
+                return response["choices"][0]["text"].strip()
+                
+            # Se chegou aqui, o provedor não está configurado
             logger.error(f"Cliente não configurado para provedor {provider}")
             return None
             
