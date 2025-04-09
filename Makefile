@@ -87,7 +87,7 @@ install:
 	@echo "🔧 Instalando dependências..."
 	$(PYTHON) -m venv $(VENV)
 	@echo "Ativando ambiente virtual e instalando dependências..."
-	@bash -c "source $(VENV)/bin/activate && $(PYTHON) -m pip install --upgrade pip && $(PYTHON) -m pip install -e \".[dev,docs]\""
+	@bash -c "source $(VENV)/bin/activate && $(PYTHON) -m pip install --upgrade pip && $(PYTHON) -m pip install -r requirements.txt && $(PYTHON) setup.py develop"
 	@echo "✅ Instalação concluída!"
 
 # Testes

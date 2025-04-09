@@ -10,7 +10,7 @@ from setuptools.command.develop import develop
 from setuptools.command.install import install
 import pkg_resources
 import os
-# from src.core.models import ModelDownloader
+from src.core.models import ModelDownloader
 
 class PreInstallCommand:
     """Classe base para executar comandos antes da instalação."""
@@ -40,63 +40,17 @@ class CustomInstallCommand(install, PreInstallCommand):
     def run(self):
         self.run_pre_install()
         install.run(self)
-        # ModelDownloader.verify_and_download_models()
+        ModelDownloader.verify_and_download_models()
 
 class CustomDevelopCommand(develop, PreInstallCommand):
     """Comando customizado para instalação em modo desenvolvimento."""
     def run(self):
         self.run_pre_install()
         develop.run(self)
-        # ModelDownloader.verify_and_download_models()
+        ModelDownloader.verify_and_download_models()
 
 # Dependências principais
-install_requires = [
-    "typer>=0.9.0",
-    "rich>=13.7.0",
-    "openai>=1.12.0",
-    "openrouter>=1.0.0",
-    "google-generativeai>=0.8.0",
-    "python-dotenv>=1.0.0",
-    "pydantic>=2.6.0",
-    "requests>=2.31.0",
-    "tenacity>=8.2.0",
-    "cachetools>=5.3.0",
-    "anthropic>=0.18.0",
-    "PyYAML>=6.0.1",
-    "llama-cpp-python>=0.2.10",
-    "textual>=0.44.0",
-]
-
-# Dependências de desenvolvimento
-dev_requires = [
-    "pytest>=8.0.0",
-    "pytest-cov>=4.1.0",
-    "pytest-mock>=3.12.0",
-    "black>=23.0.0",
-    "isort>=5.12.0",
-    "flake8>=6.1.0",
-    "mypy>=1.5.0",
-    "autoflake>=2.2.0",
-    "build>=1.0.3",
-    "twine>=4.0.2",
-]
-
-# Dependências para documentação
-docs_requires = [
-    "mkdocs>=1.5.0",
-    "mkdocs-material>=9.5.0",
-    "mkdocstrings>=0.24.0",
-    "mkdocstrings-python>=1.7.0",
-    "mkdocs-gen-files>=0.5.0",
-    "mkdocs-literate-nav>=0.6.0",
-]
-
-# Dependências opcionais para modelos mais avançados
-ml_requires = [
-    "transformers>=4.34.0",
-    "torch>=2.0.0",
-    "accelerate>=0.20.0",
-]
+install_requires = []
 
 # Lê a versão do arquivo .version.json
 with open('.version.json', 'r', encoding='utf-8') as f:
@@ -116,9 +70,9 @@ setup(
     ],
     install_requires=install_requires,
     extras_require={
-        "dev": dev_requires,
-        "docs": docs_requires,
-        "ml": ml_requires,
+        # "dev": dev_requires,
+        # "docs": docs_requires,
+        # "ml": ml_requires,
     },
     entry_points={
         "console_scripts": [
