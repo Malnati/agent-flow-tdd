@@ -1,4 +1,5 @@
 """
+# src/core/models.py
 Gerenciador de modelos de IA com suporte a múltiplos provedores e fallback automático.
 """
 from enum import Enum

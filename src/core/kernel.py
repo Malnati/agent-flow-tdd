@@ -1,4 +1,5 @@
 """
+src/core/kernel.py
 Utilitários para o sistema.
 Módulo com funções comuns usadas em diferentes partes do sistema.
 """

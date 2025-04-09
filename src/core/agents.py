@@ -1,4 +1,5 @@
 """
+# src/core/agents.py
 Módulo de agentes e guardrails do sistema.
 """
 from typing import Any, Dict, List, Optional

@@ -1,4 +1,5 @@
 """
+# src/core/db.py
 Módulo de gerenciamento do banco de dados.
 """
 import json
