@@ -10,13 +10,7 @@ from setuptools.command.develop import develop
 from setuptools.command.install import install
 import pkg_resources
 import os
-from src.core.models import ModelDownloader
-
-def ensure_yaml_installed():
-    try:
-        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'PyYAML'])
-    except ImportError:
-        print("⚠️ PyYAML não está instalado. Por favor, instale o PyYAML para continuar.")
+# from src.core.models import ModelDownloader
 
 class PreInstallCommand:
     """Classe base para executar comandos antes da instalação."""
@@ -46,16 +40,14 @@ class CustomInstallCommand(install, PreInstallCommand):
     def run(self):
         self.run_pre_install()
         install.run(self)
-        ensure_yaml_installed()
-        ModelDownloader.verify_and_download_models()
+        # ModelDownloader.verify_and_download_models()
 
 class CustomDevelopCommand(develop, PreInstallCommand):
     """Comando customizado para instalação em modo desenvolvimento."""
     def run(self):
         self.run_pre_install()
         develop.run(self)
-        ensure_yaml_installed()
-        ModelDownloader.verify_and_download_models()
+        # ModelDownloader.verify_and_download_models()
 
 # Dependências principais
 install_requires = [
