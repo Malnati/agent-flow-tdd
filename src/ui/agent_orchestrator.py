@@ -1,9 +1,7 @@
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, Vertical, Container
+from textual.containers import Vertical, Container
 from textual.widgets import Header, Footer, Tabs, Tab, Input, OptionList, Pretty, Static
 from textual.reactive import reactive
-from textual.events import Key
-import logging
 import json
 import os
 import uuid
@@ -11,9 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from textual.app import App, ComposeResult
 from textual.containers import Container
-from textual.widgets import Footer, Header, Input, Static, RadioSet, RadioButton
+from textual.widgets import Footer, Header, Input, Static
 from textual import on
-from textual.binding import Binding
 from textual.css.query import NoMatches
 from textual.reactive import reactive
 
@@ -45,6 +42,8 @@ MODEL_OPTIONS = [
 logger = get_logger(__name__)
 
 class PromptGenTab(Vertical):
+    """Aba de geração de prompts."""
+    
     def compose(self) -> ComposeResult:
         yield Static("Digite o prompt abaixo:")
         yield Input(placeholder="Digite seu prompt...", id="prompt_input")
@@ -52,6 +51,12 @@ class PromptGenTab(Vertical):
         yield OptionList(*MODEL_OPTIONS, id="model_list")
         yield Static("Resultado da geração:")
         yield Pretty({}, id="result_output")
+    
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Trata o evento quando o ENTER é pressionado no campo de prompt."""
+        if event.input.id == "prompt_input":
+            # Propagamos o evento para a aplicação principal
+            self.app.on_input_submitted(event)
 
 
 class TDDPromptApp(App):
@@ -84,7 +89,8 @@ class TDDPromptApp(App):
     """
     
     BINDINGS = [
-        ("s", "quit", "Sair do app")
+        ("s", "quit", "Sair do app"),
+        ("enter", "gerar_conteudo", "Gerar conteúdo"),
     ]
     
     selected_tab = reactive("Gen")
@@ -183,10 +189,21 @@ class TDDPromptApp(App):
 
     def on_mount(self) -> None:
         # Inicializa o ModelManager para obter a lista de modelos disponíveis
-        self.model_manager = ModelManager()
-        self.available_models = self._get_available_models()
+        try:
+            self.model_manager = ModelManager()
+            self.available_models = self._get_available_models()
+            logger.info(f"Modelos disponíveis: {self.available_models}")
+        except Exception as e:
+            logger.error(f"Erro ao inicializar ModelManager: {str(e)}", exc_info=True)
+            self.notify(f"Erro ao inicializar: {str(e)}", severity="error")
+            
         # Inicializa o DatabaseManager para registrar execuções
-        self.db = DatabaseManager(db_path=str(DATA_DIR / "agent_logs.db"))
+        try:
+            self.db = DatabaseManager(db_path=str(DATA_DIR / "agent_logs.db"))
+        except Exception as e:
+            logger.error(f"Erro ao inicializar DatabaseManager: {str(e)}", exc_info=True)
+            self.notify(f"Erro ao inicializar banco de dados: {str(e)}", severity="error")
+            
         # Inicializa o orquestrador
         self.orchestrator = None
         # ID de sessão para registrar logs
@@ -194,6 +211,8 @@ class TDDPromptApp(App):
         
         self.query_one("#tabs", Tabs).active = "Gen"
         self.mount_tab("Gen")
+        
+        logger.info("Aplicativo iniciado com sucesso")
 
     def mount_tab(self, tab_name: str):
         container = self.query_one("#content_container", Container)
@@ -207,10 +226,15 @@ class TDDPromptApp(App):
         self.mount_tab(self.selected_tab)
 
     @on(Input.Submitted)
-    def on_input_submitted(self) -> None:
+    def on_input_submitted(self, event: Input.Submitted) -> None:
         """Ação quando o ENTER é pressionado em um campo de input."""
-        self.gerar_conteudo()
-
+        logger.info(f"Input submetido: {event.input.id}")
+        
+        # Verifica se o input é do prompt
+        if event.input.id == "prompt_input":
+            logger.info("Prompt submetido, gerando conteúdo...")
+            self.gerar_conteudo()
+        
     def gerar_conteudo(self) -> None:
         """Gera conteúdo com base no prompt usando o orquestrador de agentes."""
         self.notify("Gerando conteúdo...")
@@ -270,12 +294,24 @@ class TDDPromptApp(App):
             
         except Exception as e:
             error_msg = str(e)
-            logger.error(f"Erro ao executar orquestrador: {error_msg}")
+            logger.error(f"Erro ao executar orquestrador: {error_msg}", exc_info=True)
             try:
                 self.query_one("#result_output", Pretty).update({"erro": error_msg})
             except NoMatches:
                 logger.error("Componente de saída não encontrado")
             self.notify(f"Erro ao gerar conteúdo: {error_msg}", severity="error")
+
+    def action_gerar_conteudo(self) -> None:
+        """Ação chamada quando a tecla 'enter' é pressionada."""
+        logger.info("Ação gerar_conteudo acionada via binding")
+        # Verifica se estamos na aba de geração
+        if self.selected_tab == "Gen":
+            self.gerar_conteudo()
+            
+    def action_quit(self) -> None:
+        """Ação para sair do aplicativo."""
+        logger.info("Finalizando aplicação via ação quit")
+        self.exit()
 
 if __name__ == "__main__":
     logger.info("INÍCIO - main | Iniciando Orquestrador Simples")
