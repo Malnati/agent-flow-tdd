@@ -9,7 +9,6 @@ import json
 import yaml
 from pathlib import Path
 from dataclasses import dataclass
-import subprocess
 import requests
 
 import google.generativeai as genai
@@ -675,13 +674,13 @@ class ModelManager:
                 # Formata o prompt para Phi-1
                 full_prompt = ""
                 if system_prompt:
-                    full_prompt += f"<|system|>\n{system_prompt}</s>\n"
-                full_prompt += f"<|user|>\n{user_prompt}</s>\n<|assistant|>\n"
+                    full_prompt += f"<|system|>\n{system_prompt} { \n"
+                full_prompt += f"<|user|>\n{user_prompt} { \n<|assistant|>\n"
                 
                 # Parâmetros para geração
                 phi1_config = self.registry.get_provider_config('phi1')
                 max_tokens = self.max_tokens or phi1_config.get('default_max_tokens', 100)
-                stop = ["</s>", "<|user|>", "<|system|>", "<|assistant|>"]
+                stop = [" { ", "<|user|>", "<|system|>", "<|assistant|>"]
                 
                 response = self.phi1_model(
                     full_prompt,
@@ -695,13 +694,13 @@ class ModelManager:
                 # Formata o prompt para DeepSeek Coder
                 full_prompt = ""
                 if system_prompt:
-                    full_prompt += f"<s>\n{system_prompt}\n</s>\n"
+                    full_prompt += f" \n{system_prompt}\n Arbitro \n"
                 full_prompt += f"<user>\n{user_prompt}\n</user>\n<assistant>\n"
                 
                 # Parâmetros para geração
                 deepseek_config = self.registry.get_provider_config('deepseek_local')
                 max_tokens = self.max_tokens or deepseek_config.get('default_max_tokens', 512)
-                stop = ["</assistant>", "<user>", "<s>", "</user>", "</s>"]
+                stop = ["</assistant>", "<user>", " ", "</user>", " Arbitro "]
                 
                 response = self.deepseek_model(
                     full_prompt,
@@ -812,14 +811,14 @@ class ModelManager:
             # Formata o prompt
             full_prompt = ""
             if system:
-                full_prompt += f"<|system|>\n{system}</s>\n"
-            full_prompt += f"<|user|>\n{prompt}</s>\n<|assistant|>\n"
+                full_prompt += f"<|system|>\n{system} Arbitro \n"
+            full_prompt += f"<|user|>\n{prompt} Arbitro \n<|assistant|>\n"
             
             # Parâmetros para geração
             tinyllama_config = self.registry.get_provider_config('tinyllama')
             max_tokens = kwargs.get('max_tokens', self.max_tokens) or tinyllama_config.get('default_max_tokens', 256)
             temperature = kwargs.get('temperature', self.temperature)
-            stop = ["</s>", "<|user|>", "<|system|>", "<|assistant|>"]
+            stop = [" Arbitro ", "<|user|>", "<|system|>", "<|assistant|>"]
             
             # Usa apenas a API direta, que funciona em todas as versões
             response = self.tinyllama_model(
@@ -891,14 +890,14 @@ class ModelManager:
             # Formata o prompt
             full_prompt = ""
             if system:
-                full_prompt += f"<|system|>\n{system}</s>\n"
-            full_prompt += f"<|user|>\n{prompt}</s>\n<|assistant|>\n"
+                full_prompt += f"<|system|>\n{system} Arbitro \n"
+            full_prompt += f"<|user|>\n{prompt} Arbitro \n<|assistant|>\n"
             
             # Parâmetros para geração
             phi1_config = self.registry.get_provider_config('phi1')
             max_tokens = kwargs.get('max_tokens', self.max_tokens) or phi1_config.get('default_max_tokens', 100)
             temperature = kwargs.get('temperature', self.temperature)
-            stop = ["</s>", "<|user|>", "<|system|>", "<|assistant|>"]
+            stop = [" Arbitro ", "<|user|>", "<|system|>", "<|assistant|>"]
             
             # Usa apenas a API direta, que funciona em todas as versões
             response = self.phi1_model(
@@ -970,14 +969,14 @@ class ModelManager:
             # Formata o prompt para DeepSeek Coder
             full_prompt = ""
             if system:
-                full_prompt += f"<s>\n{system}\n</s>\n"
+                full_prompt += f" \n{system}\n Arbitro \n"
             full_prompt += f"<user>\n{prompt}\n</user>\n<assistant>\n"
             
             # Parâmetros para geração
             deepseek_config = self.registry.get_provider_config('deepseek_local')
             max_tokens = kwargs.get('max_tokens', self.max_tokens) or deepseek_config.get('default_max_tokens', 512)
             temperature = kwargs.get('temperature', self.temperature)
-            stop = ["</assistant>", "<user>", "<s>", "</user>", "</s>"]
+            stop = ["</assistant>", "<user>", " ", "</user>", " Arbitro "]
             
             # Usa apenas a API direta, que funciona em todas as versões
             response = self.deepseek_model(
@@ -1241,7 +1240,7 @@ class ModelDownloader:
     @staticmethod
     def download_model(model_name, url):
         model_path = os.path.join(ModelDownloader.MODEL_DIR, f"{model_name}.gguf")
-        if not os.path.exists(model_path) or os.path.getsize(model_path) < 1024:
+        if not ModelDownloader.is_model_available(model_name):
             print(f"📥 Baixando modelo {model_name}...")
             os.makedirs(ModelDownloader.MODEL_DIR, exist_ok=True)
             response = requests.get(url, stream=True)
@@ -1254,6 +1253,11 @@ class ModelDownloader:
                 print(f"❌ Falha ao baixar o modelo {model_name}. Código de status: {response.status_code}")
         else:
             print(f"✅ Modelo {model_name} já está disponível.")
+
+    @staticmethod
+    def is_model_available(model_name: str) -> bool:
+        model_path = os.path.join(ModelDownloader.MODEL_DIR, f"{model_name}.gguf")
+        return os.path.exists(model_path) and os.path.getsize(model_path) >= 1000000
 
     @staticmethod
     def verify_and_download_models():

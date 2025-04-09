@@ -8,7 +8,6 @@ import os
 import sys
 import json
 import argparse
-import subprocess
 import uuid
 from typing import Dict, Any
 from dataclasses import dataclass
@@ -16,7 +15,7 @@ from pathlib import Path
 from rich.console import Console
 
 from src.core.agents import AgentOrchestrator
-from src.core.models import ModelManager
+from src.core.models import ModelManager, ModelDownloader
 from src.core.db import DatabaseManager
 from src.core.logger import get_logger
 
@@ -257,48 +256,31 @@ def check_model_availability():
             logger.info("Configurado para não usar modelo local, pulando verificação de disponibilidade")
             return
             
-        # Verifica se o arquivo do modelo TinyLLaMA existe
-        base_dir = Path(__file__).resolve().parent.parent
-        model_path = os.path.join(base_dir, "models", "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf")
-        
-        if not os.path.exists(model_path) or os.path.getsize(model_path) < 1000000:  # Menos de 1MB
-            logger.warning(f"Modelo TinyLLaMA não encontrado ou incompleto em: {model_path}")
-            logger.info("Tentando baixar o modelo usando 'make download-model'...")
-            
-            # Executa o comando make para baixar o modelo
-            result = subprocess.run(["make", "download-model"], 
-                                   cwd=base_dir,
-                                   capture_output=True, 
-                                   text=True)
-            
-            if result.returncode == 0:
+        # Verifica se o modelo TinyLLaMA está disponível
+        if not ModelDownloader.is_model_available("tinyllama"):
+            logger.warning(f"Modelo TinyLLaMA não encontrado ou incompleto.")
+            logger.info("Tentando baixar o modelo usando ModelDownloader...")
+            try:
+                ModelDownloader.download_model("tinyllama", ModelDownloader.MODEL_URLS["tinyllama"])
                 logger.info("Modelo TinyLLaMA baixado com sucesso!")
-            else:
-                logger.warning(f"Falha ao baixar o modelo TinyLLaMA: {result.stderr}")
+            except Exception as e:
+                logger.warning(f"Falha ao baixar o modelo TinyLLaMA: {str(e)}")
                 logger.warning("O sistema usará um modelo de fallback.")
         else:
-            logger.info(f"Modelo TinyLLaMA encontrado: {model_path}")
-            
-        # Verifica se o arquivo do modelo Phi-1 existe
-        phi1_model_path = os.path.join(base_dir, "models", "phi-1.Q4_K_M.gguf")
-        
-        if not os.path.exists(phi1_model_path) or os.path.getsize(phi1_model_path) < 1000000:  # Menos de 1MB
-            logger.warning(f"Modelo Phi-1 não encontrado ou incompleto em: {phi1_model_path}")
-            logger.info("Tentando baixar o modelo usando 'make download-phi1'...")
-            
-            # Executa o comando make para baixar o modelo
-            result = subprocess.run(["make", "download-phi1"], 
-                                   cwd=base_dir,
-                                   capture_output=True, 
-                                   text=True)
-            
-            if result.returncode == 0:
+            logger.info(f"Modelo TinyLLaMA encontrado.")
+
+        # Verifica se o modelo Phi-1 está disponível
+        if not ModelDownloader.is_model_available("phi1"):
+            logger.warning(f"Modelo Phi-1 não encontrado ou incompleto.")
+            logger.info("Tentando baixar o modelo usando ModelDownloader...")
+            try:
+                ModelDownloader.download_model("phi1", ModelDownloader.MODEL_URLS["phi1"])
                 logger.info("Modelo Phi-1 baixado com sucesso!")
-            else:
-                logger.warning(f"Falha ao baixar o modelo Phi-1: {result.stderr}")
+            except Exception as e:
+                logger.warning(f"Falha ao baixar o modelo Phi-1: {str(e)}")
                 logger.warning("O sistema usará um modelo de fallback para Phi-1.")
         else:
-            logger.info(f"Modelo Phi-1 encontrado: {phi1_model_path}")
+            logger.info(f"Modelo Phi-1 encontrado.")
             
     except Exception as e:
         logger.warning(f"Erro ao verificar/baixar modelos: {str(e)}")
