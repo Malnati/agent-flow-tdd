@@ -1,6 +1,6 @@
 # Makefile para o projeto prompt-tdd
 
-.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs test-e2e publish download-model docs-serve docs-build docs-deploy docs-generate status edit-prompts orchestrator
+.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs test-e2e publish download-model docs-serve docs-build docs-deploy docs-generate status orchestrator
 
 # Configuração do ambiente virtual
 VENV = .venv
@@ -43,7 +43,6 @@ help:
 	@echo "  make docs-generate - Gera documentação via IA"
 	@echo ""
 	@echo "Interface de Usuário:"
-	@echo "  make edit-prompts   - Inicia o editor de prompts TUI"
 	@echo "  make orchestrator   - Inicia o orquestrador de agentes TUI"
 	@echo ""
 	@echo "Qualidade:"
@@ -266,12 +265,6 @@ docs-deploy:
 docs-generate:
 	@echo "🤖 Gerando documentação via IA..."
 	@$(PYTHON) src/scripts/generate_docs.py
-
-# Editor de prompts TUI
-edit-prompts:
-	@echo "🖥️ Iniciando editor de prompts..."
-	@bash -c "source $(VENV)/bin/activate && $(PYTHON) src/ui/edit_agents.py"
-	@echo "✅ Editor de prompts finalizado!"
 
 # Orquestrador de agentes TUI
 orchestrator:
