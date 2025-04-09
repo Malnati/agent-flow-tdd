@@ -1,8 +1,8 @@
-#!/usr/bin/env python3
-"""
-Orquestrador de Agentes - Interface TUI para execução de prompts e visualização de resultados.
-"""
-
+from textual.app import App, ComposeResult
+from textual.containers import Horizontal, Vertical, Container
+from textual.widgets import Header, Footer, Tabs, Tab, Input, OptionList, Pretty, Static
+from textual.reactive import reactive
+from textual.events import Key
 import logging
 import json
 import os
@@ -20,6 +20,16 @@ from src.core.models import ModelManager
 from src.core.agents import AgentOrchestrator
 from src.core.db import DatabaseManager
 
+# Modelos disponíveis para seleção
+MODEL_OPTIONS = [
+    "tinyllama-1.1b",
+    "phi-1",
+    "deepseek-coder-6.7b",
+    "phi-3-mini",
+    "gpt-4",
+    "claude-3-opus"
+]
+
 # Configuração de logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -28,24 +38,57 @@ logging.basicConfig(
     filename="logs/agent_orchestrator.log"
 )
 
-class SimpleOrchestratorApp(App):
-    """Aplicativo simples para orquestração de prompts."""
+class PromptGenTab(Vertical):
+    def compose(self) -> ComposeResult:
+        yield Static("Digite o prompt abaixo:")
+        yield Input(placeholder="Digite seu prompt...", id="prompt_input")
+        yield Static("Selecione o modelo:")
+        yield OptionList(*MODEL_OPTIONS, id="model_list")
+        yield Static("Resultado da geração:")
+        yield Pretty({}, id="result_output")
+
+
+class TDDPromptApp(App):
+    CSS = """
+    #content_container {
+        height: 1fr;
+        padding: 1;
+    }
     
-    TITLE = "Orquestrador de Prompts"
-    CSS_PATH = "agent_orchestrator.tcss"
+    OptionList {
+        height: auto;
+        max-height: 10;
+        border: solid $accent;
+    }
     
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Inicializa o ModelManager para obter a lista de modelos disponíveis
-        self.model_manager = ModelManager()
-        self.available_models = self._get_available_models()
-        # Inicializa o DatabaseManager para registrar execuções
-        self.db = DatabaseManager()
-        # Inicializa o orquestrador
-        self.orchestrator = None
-        # ID de sessão para registrar logs
-        self.session_id = f"tui_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
+    Pretty {
+        height: auto;
+        max-height: 1fr;
+        border: solid $primary;
+        overflow: auto;
+    }
     
+    Input {
+        margin: 1 0;
+    }
+    
+    Static {
+        margin-top: 1;
+    }
+    """
+
+    # Inicializa o ModelManager para obter a lista de modelos disponíveis
+    self.model_manager = ModelManager()
+    self.available_models = self._get_available_models()
+    # Inicializa o DatabaseManager para registrar execuções
+    self.db = DatabaseManager()
+    # Inicializa o orquestrador
+    self.orchestrator = None
+    # ID de sessão para registrar logs
+    self.session_id = f"tui_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
+    
+    selected_tab = reactive("Gen")
+
     def _get_available_models(self):
         """Obtém a lista de modelos disponíveis no sistema."""
         modelos = []
@@ -63,23 +106,8 @@ class SimpleOrchestratorApp(App):
         modelos.append("claude-3-opus")
         
         return modelos
+
     
-    def compose(self) -> ComposeResult:
-        """Compõe a interface gráfica da aplicação."""
-        yield Header()
-        
-        with Container(id="main"):
-            with Container(id="input-line"):
-                yield Input(placeholder="Digite seu prompt aqui...", id="prompt-input")
-            
-            yield Static("[b]Aguardando entrada...[/b]", id="output")
-        
-        yield Footer()
-    
-    @on(Input.Submitted)
-    def on_input_submitted(self) -> None:
-        """Ação quando o ENTER é pressionado em um campo de input."""
-        self.gerar_conteudo()
     
     def _get_orchestrator(self, modelo):
         """
@@ -147,6 +175,32 @@ class SimpleOrchestratorApp(App):
             self.notify(f"Erro ao inicializar o modelo: {str(e)}", severity="error")
             raise
     
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=True)
+        yield Tabs(Tab("Gen", id="Gen"), id="tabs")
+        yield Container(id="content_container")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        self.query_one("#tabs", Tabs).active = "Gen"
+        self.mount_tab("Gen")
+
+    def mount_tab(self, tab_name: str):
+        container = self.query_one("#content_container", Container)
+        container.remove_children()
+
+        if tab_name == "Gen":
+            container.mount(PromptGenTab())
+
+    def on_tabs_tab_activated(self, event: Tabs.TabActivated) -> None:
+        self.selected_tab = event.tab.id
+        self.mount_tab(self.selected_tab)
+
+    @on(Input.Submitted)
+    def on_input_submitted(self) -> None:
+        """Ação quando o ENTER é pressionado em um campo de input."""
+        self.gerar_conteudo()
+
     def gerar_conteudo(self) -> None:
         """Gera conteúdo com base no prompt usando o orquestrador de agentes."""
         self.notify("Gerando conteúdo...")
@@ -170,17 +224,13 @@ class SimpleOrchestratorApp(App):
                 format=formato
             )
             
-            # Formata a saída de acordo com o formato especificado
-            if formato == "json":
-                try:
-                    # Tenta converter para um objeto Python se a resposta for um JSON como string
-                    output_content = json.loads(result.output) if isinstance(result.output, str) else result.output
-                    resultado = f"[bold green]Resposta JSON:[/]\n\n[yellow]{json.dumps(output_content, indent=2, ensure_ascii=False)}[/]"
-                except (json.JSONDecodeError, TypeError):
-                    # Se não for um JSON válido, mostra como texto
-                    resultado = f"[bold green]Resposta:[/]\n\n[yellow]{result.output}[/]"
-            else:
-                resultado = f"[bold green]Resposta Markdown:[/]\n\n[yellow]{result.output}[/]"
+            try:
+                # Tenta converter para um objeto Python se a resposta for um JSON como string
+                output_content = json.loads(result.output) if isinstance(result.output, str) else result.output
+                resultado = f"[bold green]Resposta JSON:[/]\n\n[yellow]{json.dumps(output_content, indent=2, ensure_ascii=False)}[/]"
+            except (json.JSONDecodeError, TypeError):
+                # Se não for um JSON válido, mostra como texto
+                resultado = f"[bold green]Resposta:[/]\n\n[yellow]{result.output}[/]"
             
             # Atualiza a interface com o resultado
             self.query_one("#output", Static).update(resultado)
@@ -200,28 +250,8 @@ class SimpleOrchestratorApp(App):
             self.query_one("#output", Static).update(f"[bold red]Erro:[/]\n\n{error_msg}")
             self.notify(f"Erro ao gerar conteúdo: {error_msg}", severity="error")
 
-    def on_mount(self) -> None:
-        """Evento disparado quando o aplicativo é montado."""
-        # Coloca o foco no campo de input automaticamente
-        try:
-            self.query_one("#prompt-input").focus()
-        except NoMatches:
-            pass
-
-    def action_quit(self) -> None:
-        """Ação para sair do aplicativo."""
-        self.exit()
-
-def main():
-    """Função principal para executar o aplicativo."""
-    try:
-        logger.info("INÍCIO - main | Iniciando Orquestrador Simples")
-        app = SimpleOrchestratorApp()
-        app.run()
-        logger.info("FIM - main | Aplicativo finalizado")
-    except Exception as e:
-        logger.error(f"FALHA - main | Erro ao executar aplicativo: {str(e)}", exc_info=True)
-        print(f"Erro ao executar aplicativo: {str(e)}")
-
 if __name__ == "__main__":
-    main() 
+    logger.info("INÍCIO - main | Iniciando Orquestrador Simples")
+    app = TDDPromptApp()
+    app.run()
+    logger.info("FIM - main | Aplicativo finalizado")
