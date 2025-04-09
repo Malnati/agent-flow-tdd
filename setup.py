@@ -14,10 +14,10 @@ from src.core.models import ModelDownloader
 
 def ensure_yaml_installed():
     try:
-        import yaml
-    except ImportError:
         subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'PyYAML'])
         import yaml
+    except ImportError:
+        print("⚠️ PyYAML não está instalado. Por favor, instale o PyYAML para continuar.")
 
 class PreInstallCommand:
     """Classe base para executar comandos antes da instalação."""
