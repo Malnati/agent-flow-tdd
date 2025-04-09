@@ -76,16 +76,10 @@ class TDDPromptApp(App):
         margin-top: 1;
     }
     """
-
-    # Inicializa o ModelManager para obter a lista de modelos disponíveis
-    self.model_manager = ModelManager()
-    self.available_models = self._get_available_models()
-    # Inicializa o DatabaseManager para registrar execuções
-    self.db = DatabaseManager()
-    # Inicializa o orquestrador
-    self.orchestrator = None
-    # ID de sessão para registrar logs
-    self.session_id = f"tui_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
+    
+    BINDINGS = [
+        ("s", "quit", "Sair do app")
+    ]
     
     selected_tab = reactive("Gen")
 
@@ -182,6 +176,16 @@ class TDDPromptApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
+        # Inicializa o ModelManager para obter a lista de modelos disponíveis
+        self.model_manager = ModelManager()
+        self.available_models = self._get_available_models()
+        # Inicializa o DatabaseManager para registrar execuções
+        self.db = DatabaseManager()
+        # Inicializa o orquestrador
+        self.orchestrator = None
+        # ID de sessão para registrar logs
+        self.session_id = f"tui_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
+        
         self.query_one("#tabs", Tabs).active = "Gen"
         self.mount_tab("Gen")
 
