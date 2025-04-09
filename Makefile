@@ -1,6 +1,6 @@
 # Makefile para o projeto prompt-tdd
 
-.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs test-e2e publish download-model docs-serve docs-build docs-deploy docs-generate status
+.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs test-e2e publish download-model docs-serve docs-build docs-deploy docs-generate status orchestrator
 
 # Configuração do ambiente virtual
 VENV = .venv
@@ -41,6 +41,9 @@ help:
 	@echo "  make docs-build   - Gera documentação estática"
 	@echo "  make docs-deploy  - Faz deploy da documentação"
 	@echo "  make docs-generate - Gera documentação via IA"
+	@echo ""
+	@echo "Interface de Usuário:"
+	@echo "  make orchestrator   - Inicia o orquestrador de agentes TUI"
 	@echo ""
 	@echo "Qualidade:"
 	@echo "  make test       - Executa todos os testes"
@@ -262,6 +265,12 @@ docs-deploy:
 docs-generate:
 	@echo "🤖 Gerando documentação via IA..."
 	@$(PYTHON) src/scripts/generate_docs.py
+
+# Orquestrador de agentes TUI
+orchestrator:
+	@echo "🖥️ Iniciando orquestrador de agentes..."
+	@bash -c "source $(VENV)/bin/activate && $(PYTHON) src/ui/agent_orchestrator.py"
+	@echo "✅ Orquestrador de agentes finalizado!"
 
 # Permite argumentos extras para o comando run
 %:
