@@ -208,17 +208,31 @@ class TDDPromptApp(App):
     def gerar_conteudo(self) -> None:
         """Gera conteúdo com base no prompt usando o orquestrador de agentes."""
         self.notify("Gerando conteúdo...")
-        prompt = self.query_one("#prompt-input", Input).value
-        
-        if not prompt:
-            self.notify("Por favor, digite um prompt", severity="error")
-            return
-        
-        # Define valores padrão para formato e modelo
-        formato = "json"  # Padrão: JSON
-        modelo = "gpt-3.5-turbo"  # Padrão: GPT-3.5
-        
         try:
+            # Obtém o valor do prompt do campo de input
+            prompt = self.query_one("#prompt_input", Input).value
+            
+            if not prompt:
+                self.notify("Por favor, digite um prompt", severity="error")
+                return
+            
+            # Define valores padrão para formato e modelo
+            formato = "json"  # Padrão: JSON
+            
+            # Obtém o modelo selecionado na lista
+            try:
+                option_list = self.query_one("#model_list", OptionList)
+                if option_list.selected is not None:
+                    modelo = MODEL_OPTIONS[option_list.selected]
+                else:
+                    modelo = "gpt-3.5-turbo"  # Modelo padrão
+                    self.notify("Nenhum modelo selecionado, usando modelo padrão", severity="warning")
+            except NoMatches:
+                modelo = "gpt-3.5-turbo"  # Modelo padrão
+                self.notify("Lista de modelos não encontrada, usando modelo padrão", severity="warning")
+                
+            logger.info(f"Gerando conteúdo com modelo: {modelo}")
+            
             # Inicializa o orquestrador com o modelo selecionado
             orchestrator = self._get_orchestrator(modelo)
             
@@ -231,13 +245,13 @@ class TDDPromptApp(App):
             try:
                 # Tenta converter para um objeto Python se a resposta for um JSON como string
                 output_content = json.loads(result.output) if isinstance(result.output, str) else result.output
-                resultado = f"[bold green]Resposta JSON:[/]\n\n[yellow]{json.dumps(output_content, indent=2, ensure_ascii=False)}[/]"
+                resultado = output_content
             except (json.JSONDecodeError, TypeError):
                 # Se não for um JSON válido, mostra como texto
-                resultado = f"[bold green]Resposta:[/]\n\n[yellow]{result.output}[/]"
+                resultado = result.output
             
             # Atualiza a interface com o resultado
-            self.query_one("#output", Static).update(resultado)
+            self.query_one("#result_output", Pretty).update(resultado)
             self.notify(f"Conteúdo gerado com sucesso usando {modelo} em formato {formato.upper()}!", severity="success")
             
             # Registra a execução no banco de dados
@@ -251,7 +265,10 @@ class TDDPromptApp(App):
         except Exception as e:
             error_msg = str(e)
             logger.error(f"Erro ao executar orquestrador: {error_msg}")
-            self.query_one("#output", Static).update(f"[bold red]Erro:[/]\n\n{error_msg}")
+            try:
+                self.query_one("#result_output", Pretty).update({"erro": error_msg})
+            except NoMatches:
+                logger.error("Componente de saída não encontrado")
             self.notify(f"Erro ao gerar conteúdo: {error_msg}", severity="error")
 
 if __name__ == "__main__":
