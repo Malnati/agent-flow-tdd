@@ -228,8 +228,8 @@ class TDDPromptApp(App):
             # Obtém o modelo selecionado na lista
             try:
                 option_list = self.query_one("#model_list", OptionList)
-                if option_list.selected is not None:
-                    modelo = MODEL_OPTIONS[option_list.selected]
+                if option_list.highlighted is not None:
+                    modelo = MODEL_OPTIONS[option_list.highlighted]
                 else:
                     modelo = "gpt-3.5-turbo"  # Modelo padrão
                     self.notify("Nenhum modelo selecionado, usando modelo padrão", severity="warning")
