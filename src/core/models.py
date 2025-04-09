@@ -10,6 +10,7 @@ import yaml
 from pathlib import Path
 from dataclasses import dataclass
 import subprocess
+import requests
 
 import google.generativeai as genai
 from pydantic import BaseModel
@@ -1243,8 +1244,14 @@ class ModelDownloader:
         if not os.path.exists(model_path) or os.path.getsize(model_path) < 1024:
             print(f"📥 Baixando modelo {model_name}...")
             os.makedirs(ModelDownloader.MODEL_DIR, exist_ok=True)
-            subprocess.run(["curl", "-L", "-f", url, "-o", model_path], check=True)
-            print(f"✅ Modelo {model_name} baixado com sucesso!")
+            response = requests.get(url, stream=True)
+            if response.status_code == 200:
+                with open(model_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                print(f"✅ Modelo {model_name} baixado com sucesso!")
+            else:
+                print(f"❌ Falha ao baixar o modelo {model_name}. Código de status: {response.status_code}")
         else:
             print(f"✅ Modelo {model_name} já está disponível.")
 
