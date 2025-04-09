@@ -2,6 +2,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Vertical, Container
 from textual.widgets import Header, Footer, Tabs, Tab, Input, OptionList, Pretty, Static
 from textual.reactive import reactive
+from textual.events import Key
 import json
 import os
 import uuid
@@ -230,11 +231,19 @@ class TDDPromptApp(App):
         """Ação quando o ENTER é pressionado em um campo de input."""
         logger.info(f"Input submetido: {event.input.id}")
         
-        # Verifica se o input é do prompt
-        if event.input.id == "prompt_input":
-            logger.info("Prompt submetido, gerando conteúdo...")
-            self.gerar_conteudo()
+        # Gera conteúdo independentemente do input onde ENTER foi pressionado
+        self.gerar_conteudo()
         
+    @on(Key)
+    def on_key(self, event: Key) -> None:
+        """Captura eventos de tecla."""
+        if event.key == "enter":
+            # Evita duplicação quando o evento já estiver sendo tratado por um input de prompt
+            # mas permite para outros inputs como o seletor de modelos
+            if not isinstance(self.screen.focused, Input) or self.screen.focused.id != "prompt_input":
+                logger.info("Tecla ENTER pressionada, gerando conteúdo...")
+                self.gerar_conteudo()
+
     def gerar_conteudo(self) -> None:
         """Gera conteúdo com base no prompt usando o orquestrador de agentes."""
         self.notify("Gerando conteúdo...")
@@ -304,10 +313,8 @@ class TDDPromptApp(App):
     def action_gerar_conteudo(self) -> None:
         """Ação chamada quando a tecla 'enter' é pressionada."""
         logger.info("Ação gerar_conteudo acionada via binding")
-        # Verifica se estamos na aba de geração
-        if self.selected_tab == "Gen":
-            self.gerar_conteudo()
-            
+        self.gerar_conteudo()
+
     def action_quit(self) -> None:
         """Ação para sair do aplicativo."""
         logger.info("Finalizando aplicação via ação quit")
