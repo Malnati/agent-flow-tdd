@@ -948,13 +948,13 @@ class ModelManager:
             # Formata o prompt para DeepSeek Coder
             full_prompt = ""
             if system:
-                full_prompt += f"<system>\n{system}\n</system>\n"
+                full_prompt += f"<s>\n{system}\n</s>\n"
             full_prompt += f"<user>\n{prompt}\n</user>\n<assistant>\n"
             
             # Parâmetros para geração
             max_tokens = kwargs.get('max_tokens', self.max_tokens) or self.config['providers']['deepseek_local'].get('default_max_tokens', 512)
             temperature = kwargs.get('temperature', self.temperature)
-            stop = ["</assistant>", "<user>", "<system>", "</user>", "</system>"]
+            stop = ["</assistant>", "<user>", "<s>", "</user>", "</s>"]
             
             # Usa apenas a API direta, que funciona em todas as versões
             response = self.deepseek_model(
@@ -987,8 +987,11 @@ class ModelManager:
                 logger.error(f"Erro ao processar resposta JSON: {str(e)}")
                 # Mantém o texto original em caso de erro
             
+            # Usa um ID de modelo consistente para metadados
+            model_id = "deepseek-coder-local"
+            
             return text, {
-                "model": "deepseek-coder-6.7b",
+                "model": model_id,
                 "usage": {
                     "prompt_tokens": len(full_prompt.split()),
                     "completion_tokens": len(text.split()),
@@ -1007,8 +1010,11 @@ class ModelManager:
                 "constraints": ["Definir restrições do sistema"]
             }, ensure_ascii=False)
             
+            # Usa um ID de modelo consistente para metadados
+            model_id = "deepseek-coder-local"
+            
             return text, {
-                "model": "deepseek-coder-6.7b",
+                "model": model_id,
                 "error": str(e),
                 "usage": {
                     "prompt_tokens": len(prompt.split()),
@@ -1065,8 +1071,11 @@ class ModelManager:
                 logger.error(f"Erro ao processar resposta JSON: {str(e)}")
                 # Mantém o texto original em caso de erro
             
+            # Usa nome padronizado do modelo
+            model_id = "phi3-mini"
+            
             return text, {
-                "model": "phi-3-mini",
+                "model": model_id,
                 "usage": {
                     "prompt_tokens": len(full_prompt.split()),
                     "completion_tokens": len(text.split()),
@@ -1085,8 +1094,11 @@ class ModelManager:
                 "constraints": ["Definir restrições do sistema"]
             }, ensure_ascii=False)
             
+            # Usa nome padronizado do modelo
+            model_id = "phi3-mini"
+            
             return text, {
-                "model": "phi-3-mini",
+                "model": model_id,
                 "error": str(e),
                 "usage": {
                     "prompt_tokens": len(prompt.split()),

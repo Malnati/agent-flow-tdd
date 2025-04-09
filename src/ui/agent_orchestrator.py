@@ -34,8 +34,10 @@ MODEL_OPTIONS = [
     "tinyllama-1.1b",
     "phi-1",
     "deepseek-coder-6.7b",
-    "phi-3-mini",
+    "phi3-mini",
+    "gpt-3.5-turbo",
     "gpt-4",
+    "gemini-pro",
     "claude-3-opus"
 ]
 
@@ -104,7 +106,7 @@ class TDDPromptApp(App):
         modelos.append("tinyllama-1.1b")
         modelos.append("phi-1")
         modelos.append("deepseek-coder-6.7b")  # Nome correto para o modelo DeepSeek
-        modelos.append("phi3-mini")  # Nome correto para o modelo Phi-3
+        modelos.append("phi3-mini")  # Nome padronizado para o modelo Phi-3
         
         # Modelos remotos (sempre incluídos como opções)
         modelos.append("gpt-3.5-turbo")
@@ -127,8 +129,14 @@ class TDDPromptApp(App):
             AgentOrchestrator configurado
         """
         try:
+            # Ajusta nome do modelo para APIs externas se necessário
+            api_model_name = modelo
+            if modelo == "deepseek-coder-6.7b":
+                # Para chamadas de API externa, usamos um nome diferente
+                api_model_name = "deepseek-coder"
+            
             # Configura o modelo via variável de ambiente
-            os.environ["DEFAULT_MODEL"] = modelo
+            os.environ["DEFAULT_MODEL"] = api_model_name
             
             # Inicializa componentes
             model_manager = ModelManager(model_name=modelo)
@@ -264,12 +272,13 @@ class TDDPromptApp(App):
                 if option_list.highlighted is not None:
                     modelo = MODEL_OPTIONS[option_list.highlighted]
                 else:
-                    modelo = "gpt-3.5-turbo"  # Modelo padrão
+                    modelo = "tinyllama-1.1b"  # Modelo padrão
                     self.notify("Nenhum modelo selecionado, usando modelo padrão", severity="warning")
             except NoMatches:
-                modelo = "gpt-3.5-turbo"  # Modelo padrão
+                modelo = "tinyllama-1.1b"  # Modelo padrão
                 self.notify("Lista de modelos não encontrada, usando modelo padrão", severity="warning")
                 
+            logger.info(f"Prompt submetido, gerando conteúdo...")
             logger.info(f"Gerando conteúdo com modelo: {modelo}")
             
             # Inicializa o orquestrador com o modelo selecionado
