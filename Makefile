@@ -168,12 +168,9 @@ publish:
 		exit 1; \
 	fi
 	@echo "🔄 Verificando dependências necessárias..."
-	@bash -c "source $(VENV)/bin/activate && pip install PyYAML"
+	@make install
 	@echo "🔄 Incrementando versão..."
-	@bash -c "source $(VENV)/bin/activate && PUBLISHING=true $(PYTHON) -c \"from src.core.kernel import VersionAnalyzer; v = VersionAnalyzer(); v.smart_bump()\""
-	@make clean
-	@echo "📥 Instalando dependências de build..."
-	@bash -c "source $(VENV)/bin/activate && $(PIP) install --upgrade pip build twine"
+	@bash -c "source $(VENV)/bin/activate && PUBLISHING=true $(PYTHON) -m src.core.version"
 	@echo "🔨 Construindo distribuição..."
 	@bash -c "source $(VENV)/bin/activate && $(PYTHON) -m build"
 	@echo "🚀 Publicando no PyPI..."
