@@ -3,7 +3,7 @@
 Gerenciador de modelos de IA com suporte a múltiplos provedores e fallback automático.
 """
 from enum import Enum
-from typing import Any, Dict, Optional, Tuple, List
+from typing import Any, Dict, Optional, Tuple, List, Callable
 import os
 import json
 import yaml
@@ -784,26 +784,49 @@ class ModelManager:
             "usage": {}
         }
 
-    def _generate_tinyllama(self, prompt: str, system: Optional[str] = None, **kwargs) -> Tuple[str, Dict[str, Any]]:
-        """Gera resposta usando TinyLLaMA."""
-        if not self.tinyllama_model:
-            raise ValueError("TinyLLaMA não configurado")
+    def _generate_local_model(
+        self,
+        provider_name: str,
+        prompt: str,
+        system: Optional[str],
+        formatter: Callable[[str, str], str],
+        stop: List[str],
+        model_id: str,
+        **kwargs
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        Método genérico para gerar respostas usando modelos locais.
+        
+        Args:
+            provider_name: Nome do provedor
+            prompt: Prompt para o modelo
+            system: Prompt de sistema (opcional)
+            formatter: Função que formata o prompt completo
+            stop: Lista de strings de parada
+            model_id: Identificador do modelo para metadados
+            **kwargs: Argumentos adicionais
+            
+        Returns:
+            Tupla (resposta, metadados)
+        """
+        # Obtém o atributo com o modelo
+        attr_name = f"{provider_name.replace('-', '_')}_model".replace('tinyllama_1.1b', 'tinyllama')
+        model_instance = getattr(self, attr_name, None)
+        
+        if not model_instance:
+            raise ValueError(f"Modelo {provider_name} não está disponível.")
             
         try:
-            # Formata o prompt
-            full_prompt = ""
-            if system:
-                full_prompt += f"<|system|>\n{system} Arbitro \n"
-            full_prompt += f"<|user|>\n{prompt} Arbitro \n<|assistant|>\n"
+            # Formata o prompt usando a função específica
+            full_prompt = formatter(system, prompt)
             
             # Parâmetros para geração
-            tinyllama_config = self.registry.get_provider_config('tinyllama')
-            max_tokens = kwargs.get('max_tokens', self.max_tokens) or tinyllama_config.get('default_max_tokens', 256)
+            provider_config = self.registry.get_provider_config(provider_name)
+            max_tokens = kwargs.get('max_tokens', self.max_tokens) or provider_config.get('default_max_tokens', 512)
             temperature = kwargs.get('temperature', self.temperature)
-            stop = [" Arbitro ", "<|user|>", "<|system|>", "<|assistant|>"]
             
-            # Usa apenas a API direta, que funciona em todas as versões
-            response = self.tinyllama_model(
+            # Usa a API do modelo
+            response = model_instance(
                 full_prompt,
                 max_tokens=max_tokens,
                 temperature=temperature,
@@ -834,7 +857,7 @@ class ModelManager:
                 # Mantém o texto original em caso de erro
             
             return text, {
-                "model": "tinyllama-1.1b",
+                "model": model_id,
                 "usage": {
                     "prompt_tokens": len(full_prompt.split()),
                     "completion_tokens": len(text.split()),
@@ -843,7 +866,7 @@ class ModelManager:
             }
             
         except Exception as e:
-            logger.error(f"Erro ao gerar resposta com TinyLLaMA: {str(e)}")
+            logger.error(f"Erro ao gerar resposta com {provider_name}: {str(e)}")
             # Retorna estrutura padrão em caso de erro
             text = json.dumps({
                 "name": "Sistema Genérico",
@@ -854,7 +877,7 @@ class ModelManager:
             }, ensure_ascii=False)
             
             return text, {
-                "model": "tinyllama-1.1b",
+                "model": model_id,
                 "error": str(e),
                 "usage": {
                     "prompt_tokens": len(prompt.split()),
@@ -862,256 +885,86 @@ class ModelManager:
                     "total_tokens": len(prompt.split()) + len(text.split())
                 }
             }
+
+    def _generate_tinyllama(self, prompt: str, system: Optional[str] = None, **kwargs) -> Tuple[str, Dict[str, Any]]:
+        """Gera resposta usando TinyLLaMA."""
+        def formatter(system, prompt):
+            full_prompt = ""
+            if system:
+                full_prompt += f"<|system|>\n{system} Arbitro \n"
+            full_prompt += f"<|user|>\n{prompt} Arbitro \n<|assistant|>\n"
+            return full_prompt
+            
+        stop = [" Arbitro ", "<|user|>", "<|system|>", "<|assistant|>"]
+        return self._generate_local_model(
+            provider_name='tinyllama',
+            prompt=prompt,
+            system=system,
+            formatter=formatter,
+            stop=stop,
+            model_id="tinyllama-1.1b",
+            **kwargs
+        )
 
     def _generate_phi1(self, prompt: str, system: Optional[str] = None, **kwargs) -> Tuple[str, Dict[str, Any]]:
         """Gera resposta usando Phi-1."""
-        if not self.phi1_model:
-            raise ValueError("Phi-1 não configurado")
-            
-        try:
-            # Formata o prompt
+        def formatter(system, prompt):
             full_prompt = ""
             if system:
                 full_prompt += f"<|system|>\n{system} Arbitro \n"
             full_prompt += f"<|user|>\n{prompt} Arbitro \n<|assistant|>\n"
+            return full_prompt
             
-            # Parâmetros para geração
-            phi1_config = self.registry.get_provider_config('phi1')
-            max_tokens = kwargs.get('max_tokens', self.max_tokens) or phi1_config.get('default_max_tokens', 100)
-            temperature = kwargs.get('temperature', self.temperature)
-            stop = [" Arbitro ", "<|user|>", "<|system|>", "<|assistant|>"]
-            
-            # Usa apenas a API direta, que funciona em todas as versões
-            response = self.phi1_model(
-                full_prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                stop=stop
-            )
-            text = response["choices"][0]["text"].strip()
-            
-            # Tenta extrair JSON se presente
-            try:
-                if '{' in text and '}' in text:
-                    start = text.find('{')
-                    end = text.rfind('}') + 1
-                    json_str = text[start:end]
-                    
-                    # Limpa o JSON
-                    json_str = json_str.replace('\n', ' ').replace('\r', '')
-                    while '  ' in json_str:
-                        json_str = json_str.replace('  ', ' ')
-                    
-                    # Valida se é um JSON válido
-                    json_data = json.loads(json_str)
-                    text = json.dumps(json_data, ensure_ascii=False)
-                else:
-                    # Se não encontrou JSON, retorna texto normal
-                    text = text
-            except Exception as e:
-                logger.error(f"Erro ao processar resposta JSON: {str(e)}")
-                # Mantém o texto original em caso de erro
-            
-            return text, {
-                "model": "phi-1",
-                "usage": {
-                    "prompt_tokens": len(full_prompt.split()),
-                    "completion_tokens": len(text.split()),
-                    "total_tokens": len(full_prompt.split()) + len(text.split())
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"Erro ao gerar resposta com Phi-1: {str(e)}")
-            # Retorna estrutura padrão em caso de erro
-            text = json.dumps({
-                "name": "Sistema Genérico",
-                "description": "Sistema a ser especificado",
-                "objectives": ["Definir objetivos específicos"],
-                "requirements": ["Definir requisitos específicos"],
-                "constraints": ["Definir restrições do sistema"]
-            }, ensure_ascii=False)
-            
-            return text, {
-                "model": "phi-1",
-                "error": str(e),
-                "usage": {
-                    "prompt_tokens": len(prompt.split()),
-                    "completion_tokens": len(text.split()),
-                    "total_tokens": len(prompt.split()) + len(text.split())
-                }
-            }
+        stop = [" Arbitro ", "<|user|>", "<|system|>", "<|assistant|>"]
+        return self._generate_local_model(
+            provider_name='phi1',
+            prompt=prompt,
+            system=system,
+            formatter=formatter,
+            stop=stop,
+            model_id="phi-1",
+            **kwargs
+        )
 
     def _generate_deepseek(self, prompt: str, system: Optional[str] = None, **kwargs) -> Tuple[str, Dict[str, Any]]:
         """Gera resposta usando DeepSeek Coder."""
-        if not self.deepseek_model:
-            raise ValueError("DeepSeek Coder não configurado")
-            
-        try:
-            # Formata o prompt para DeepSeek Coder
+        def formatter(system, prompt):
             full_prompt = ""
             if system:
                 full_prompt += f" \n{system}\n Arbitro \n"
-
             full_prompt += f"<user>\n{prompt}\n</user>\n<assistant>\n"
+            return full_prompt
             
-            # Parâmetros para geração
-            deepseek_config = self.registry.get_provider_config('deepseek_local')
-            max_tokens = kwargs.get('max_tokens', self.max_tokens) or deepseek_config.get('default_max_tokens', 512)
-            temperature = kwargs.get('temperature', self.temperature)
-            stop = ["</assistant>", "<user>", " ", "</user>", " Arbitro "]
-            
-            # Usa apenas a API direta, que funciona em todas as versões
-            response = self.deepseek_model(
-                full_prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                stop=stop
-            )
-            text = response["choices"][0]["text"].strip()
-            
-            # Tenta extrair JSON se presente
-            try:
-                if '{' in text and '}' in text:
-                    start = text.find('{')
-                    end = text.rfind('}') + 1
-                    json_str = text[start:end]
-                    
-                    # Limpa o JSON
-                    json_str = json_str.replace('\n', ' ').replace('\r', '')
-                    while '  ' in json_str:
-                        json_str = json_str.replace('  ', ' ')
-                    
-                    # Valida se é um JSON válido
-                    json_data = json.loads(json_str)
-                    text = json.dumps(json_data, ensure_ascii=False)
-                else:
-                    # Se não encontrou JSON, retorna texto normal
-                    text = text
-            except Exception as e:
-                logger.error(f"Erro ao processar resposta JSON: {str(e)}")
-                # Mantém o texto original em caso de erro
-            
-            # Usa um ID de modelo consistente para metadados
-            model_id = "deepseek-coder-local"
-            
-            return text, {
-                "model": model_id,
-                "usage": {
-                    "prompt_tokens": len(full_prompt.split()),
-                    "completion_tokens": len(text.split()),
-                    "total_tokens": len(full_prompt.split()) + len(text.split())
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"Erro ao gerar resposta com DeepSeek Coder: {str(e)}")
-            # Retorna estrutura padrão em caso de erro
-            text = json.dumps({
-                "name": "Sistema Genérico",
-                "description": "Sistema a ser especificado",
-                "objectives": ["Definir objetivos específicos"],
-                "requirements": ["Definir requisitos específicos"],
-                "constraints": ["Definir restrições do sistema"]
-            }, ensure_ascii=False)
-            
-            # Usa um ID de modelo consistente para metadados
-            model_id = "deepseek-coder-local"
-            
-            return text, {
-                "model": model_id,
-                "error": str(e),
-                "usage": {
-                    "prompt_tokens": len(prompt.split()),
-                    "completion_tokens": len(text.split()),
-                    "total_tokens": len(prompt.split()) + len(text.split())
-                }
-            }
+        stop = ["</assistant>", "<user>", " ", "</user>", " Arbitro "]
+        return self._generate_local_model(
+            provider_name='deepseek',
+            prompt=prompt,
+            system=system,
+            formatter=formatter,
+            stop=stop,
+            model_id="deepseek-coder-local",
+            **kwargs
+        )
 
     def _generate_phi3(self, prompt: str, system: Optional[str] = None, **kwargs) -> Tuple[str, Dict[str, Any]]:
         """Gera resposta usando Phi-3 Mini."""
-        if not self.phi3_model:
-            raise ValueError("Phi-3 Mini não configurado")
-            
-        try:
-            # Formata o prompt para Phi-3 Mini
+        def formatter(system, prompt):
             full_prompt = ""
             if system:
                 full_prompt += f"<|system|>\n{system}\n"
             full_prompt += f"<|user|>\n{prompt}\n<|assistant|>\n"
+            return full_prompt
             
-            # Parâmetros para geração
-            phi3_config = self.registry.get_provider_config('phi3')
-            max_tokens = kwargs.get('max_tokens', self.max_tokens) or phi3_config.get('default_max_tokens', 512)
-            temperature = kwargs.get('temperature', self.temperature)
-            stop = ["<|user|>", "<|system|>", "<|assistant|>"]
-            
-            # Usa apenas a API direta, que funciona em todas as versões
-            response = self.phi3_model(
-                full_prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                stop=stop
-            )
-            text = response["choices"][0]["text"].strip()
-            
-            # Tenta extrair JSON se presente
-            try:
-                if '{' in text and '}' in text:
-                    start = text.find('{')
-                    end = text.rfind('}') + 1
-                    json_str = text[start:end]
-                    
-                    # Limpa o JSON
-                    json_str = json_str.replace('\n', ' ').replace('\r', '')
-                    while '  ' in json_str:
-                        json_str = json_str.replace('  ', ' ')
-                    
-                    # Valida se é um JSON válido
-                    json_data = json.loads(json_str)
-                    text = json.dumps(json_data, ensure_ascii=False)
-                else:
-                    # Se não encontrou JSON, retorna texto normal
-                    text = text
-            except Exception as e:
-                logger.error(f"Erro ao processar resposta JSON: {str(e)}")
-                # Mantém o texto original em caso de erro
-            
-            # Usa nome padronizado do modelo
-            model_id = "phi3-mini"
-            
-            return text, {
-                "model": model_id,
-                "usage": {
-                    "prompt_tokens": len(full_prompt.split()),
-                    "completion_tokens": len(text.split()),
-                    "total_tokens": len(full_prompt.split()) + len(text.split())
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"Erro ao gerar resposta com Phi-3 Mini: {str(e)}")
-            # Retorna estrutura padrão em caso de erro
-            text = json.dumps({
-                "name": "Sistema Genérico",
-                "description": "Sistema a ser especificado",
-                "objectives": ["Definir objetivos específicos"],
-                "requirements": ["Definir requisitos específicos"],
-                "constraints": ["Definir restrições do sistema"]
-            }, ensure_ascii=False)
-            
-            # Usa nome padronizado do modelo
-            model_id = "phi3-mini"
-            
-            return text, {
-                "model": model_id,
-                "error": str(e),
-                "usage": {
-                    "prompt_tokens": len(prompt.split()),
-                    "completion_tokens": len(text.split()),
-                    "total_tokens": len(prompt.split()) + len(text.split())
-                }
-            }
+        stop = ["<|user|>", "<|system|>", "<|assistant|>"]
+        return self._generate_local_model(
+            provider_name='phi3',
+            prompt=prompt,
+            system=system,
+            formatter=formatter,
+            stop=stop,
+            model_id="phi3-mini",
+            **kwargs
+        )
 
 class ModelRegistry:
     def __init__(self, config_path: Optional[str] = None):
