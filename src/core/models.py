@@ -674,13 +674,13 @@ class ModelManager:
                 # Formata o prompt para Phi-1
                 full_prompt = ""
                 if system_prompt:
-                    full_prompt += f"<|system|>\n{system_prompt} { \n"
-                full_prompt += f"<|user|>\n{user_prompt} { \n<|assistant|>\n"
+                    full_prompt += f"<|system|>\n{system_prompt}\n"
+                full_prompt += f"<|user|>\n{user_prompt}\n<|assistant|>\n"
                 
                 # Parâmetros para geração
                 phi1_config = self.registry.get_provider_config('phi1')
                 max_tokens = self.max_tokens or phi1_config.get('default_max_tokens', 100)
-                stop = [" { ", "<|user|>", "<|system|>", "<|assistant|>"]
+                stop = ["</s>", "<|user|>", "<|system|>", "<|assistant|>"]
                 
                 response = self.phi1_model(
                     full_prompt,
@@ -694,18 +694,19 @@ class ModelManager:
                 # Formata o prompt para DeepSeek Coder
                 full_prompt = ""
                 if system_prompt:
-                    full_prompt += f" \n{system_prompt}\n Arbitro \n"
+                    full_prompt += f" \n{system}\n Arbitro \n"
                 full_prompt += f"<user>\n{user_prompt}\n</user>\n<assistant>\n"
                 
                 # Parâmetros para geração
                 deepseek_config = self.registry.get_provider_config('deepseek_local')
                 max_tokens = self.max_tokens or deepseek_config.get('default_max_tokens', 512)
+                temperature = kwargs.get('temperature', self.temperature)
                 stop = ["</assistant>", "<user>", " ", "</user>", " Arbitro "]
                 
                 response = self.deepseek_model(
                     full_prompt,
                     max_tokens=max_tokens,
-                    temperature=self.temperature,
+                    temperature=temperature,
                     stop=stop
                 )
                 return response["choices"][0]["text"].strip()
@@ -714,18 +715,19 @@ class ModelManager:
                 # Formata o prompt para Phi-3 Mini
                 full_prompt = ""
                 if system_prompt:
-                    full_prompt += f"<|system|>\n{system_prompt}\n"
+                    full_prompt += f"<|system|>\n{system}\n"
                 full_prompt += f"<|user|>\n{user_prompt}\n<|assistant|>\n"
                 
                 # Parâmetros para geração
                 phi3_config = self.registry.get_provider_config('phi3')
                 max_tokens = self.max_tokens or phi3_config.get('default_max_tokens', 512)
+                temperature = kwargs.get('temperature', self.temperature)
                 stop = ["<|user|>", "<|system|>", "<|assistant|>"]
                 
                 response = self.phi3_model(
                     full_prompt,
                     max_tokens=max_tokens,
-                    temperature=self.temperature,
+                    temperature=temperature,
                     stop=stop
                 )
                 return response["choices"][0]["text"].strip()
