@@ -169,12 +169,11 @@ publish:
 	fi
 	@echo "🔄 Verificando dependências necessárias..."
 	@make install
-	@echo "🔄 Incrementando versão..."
-	@bash -c "source $(VENV)/bin/activate && PUBLISHING=true $(PYTHON) -m src.core.version"
-	@echo "🔨 Construindo distribuição..."
-	@bash -c "source $(VENV)/bin/activate && $(PYTHON) -m build"
-	@echo "🚀 Publicando no PyPI..."
-	@bash -c "source $(VENV)/bin/activate && PUBLISHING=true $(PYTHON) -m twine upload dist/* --username __token__ --password $(PYPI_TOKEN)"
+	@bash -c "echo $(PWD) && echo '🔄 Incrementando versão...'; PUBLISHING=true ; $(PYTHON) -m src.core.version ;"
+	@bash -c "echo '🔨 Construindo distribuição...'";
+	# @bash -c "python3 -m build"
+	@echo '🚀 Publicando no PyPI...' 
+	@bash -c "$(PYTHON) -m twine upload dist/* --username __token__ --password $(PYPI_TOKEN) "
 	@echo "✅ Pacote publicado com sucesso!"
 
 # Comandos de documentação
