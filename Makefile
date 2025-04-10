@@ -13,6 +13,9 @@ MODEL_URL = https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolv
 MODEL_NAME = tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
 MODEL_DIR = models
 
+# Define um dir	para cache do Python
+export PYTHONPYCACHEPREFIX=cache
+
 # Carrega variáveis de ambiente do arquivo .env se existir
 ifneq (,$(wildcard .env))
     include .env
@@ -84,11 +87,7 @@ install:
 	@echo "🔧 Instalando dependências..."
 	$(PYTHON) -m venv $(VENV)
 	@echo "Ativando ambiente virtual e instalando dependências..."
-	@bash -c "source $(VENV)/bin/activate && $(PYTHON) -m pip install --upgrade pip && $(PYTHON) -m pip install -e \".[dev,docs]\""
-	@make download-model || exit 1
-	@make download-phi1 || exit 1
-	@make download-deepseek || exit 1
-	@make download-phi3 || exit 1
+	@bash -c "source $(VENV)/bin/activate && $(PYTHON) -m pip install --upgrade pip && $(PYTHON) -m pip install -r requirements.txt && $(PYTHON) setup.py develop"
 	@echo "✅ Instalação concluída!"
 
 # Testes
@@ -169,85 +168,11 @@ publish:
 		exit 1; \
 	fi
 	@echo "🔄 Verificando dependências necessárias..."
-	@bash -c "source $(VENV)/bin/activate && pip install PyYAML"
-	@echo "🔄 Incrementando versão..."
-	@bash -c "source $(VENV)/bin/activate && PUBLISHING=true $(PYTHON) -c \"from src.core.kernel import VersionAnalyzer; v = VersionAnalyzer(); v.smart_bump()\""
-	@make clean
-	@echo "📥 Instalando dependências de build..."
-	@bash -c "source $(VENV)/bin/activate && $(PIP) install --upgrade pip build twine"
-	@echo "🔨 Construindo distribuição..."
-	@bash -c "source $(VENV)/bin/activate && $(PYTHON) -m build"
-	@echo "🚀 Publicando no PyPI..."
-	@bash -c "source $(VENV)/bin/activate && PUBLISHING=true $(PYTHON) -m twine upload dist/* --username __token__ --password $(PYPI_TOKEN)"
+	@make install
+	@$(SHELL) -c "echo $(PWD) && echo '🔄 Incrementando versão...'; PUBLISHING=true ; $(PYTHON) -m src.core.version ;"
+	@echo '🚀 Publicando no PyPI...' 
+	@$(SHELL) -c "$(PYTHON) -m twine upload dist/* --username __token__ --password $(PYPI_TOKEN) "
 	@echo "✅ Pacote publicado com sucesso!"
-
-# Download do modelo TinyLLaMA
-download-model:
-	@echo "📥 Baixando modelo TinyLLaMA..."
-	@mkdir -p $(MODEL_DIR)
-	@if [ -f "$(MODEL_DIR)/$(MODEL_NAME)" ]; then \
-		echo "✅ Modelo já existe em $(MODEL_DIR)/$(MODEL_NAME)"; \
-	else \
-		echo "🔄 Iniciando download..."; \
-		if ! curl -L -f $(MODEL_URL) -o $(MODEL_DIR)/$(MODEL_NAME); then \
-			echo "❌ Falha no download do modelo"; \
-			rm -f $(MODEL_DIR)/$(MODEL_NAME); \
-			exit 1; \
-		fi; \
-		echo "✅ Download concluído em $(MODEL_DIR)/$(MODEL_NAME)"; \
-	fi
-
-# Download do modelo Phi-1
-download-phi1:
-	@echo "📥 Baixando modelo Phi-1..."
-	@mkdir -p $(MODEL_DIR)
-	@if [ -f "$(MODEL_DIR)/phi-1.Q4_K_M.gguf" ]; then \
-		echo "✅ Modelo já existe em $(MODEL_DIR)/phi-1.Q4_K_M.gguf"; \
-	else \
-		echo "🔄 Iniciando download..."; \
-		if ! curl -L -f https://huggingface.co/professorf/phi-1-gguf/resolve/main/phi-1-f16.gguf -o $(MODEL_DIR)/phi-1.Q4_K_M.gguf; then \
-			echo "❌ Falha no download do modelo"; \
-			rm -f $(MODEL_DIR)/phi-1.Q4_K_M.gguf; \
-			exit 1; \
-		fi; \
-		echo "✅ Download concluído em $(MODEL_DIR)/phi-1.Q4_K_M.gguf"; \
-	fi
-
-# Download do modelo DeepSeek Coder
-download-deepseek:
-	@echo "📥 Baixando modelo DeepSeek Coder..."
-	@mkdir -p $(MODEL_DIR)
-	@if [ -f "$(MODEL_DIR)/deepseek-coder-6.7b.Q4_K_M.gguf" ]; then \
-		echo "✅ Modelo já existe em $(MODEL_DIR)/deepseek-coder-6.7b.Q4_K_M.gguf"; \
-	else \
-		echo "🔄 Iniciando download..."; \
-		if ! curl -L -f https://huggingface.co/TheBloke/deepseek-coder-6.7B-instruct-GGUF/resolve/main/deepseek-coder-6.7b-instruct.Q4_K_M.gguf -o $(MODEL_DIR)/deepseek-coder-6.7b.Q4_K_M.gguf; then \
-			echo "❌ Falha no download do modelo"; \
-			rm -f $(MODEL_DIR)/deepseek-coder-6.7b.Q4_K_M.gguf; \
-			exit 1; \
-		fi; \
-		echo "✅ Download concluído em $(MODEL_DIR)/deepseek-coder-6.7b.Q4_K_M.gguf"; \
-	fi
-
-# Download do modelo Phi-3 Mini
-download-phi3:
-	@echo "📥 Baixando modelo Phi-3 Mini..."
-	@mkdir -p $(MODEL_DIR)
-	@if [ -f "$(MODEL_DIR)/phi-3-mini-4k-instruct.gguf" ]; then \
-		echo "✅ Modelo já existe em $(MODEL_DIR)/phi-3-mini-4k-instruct.gguf"; \
-	else \
-		echo "🔄 Instalando huggingface-cli se necessário..."; \
-		pip install -q huggingface-hub; \
-		echo "🔄 Iniciando download do modelo Phi-3..."; \
-		huggingface-cli download microsoft/Phi-3-mini-4k-instruct-gguf Phi-3-mini-4k-instruct-q4.gguf --local-dir $(MODEL_DIR) --local-dir-use-symlinks False; \
-		if [ -f "$(MODEL_DIR)/Phi-3-mini-4k-instruct-q4.gguf" ]; then \
-			mv $(MODEL_DIR)/Phi-3-mini-4k-instruct-q4.gguf $(MODEL_DIR)/phi-3-mini-4k-instruct.gguf; \
-			echo "✅ Download concluído e renomeado em $(MODEL_DIR)/phi-3-mini-4k-instruct.gguf"; \
-		else \
-			echo "❌ Falha no download do modelo"; \
-			exit 1; \
-		fi; \
-	fi
 
 # Comandos de documentação
 docs-serve:

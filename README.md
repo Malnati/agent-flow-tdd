@@ -8,7 +8,7 @@ Framework para desenvolvimento orientado a testes usando agentes de IA.
 
 ## 🔍 Visão Geral
 
-O Agent Flow TDD utiliza modelos de IA para auxiliar no desenvolvimento orientado a testes, gerando código, testes e documentação com base em prompts.
+O Agent Flow TDD utiliza modelos de IA para auxiliar no desenvolvimento orientado a testes, gerando código, testes e documentação com base em prompts. O framework suporta múltiplos modelos de IA, tanto locais quanto remotos, e oferece uma interface de linha de comando simples para interação.
 
 ## 🚀 Início Rápido
 
@@ -48,6 +48,9 @@ make logs
 
 # Executar testes
 make test
+
+# Publicar pacote (requer token PyPI)
+make publish
 ```
 
 ## 🤖 Modelos Suportados
@@ -62,6 +65,30 @@ make test
 - `gpt-3.5-turbo`, `gpt-4-turbo` - OpenAI
 - `claude-3-opus`, `claude-3-sonnet` - Anthropic
 - `gemini-pro` - Google
+
+## 🛠️ Problemas Conhecidos e Soluções
+
+### Problema com `python -m build` no Makefile
+Se você encontrar problemas ao executar `make publish` devido a falhas no comando `python -m build`, você pode:
+
+1. Executar os comandos de build manualmente no terminal:
+   ```bash
+   python -m build
+   python -m twine upload dist/* --username __token__ --password $PYPI_TOKEN
+   ```
+
+2. Ou modificar o Makefile para usar `$(SHELL)` em vez de `bash -c`:
+   ```make
+   @$(SHELL) -c "$(PYTHON) -m build"
+   ```
+
+### Outros Problemas Comuns
+
+Consulte a seção de [Troubleshooting](docs/troubleshooting/README.md) para mais informações sobre outros problemas comuns e suas soluções.
+
+## 🤝 Contribuindo
+
+Contribuições são bem-vindas! Veja [CONTRIBUTING.md](CONTRIBUTING.md) para mais detalhes.
 
 ## 📝 Licença
 

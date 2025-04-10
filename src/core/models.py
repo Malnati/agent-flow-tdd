@@ -9,6 +9,7 @@ import json
 import yaml
 from pathlib import Path
 from dataclasses import dataclass
+import requests
 
 import google.generativeai as genai
 from pydantic import BaseModel
@@ -54,7 +55,6 @@ class ModelProvider(str, Enum):
     DEEPSEEK_LOCAL = "deepseek_local"
     PHI3 = "phi3"
 
-
 class ModelConfig(BaseModel):
     """Configuração de um modelo."""
     provider: ModelProvider
@@ -64,7 +64,6 @@ class ModelConfig(BaseModel):
     max_retries: int
     temperature: float
     max_tokens: Optional[int]
-
 
 class ModelManager:
     """Gerenciador de modelos de IA."""
@@ -76,14 +75,16 @@ class ModelManager:
         Args:
             model_name: Nome do modelo a ser usado (opcional)
         """
-        self.config = load_config()
-        env = self.config['env_vars']
-        self.model_name = model_name or get_env_var(env['default_model'], self.config['defaults']['model'])
-        self.elevation_model = get_env_var(env['elevation_model'], self.config['defaults']['elevation_model'])
+        self.registry = ModelRegistry()
+        self.config = self.registry.config
+        env = self.registry.get_env_vars()
+        defaults = self.registry.get_defaults()
+        self.model_name = model_name or get_env_var(env['default_model'], defaults['model'])
+        self.elevation_model = get_env_var(env['elevation_model'], defaults['elevation_model'])
         
         # Configurações de retry e timeout
-        self.max_retries = int(get_env_var(env['max_retries'], str(self.config['defaults']['max_retries'])))
-        self.timeout = int(get_env_var(env['model_timeout'], str(self.config['defaults']['timeout'])))
+        self.max_retries = int(get_env_var(env['max_retries'], str(defaults['max_retries'])))
+        self.timeout = int(get_env_var(env['model_timeout'], str(defaults['timeout'])))
         
         # Configuração de fallback
         self.fallback_enabled = get_env_var(env['fallback_enabled'], str(self.config['fallback']['enabled'])).lower() == 'true'
@@ -99,8 +100,8 @@ class ModelManager:
         self._setup_clients()
         
         # Configurações padrão
-        self.temperature = self.config['defaults']['temperature']
-        self.max_tokens = self.config['defaults']['max_tokens']
+        self.temperature = defaults['temperature']
+        self.max_tokens = defaults['max_tokens']
         
         logger.info(f"ModelManager inicializado com modelo {self.model_name}")
 
@@ -129,7 +130,7 @@ class ModelManager:
             
     def _setup_clients(self) -> None:
         """Inicializa clientes para diferentes provedores"""
-        env = self.config['env_vars']
+        env = self.registry.get_env_vars()
         
         # OpenAI
         self.openai_client = OpenAI(
@@ -141,7 +142,7 @@ class ModelManager:
         openrouter_key = get_env_var(env['openrouter_key'])
         if openrouter_key:
             self.openrouter_client = OpenAI(
-                base_url=self.config['providers']['openrouter']['base_url'],
+                base_url=self.registry.get_provider_config('openrouter')['base_url'],
                 api_key=openrouter_key,
                 timeout=self.timeout
             )
@@ -152,7 +153,7 @@ class ModelManager:
         gemini_key = get_env_var(env['gemini_key'])
         if gemini_key:
             genai.configure(api_key=gemini_key)
-            self.gemini_model = genai.GenerativeModel(self.config['providers']['gemini']['default_model'])
+            self.gemini_model = genai.GenerativeModel(self.registry.get_provider_config('gemini')['default_model'])
         else:
             self.gemini_model = None
             
@@ -166,7 +167,7 @@ class ModelManager:
         # TinyLLaMA
         try:
             from llama_cpp import Llama
-            tinyllama_config = self.config['providers']['tinyllama']
+            tinyllama_config = self.registry.get_provider_config('tinyllama')
             model_path = tinyllama_config['model_path']
             
             # Verifica se o modelo existe
@@ -197,7 +198,7 @@ class ModelManager:
         # Phi-1
         try:
             from llama_cpp import Llama
-            phi1_config = self.config['providers']['phi1']
+            phi1_config = self.registry.get_provider_config('phi1')
             model_path = phi1_config['model_path']
             
             # Verifica se o modelo existe
@@ -228,7 +229,7 @@ class ModelManager:
         # DeepSeek Coder
         try:
             from llama_cpp import Llama
-            deepseek_config = self.config['providers']['deepseek_local']
+            deepseek_config = self.registry.get_provider_config('deepseek_local')
             model_path = deepseek_config['model_path']
             
             # Verifica se o modelo existe
@@ -259,7 +260,7 @@ class ModelManager:
         # Phi-3 Mini
         try:
             from llama_cpp import Llama
-            phi3_config = self.config['providers']['phi3']
+            phi3_config = self.registry.get_provider_config('phi3')
             model_path = phi3_config['model_path']
             
             # Verifica se o modelo existe
@@ -351,33 +352,7 @@ class ModelManager:
         Returns:
             String com o nome do provedor
         """
-        if model.startswith("gpt-") or model.startswith("text-"):
-            return "openai"
-        elif model.startswith("deepseek-") or model.startswith("anthropic/") or model.startswith("meta-llama/"):
-            return "openrouter"
-        elif model.startswith("gemini-"):
-            return "gemini"
-        elif model.startswith("claude-"):
-            return "anthropic"
-        elif model.startswith("tinyllama-"):
-            return "tinyllama"
-        elif model.startswith("phi-"):
-            return "phi1"
-        elif model.startswith("deepseek-local-"):
-            return "deepseek_local"
-        elif model.startswith("phi3-"):
-            return "phi3"
-        else:
-            # Busca nas configurações para determinar provider
-            config = self.config
-            for provider_name, provider_config in config["providers"].items():
-                prefix_patterns = provider_config.get("prefix_patterns", [])
-                for pattern in prefix_patterns:
-                    if model.startswith(pattern):
-                        return provider_name
-            
-            # Fallback para openai se não encontrado
-            return "openai"
+        return self.registry.get_provider_name(model)
 
     def _get_provider_config(self, provider: str) -> Dict[str, Any]:
         """
@@ -389,7 +364,7 @@ class ModelManager:
         Returns:
             Dict com configurações do provedor
         """
-        return self.config['providers'].get(provider, {})
+        return self.registry.get_provider_config(provider)
 
     def _generate_with_provider(
         self,
@@ -415,6 +390,14 @@ class ModelManager:
         """
         logger.info(f"Gerando resposta com provedor: {provider}")
         
+        # Verifica se o modelo está disponível
+        if provider == 'deepseek_local' and not self.deepseek_model:
+            logger.error("Modelo DeepSeek Coder não está disponível.")
+            raise ValueError("Modelo DeepSeek Coder não está disponível. Verifique se o arquivo do modelo está presente e acessível.")
+        elif provider == 'phi3' and not self.phi3_model:
+            logger.error("Modelo Phi-3 Mini não está disponível.")
+            raise ValueError("Modelo Phi-3 Mini não está disponível. Verifique se o arquivo do modelo está presente e acessível.")
+        
         if provider == 'openai':
             return self._generate_openai(prompt, system, **kwargs)
         elif provider == 'openrouter':
@@ -423,7 +406,24 @@ class ModelManager:
                     raise ValueError("OpenRouter não configurado")
                 else:
                     return self._generate_openai(prompt, system, **kwargs)
-            return self._generate_openai(prompt, system, **kwargs)
+            # Usar o cliente OpenRouter diretamente (não chamar _generate_openai)
+            messages = []
+            if system:
+                messages.append({"role": "system", "content": system})
+            messages.append({"role": "user", "content": prompt})
+            
+            response = self.openrouter_client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+                temperature=kwargs.get('temperature', self.temperature),
+                max_tokens=kwargs.get('max_tokens', self.max_tokens)
+            )
+            
+            return response.choices[0].message.content, {
+                "model": response.model,
+                "usage": response.usage.model_dump(),
+                "status": "success"
+            }
         elif provider == 'gemini':
             if not self.gemini_model:
                 if not self.fallback_enabled:
@@ -539,43 +539,7 @@ class ModelManager:
         }
 
     def get_available_models(self) -> Dict[str, list]:
-        """
-        Retorna os modelos disponíveis para cada provedor.
-        
-        Returns:
-            Dict com os modelos disponíveis por provedor
-        """
-        available_models = {}
-        
-        # OpenAI
-        if hasattr(self, 'openai_client'):
-            available_models['openai'] = self.config['providers']['openai']['models']
-            
-        # OpenRouter
-        if self.openrouter_client:
-            available_models['openrouter'] = self.config['providers']['openrouter']['models']
-            
-        # Gemini
-        if self.gemini_model:
-            available_models['gemini'] = self.config['providers']['gemini']['models']
-            
-        # TinyLLaMA
-        if self.tinyllama_model:
-            available_models['tinyllama'] = self.config['providers']['tinyllama']['prefix_patterns']
-            
-        # Phi-1
-        if self.phi1_model:
-            available_models['phi1'] = self.config['providers']['phi1']['prefix_patterns']
-            
-        # DeepSeek
-        if self.deepseek_model:
-            available_models['deepseek_local'] = self.config['providers']['deepseek_local']['prefix_patterns']
-            
-        # Phi-3
-        if self.phi3_model:
-            available_models['phi3'] = self.config['providers']['phi3']['prefix_patterns']
-            
-        return available_models
+        return self.registry.get_available_models()
 
     def generate_response(self, messages: list, **kwargs) -> str:
         """
@@ -654,15 +618,8 @@ class ModelManager:
             String com resposta ou None se falhar
         """
         try:
-            # Identifica o provedor baseado nos padrões de prefixo
-            provider = None
-            for prov, config in self.config['providers'].items():
-                for pattern in config['prefix_patterns']:
-                    if isinstance(self.model_name, str) and self.model_name.startswith(pattern):
-                        provider = prov
-                        break
-                if provider:
-                    break
+            # Identifica o provedor baseado no nome do modelo
+            provider = self._get_provider(self.model_name)
                     
             if not provider:
                 logger.error(f"Provedor não identificado para modelo {self.model_name}")
@@ -713,6 +670,69 @@ class ModelManager:
                 )
                 return response['choices'][0]['message']['content']
                 
+            elif provider == 'phi1' and self.phi1_model:
+                # Formata o prompt para Phi-1
+                full_prompt = ""
+                if system_prompt:
+                    full_prompt += f"<|system|>\n{system_prompt}\n"
+                full_prompt += f"<|user|>\n{user_prompt}\n<|assistant|>\n"
+                
+                # Parâmetros para geração
+                phi1_config = self.registry.get_provider_config('phi1')
+                max_tokens = self.max_tokens or phi1_config.get('default_max_tokens', 100)
+                stop = ["</s>", "<|user|>", "<|system|>", "<|assistant|>"]
+                
+                response = self.phi1_model(
+                    full_prompt,
+                    max_tokens=max_tokens,
+                    temperature=self.temperature,
+                    stop=stop
+                )
+                return response["choices"][0]["text"].strip()
+                
+            elif provider == 'deepseek_local' and self.deepseek_model:
+                # Formata o prompt para DeepSeek Coder
+                full_prompt = ""
+                if system_prompt:
+                    full_prompt += f" \n{system}\n Arbitro \n"
+                full_prompt += f"<user>\n{user_prompt}\n</user>\n<assistant>\n"
+                
+                # Parâmetros para geração
+                deepseek_config = self.registry.get_provider_config('deepseek_local')
+                max_tokens = self.max_tokens or deepseek_config.get('default_max_tokens', 512)
+                temperature = kwargs.get('temperature', self.temperature)
+                stop = ["</assistant>", "<user>", " ", "</user>", " Arbitro "]
+                
+                response = self.deepseek_model(
+                    full_prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    stop=stop
+                )
+                return response["choices"][0]["text"].strip()
+                
+            elif provider == 'phi3' and self.phi3_model:
+                # Formata o prompt para Phi-3 Mini
+                full_prompt = ""
+                if system_prompt:
+                    full_prompt += f"<|system|>\n{system}\n"
+                full_prompt += f"<|user|>\n{user_prompt}\n<|assistant|>\n"
+                
+                # Parâmetros para geração
+                phi3_config = self.registry.get_provider_config('phi3')
+                max_tokens = self.max_tokens or phi3_config.get('default_max_tokens', 512)
+                temperature = kwargs.get('temperature', self.temperature)
+                stop = ["<|user|>", "<|system|>", "<|assistant|>"]
+                
+                response = self.phi3_model(
+                    full_prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    stop=stop
+                )
+                return response["choices"][0]["text"].strip()
+                
+            # Se chegou aqui, o provedor não está configurado
             logger.error(f"Cliente não configurado para provedor {provider}")
             return None
             
@@ -793,13 +813,14 @@ class ModelManager:
             # Formata o prompt
             full_prompt = ""
             if system:
-                full_prompt += f"<|system|>\n{system}</s>\n"
-            full_prompt += f"<|user|>\n{prompt}</s>\n<|assistant|>\n"
+                full_prompt += f"<|system|>\n{system} Arbitro \n"
+            full_prompt += f"<|user|>\n{prompt} Arbitro \n<|assistant|>\n"
             
             # Parâmetros para geração
-            max_tokens = kwargs.get('max_tokens', self.max_tokens) or self.config['providers']['tinyllama'].get('default_max_tokens', 256)
+            tinyllama_config = self.registry.get_provider_config('tinyllama')
+            max_tokens = kwargs.get('max_tokens', self.max_tokens) or tinyllama_config.get('default_max_tokens', 256)
             temperature = kwargs.get('temperature', self.temperature)
-            stop = ["</s>", "<|user|>", "<|system|>", "<|assistant|>"]
+            stop = [" Arbitro ", "<|user|>", "<|system|>", "<|assistant|>"]
             
             # Usa apenas a API direta, que funciona em todas as versões
             response = self.tinyllama_model(
@@ -871,13 +892,14 @@ class ModelManager:
             # Formata o prompt
             full_prompt = ""
             if system:
-                full_prompt += f"<|system|>\n{system}</s>\n"
-            full_prompt += f"<|user|>\n{prompt}</s>\n<|assistant|>\n"
+                full_prompt += f"<|system|>\n{system} Arbitro \n"
+            full_prompt += f"<|user|>\n{prompt} Arbitro \n<|assistant|>\n"
             
             # Parâmetros para geração
-            max_tokens = kwargs.get('max_tokens', self.max_tokens) or self.config['providers']['phi1'].get('default_max_tokens', 100)
+            phi1_config = self.registry.get_provider_config('phi1')
+            max_tokens = kwargs.get('max_tokens', self.max_tokens) or phi1_config.get('default_max_tokens', 100)
             temperature = kwargs.get('temperature', self.temperature)
-            stop = ["</s>", "<|user|>", "<|system|>", "<|assistant|>"]
+            stop = [" Arbitro ", "<|user|>", "<|system|>", "<|assistant|>"]
             
             # Usa apenas a API direta, que funciona em todas as versões
             response = self.phi1_model(
@@ -949,13 +971,15 @@ class ModelManager:
             # Formata o prompt para DeepSeek Coder
             full_prompt = ""
             if system:
-                full_prompt += f"<s>\n{system}\n</s>\n"
+                full_prompt += f" \n{system}\n Arbitro \n"
+
             full_prompt += f"<user>\n{prompt}\n</user>\n<assistant>\n"
             
             # Parâmetros para geração
-            max_tokens = kwargs.get('max_tokens', self.max_tokens) or self.config['providers']['deepseek_local'].get('default_max_tokens', 512)
+            deepseek_config = self.registry.get_provider_config('deepseek_local')
+            max_tokens = kwargs.get('max_tokens', self.max_tokens) or deepseek_config.get('default_max_tokens', 512)
             temperature = kwargs.get('temperature', self.temperature)
-            stop = ["</assistant>", "<user>", "<s>", "</user>", "</s>"]
+            stop = ["</assistant>", "<user>", " ", "</user>", " Arbitro "]
             
             # Usa apenas a API direta, que funciona em todas as versões
             response = self.deepseek_model(
@@ -1037,7 +1061,8 @@ class ModelManager:
             full_prompt += f"<|user|>\n{prompt}\n<|assistant|>\n"
             
             # Parâmetros para geração
-            max_tokens = kwargs.get('max_tokens', self.max_tokens) or self.config['providers']['phi3'].get('default_max_tokens', 512)
+            phi3_config = self.registry.get_provider_config('phi3')
+            max_tokens = kwargs.get('max_tokens', self.max_tokens) or phi3_config.get('default_max_tokens', 512)
             temperature = kwargs.get('temperature', self.temperature)
             stop = ["<|user|>", "<|system|>", "<|assistant|>"]
             
@@ -1107,3 +1132,137 @@ class ModelManager:
                     "total_tokens": len(prompt.split()) + len(text.split())
                 }
             }
+
+class ModelRegistry:
+    def __init__(self, config_path: Optional[str] = None):
+        base_dir = Path(__file__).resolve().parent.parent
+        config_file = config_path or os.path.join(base_dir, "configs", "kernel.yaml")
+
+        with open(config_file, "r", encoding="utf-8") as f:
+            full_config = yaml.safe_load(f)
+            self.config = full_config["models"]
+            self.providers = self.config["providers"]
+
+    def get_default_model(self) -> str:
+        return self.config['defaults']['model']
+
+    def get_provider_by_model_id(self, model_id: str) -> Optional[Dict[str, Any]]:
+        for provider in self.providers:
+            for pattern in provider.get('prefix_patterns', []):
+                if model_id.startswith(pattern):
+                    return provider
+        return None
+
+    def get_model_config(self, model_id: str) -> Optional[Dict[str, Any]]:
+        provider = self.get_provider_by_model_id(model_id)
+        if not provider:
+            return None
+
+        for name in provider.get('models', []):
+            if name == model_id:
+                return {
+                    'provider': provider['name'],
+                    'model_id': model_id,
+                    'config': provider
+                }
+        return None
+
+    def list_all_models(self) -> List[str]:
+        return [model for p in self.providers for model in p.get('models', [])]
+
+    def list_providers(self) -> List[str]:
+        return [p['name'] for p in self.providers]
+
+    def get_env_var_for_provider(self, provider_name: str) -> Optional[str]:
+        for p in self.providers:
+            if p['name'] == provider_name:
+                return p.get('env_key')
+        return None
+
+    def get_provider_name(self, model_id: str) -> str:
+        """
+        Obtém o nome do provedor com base no ID do modelo.
+        
+        Args:
+            model_id: ID do modelo
+            
+        Returns:
+            Nome do provedor ou 'openai' como fallback
+        """
+        for provider in self.providers:
+            name = provider.get('name')
+            for pattern in provider.get('prefix_patterns', []):
+                if model_id.startswith(pattern):
+                    return name
+        
+        # Se não encontrou correspondência, retorna openai como fallback
+        return 'openai'
+
+    def get_provider_config(self, provider_name: str) -> Dict[str, Any]:
+        for p in self.providers:
+            if p['name'] == provider_name:
+                return p
+        return {}
+
+    def get_available_models(self) -> Dict[str, List[str]]:
+        return {p['name']: p.get('models', []) for p in self.providers}
+
+    def resolve_model_config(self, model_id: Optional[str] = None) -> Dict[str, Any]:
+        model_name = model_id or self.get_default_model()
+        model_config = self.get_model_config(model_name)
+        if not model_config:
+            raise ValueError(f"Modelo '{model_name}' não encontrado na configuração")
+        return model_config
+
+    def get_env_vars(self) -> Dict[str, str]:
+        return self.config.get('env_vars', {})
+
+    class ModelProvider(str, Enum):
+        """Provedores de modelos suportados."""
+        OPENAI = "openai"
+        OPENROUTER = "openrouter"
+        GEMINI = "gemini"
+        TINYLLAMA = "tinyllama"
+        PHI1 = "phi1"
+        DEEPSEEK_LOCAL = "deepseek_local"
+        PHI3 = "phi3"
+
+    def get_defaults(self) -> Dict[str, Any]:
+        return self.config.get('defaults', {})
+
+# Função para verificar e baixar modelos
+class ModelDownloader:
+    MODEL_URLS = {
+        "tinyllama": "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
+        "phi1": "https://huggingface.co/professorf/phi-1-gguf/resolve/main/phi-1-f16.gguf",
+        "deepseek": "https://huggingface.co/TheBloke/deepseek-coder-6.7B-instruct-GGUF/resolve/main/deepseek-coder-6.7b-instruct.Q4_K_M.gguf",
+        "phi3": "https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/Phi-3-mini-4k-instruct-q4.gguf"
+    }
+    MODEL_DIR = "models"
+
+    @staticmethod
+    def download_model(model_name, url):
+        model_path = os.path.join(ModelDownloader.MODEL_DIR, f"{model_name}.gguf")
+        if not ModelDownloader.is_model_available(model_name):
+            print(f"📥 Baixando modelo {model_name}...")
+            os.makedirs(ModelDownloader.MODEL_DIR, exist_ok=True)
+            response = requests.get(url, stream=True)
+            if response.status_code == 200:
+                with open(model_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                print(f"✅ Modelo {model_name} baixado com sucesso!")
+            else:
+                print(f"❌ Falha ao baixar o modelo {model_name}. Código de status: {response.status_code}")
+        else:
+            print(f"✅ Modelo {model_name} já está disponível.")
+
+    @staticmethod
+    def is_model_available(model_name: str) -> bool:
+        model_path = os.path.join(ModelDownloader.MODEL_DIR, f"{model_name}.gguf")
+        return os.path.exists(model_path) and os.path.getsize(model_path) >= 1000000
+
+    @staticmethod
+    def verify_and_download_models():
+        for model_name, url in ModelDownloader.MODEL_URLS.items():
+            ModelDownloader.download_model(model_name, url)

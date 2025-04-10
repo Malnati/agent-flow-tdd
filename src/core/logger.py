@@ -25,12 +25,55 @@ def load_config() -> Dict[str, Any]:
     Returns:
         Dict com as configurações
     """
-    config_path = os.path.join(BASE_DIR, 'src', 'configs', 'kernel.yaml')
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
+    config_path = os.path.join(BASE_DIR, 'src', 'configs', 'logging.yaml')
+    try:
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+            return config
+    except (FileNotFoundError, yaml.YAMLError) as e:
+        logging.warning(f"Erro ao carregar configurações de logging: {str(e)}")
+        # Valores padrão como fallback
         return {
-            "directories": config["directories"],
-            "logging": config["logging"]
+            "directories": {"logs": "logs"},
+            "logging": {
+                "levels": {
+                    "map": {
+                        "DEBUG": logging.DEBUG,
+                        "INFO": logging.INFO,
+                        "WARNING": logging.WARNING,
+                        "ERROR": logging.ERROR,
+                        "CRITICAL": logging.CRITICAL
+                    },
+                    "default": "INFO"
+                },
+                "format": {
+                    "default": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+                },
+                "security": {
+                    "sensitive_keywords": ["password", "token", "secret", "key", "credential"],
+                    "token_patterns": ["[A-Za-z0-9-_]{20,}"],
+                    "masking": {
+                        "default_mask": "***",
+                        "min_length_for_masking": 8,
+                        "min_length_for_partial": 16,
+                        "prefix_length": 4,
+                        "suffix_length": 4
+                    }
+                },
+                "trace": {
+                    "default_workflow_name": "default",
+                    "default_span_type": "operation",
+                    "tracing_disabled": False,
+                    "trace_include_sensitive_data": False,
+                    "prefixes": {
+                        "trace": "trace-",
+                        "span": "span-"
+                    },
+                    "file_processor": {
+                        "default_file": "logs/traces.jsonl"
+                    }
+                }
+            }
         }
 
 # Carrega configurações

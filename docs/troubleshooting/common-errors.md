@@ -237,4 +237,58 @@ make tdd prompt="Criar API" model=tinyllama-1.1b
 
 # OU ajustar parâmetros de memória
 export LLAMA_N_GPU_LAYERS=20  # Carregar apenas parte do modelo na GPU
+```
+
+## Erros de Publicação e Build
+
+### Erro: `ModuleNotFoundError: No module named 'build'`
+
+**Problema**: O pacote `build` não está instalado ou não está acessível.
+
+**Solução**:
+```bash
+# Instalar o pacote build
+pip install build
+
+# Verificar se o pacote está instalado no ambiente virtual correto
+source .venv/bin/activate
+pip list | grep build
+```
+
+### Erro: `Command 'python -m build' failed with bash -c`
+
+**Problema**: Falha ao executar o comando `python -m build` através do `bash -c` no Makefile.
+
+**Solução**:
+```bash
+# Modificar o Makefile para usar o shell atual em vez de bash
+# Alterar as linhas relevantes no Makefile:
+@$(SHELL) -c "$(PYTHON) -m build"
+
+# OU executar manualmente no terminal
+python -m build
+python -m twine upload dist/* --username __token__ --password $PYPI_TOKEN
+```
+
+### Erro: `WARNING: Upload failed: HTTPError, 403 Forbidden`
+
+**Problema**: Falha de autenticação ao fazer upload para o PyPI.
+
+**Solução**:
+```bash
+# Verificar se o token PyPI está configurado corretamente
+export PYPI_TOKEN="seu-token-aqui"
+
+# Verificar se tem permissão para publicar o pacote
+# OU criar um novo token no PyPI com permissões corretas
+```
+
+### Erro: `WARNING: The metadata in pyproject.toml is invalid`
+
+**Problema**: Configuração inválida no arquivo pyproject.toml.
+
+**Solução**:
+```bash
+# Verificar e corrigir o arquivo pyproject.toml
+# OU utilizar apenas setup.py, conforme a política do projeto
 ``` 
