@@ -160,26 +160,32 @@ class ModelManager:
         """Inicializa os modelos locais via llama.cpp"""
         try:
             from llama_cpp import Llama
-            # Inicializa todos os modelos locais disponíveis
-            for provider_name in ['tinyllama-1.1b', 'phi1', 'deepseek-local-coder', 'phi3-mini', 'phi3-mini-fp16']:
+            
+            # Obtém os provedores de modelos do arquivo de configuração
+            config = load_config()
+            
+            # Itera sobre todos os provedores definidos na configuração
+            for provider in config['providers']:
                 try:
-                    provider_config = self.registry.get_provider_config(provider_name)
-                    
+                    provider_name = provider.get('name')
                     # Verifica se o modelo é local (não remoto)
-                    if provider_config.get('remote', True) == False:
-                        provider_config['model_path']
+                    if provider.get('remote', True) == False:
+                        model_name = provider.get('model')
+                        model_dir = provider.get('dir', './models')
+                        n_ctx = provider.get('n_ctx', 2048)
+                        n_threads = provider.get('n_threads', 4)
                         
                         # Verifica se o modelo existe
-                        full_model_dir = os.path.join(ModelDownloader.BASE_DIR, os.path.normpath(provider_config.get('dir', 'models').lstrip('./')))
-                        model_file = os.path.join(full_model_dir, f"{provider_config['model']}.gguf")
+                        full_model_dir = os.path.join(ModelDownloader.BASE_DIR, os.path.normpath(model_dir.lstrip('./')))
+                        model_file = os.path.join(full_model_dir, f"{model_name}.gguf")
                         
                         if os.path.exists(model_file) and os.path.getsize(model_file) > 1000000:  # Tamanho mínimo de 1MB
                             try:
                                 # Primeira tentativa - API mais recente
                                 model = Llama(
                                     model_path=model_file,
-                                    n_ctx=provider_config.get('n_ctx', 2048),
-                                    n_threads=provider_config.get('n_threads', 4)
+                                    n_ctx=n_ctx,
+                                    n_threads=n_threads
                                 )
                                 logger.info(f"Modelo {provider_name} carregado com sucesso: {model_file}")
                                 
@@ -207,11 +213,13 @@ class ModelManager:
                     logger.warning(f"Erro ao configurar modelo {provider_name}: {str(e)}")
         except ImportError as e:
             logger.warning(f"llama_cpp não disponível: {str(e)}")
-            # Define todos os atributos de modelo como None
-            self.tinyllama_model = None
-            self.phi1_model = None
-            self.deepseek_model = None
-            self.phi3_model = None
+            # Define atributos de modelo como None para todos os modelos locais
+            config = load_config()
+            for provider in config['providers']:
+                if provider.get('remote', True) == False:
+                    provider_name = provider.get('name')
+                    attr_name = f"{provider_name.replace('-', '_')}_model".replace('tinyllama_1.1b', 'tinyllama')
+                    setattr(self, attr_name, None)
 
     def _get_cache_key(self, prompt: str, system: Optional[str] = None, **kwargs) -> str:
         """
