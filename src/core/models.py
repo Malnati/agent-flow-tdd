@@ -164,128 +164,64 @@ class ModelManager:
         else:
             self.anthropic_client = None
 
-        # TinyLLaMA
+        # Modelos locais (executados via llama.cpp)
+        self._setup_local_models()
+
+    def _setup_local_models(self) -> None:
+        """Inicializa os modelos locais via llama.cpp"""
         try:
             from llama_cpp import Llama
-            tinyllama_config = self.registry.get_provider_config('tinyllama')
-            model_path = tinyllama_config['model_path']
-            
-            # Verifica se o modelo existe
-            if os.path.exists(model_path) and os.path.getsize(model_path) > 1000000:  # Tamanho mínimo de 1MB
+            # Inicializa todos os modelos locais disponíveis
+            for provider_name in ['tinyllama-1.1b', 'phi1', 'deepseek-local-coder', 'phi3-mini', 'phi3-mini-fp16']:
                 try:
-                    # Primeira tentativa - API mais recente
-                    self.tinyllama_model = Llama(
-                        model_path=model_path,
-                        n_ctx=tinyllama_config['n_ctx'],
-                        n_threads=tinyllama_config['n_threads']
-                    )
-                    logger.info(f"TinyLLaMA carregado com sucesso: {model_path}")
-                except TypeError as e:
-                    if "positional arguments but 3 were given" in str(e):
-                        # Segunda tentativa - API mais antiga
-                        # Passar apenas o caminho do modelo
-                        self.tinyllama_model = Llama(model_path)
-                        logger.info(f"TinyLLaMA carregado com API legada: {model_path}")
-                    else:
-                        raise
-            else:
-                logger.warning(f"Arquivo de modelo TinyLLaMA não encontrado ou muito pequeno: {model_path}")
-                self.tinyllama_model = None
-        except (ImportError, FileNotFoundError, ValueError) as e:
-            logger.warning(f"TinyLLaMA não disponível: {str(e)}")
+                    provider_config = self.registry.get_provider_config(provider_name)
+                    
+                    # Verifica se o modelo é local (não remoto)
+                    if provider_config.get('remote', True) == False:
+                        model_path = provider_config['model_path']
+                        
+                        # Verifica se o modelo existe
+                        full_model_dir = os.path.join(ModelDownloader.BASE_DIR, os.path.normpath(provider_config.get('dir', 'models').lstrip('./')))
+                        model_file = os.path.join(full_model_dir, f"{provider_config['model']}.gguf")
+                        
+                        if os.path.exists(model_file) and os.path.getsize(model_file) > 1000000:  # Tamanho mínimo de 1MB
+                            try:
+                                # Primeira tentativa - API mais recente
+                                model = Llama(
+                                    model_path=model_file,
+                                    n_ctx=provider_config.get('n_ctx', 2048),
+                                    n_threads=provider_config.get('n_threads', 4)
+                                )
+                                logger.info(f"Modelo {provider_name} carregado com sucesso: {model_file}")
+                                
+                                # Armazena o modelo carregado
+                                attr_name = f"{provider_name.replace('-', '_')}_model".replace('tinyllama_1.1b', 'tinyllama')
+                                setattr(self, attr_name, model)
+                                
+                            except TypeError as e:
+                                if "positional arguments but 3 were given" in str(e):
+                                    # Segunda tentativa - API mais antiga
+                                    model = Llama(model_file)
+                                    logger.info(f"Modelo {provider_name} carregado com API legada: {model_file}")
+                                    
+                                    # Armazena o modelo carregado
+                                    attr_name = f"{provider_name.replace('-', '_')}_model".replace('tinyllama_1.1b', 'tinyllama')
+                                    setattr(self, attr_name, model)
+                                else:
+                                    logger.warning(f"Erro ao carregar modelo {provider_name}: {str(e)}")
+                                    raise
+                        else:
+                            logger.warning(f"Arquivo de modelo {provider_name} não encontrado ou muito pequeno: {model_file}")
+                            attr_name = f"{provider_name.replace('-', '_')}_model".replace('tinyllama_1.1b', 'tinyllama')
+                            setattr(self, attr_name, None)
+                except Exception as e:
+                    logger.warning(f"Erro ao configurar modelo {provider_name}: {str(e)}")
+        except ImportError as e:
+            logger.warning(f"llama_cpp não disponível: {str(e)}")
+            # Define todos os atributos de modelo como None
             self.tinyllama_model = None
-            
-        # Phi-1
-        try:
-            from llama_cpp import Llama
-            phi1_config = self.registry.get_provider_config('phi1')
-            model_path = phi1_config['model_path']
-            
-            # Verifica se o modelo existe
-            if os.path.exists(model_path) and os.path.getsize(model_path) > 1000000:  # Tamanho mínimo de 1MB
-                try:
-                    # Primeira tentativa - API mais recente
-                    self.phi1_model = Llama(
-                        model_path=model_path,
-                        n_ctx=phi1_config['n_ctx'],
-                        n_threads=phi1_config['n_threads']
-                    )
-                    logger.info(f"Phi-1 carregado com sucesso: {model_path}")
-                except TypeError as e:
-                    if "positional arguments but 3 were given" in str(e):
-                        # Segunda tentativa - API mais antiga
-                        # Passar apenas o caminho do modelo
-                        self.phi1_model = Llama(model_path)
-                        logger.info(f"Phi-1 carregado com API legada: {model_path}")
-                    else:
-                        raise
-            else:
-                logger.warning(f"Arquivo de modelo Phi-1 não encontrado ou muito pequeno: {model_path}")
-                self.phi1_model = None
-        except (ImportError, FileNotFoundError, ValueError) as e:
-            logger.warning(f"Phi-1 não disponível: {str(e)}")
             self.phi1_model = None
-        
-        # DeepSeek Coder
-        try:
-            from llama_cpp import Llama
-            deepseek_config = self.registry.get_provider_config('deepseek_local')
-            model_path = deepseek_config['model_path']
-            
-            # Verifica se o modelo existe
-            if os.path.exists(model_path) and os.path.getsize(model_path) > 1000000:  # Tamanho mínimo de 1MB
-                try:
-                    # Primeira tentativa - API mais recente
-                    self.deepseek_model = Llama(
-                        model_path=model_path,
-                        n_ctx=deepseek_config['n_ctx'],
-                        n_threads=deepseek_config['n_threads']
-                    )
-                    logger.info(f"DeepSeek Coder carregado com sucesso: {model_path}")
-                except TypeError as e:
-                    if "positional arguments but 3 were given" in str(e):
-                        # Segunda tentativa - API mais antiga
-                        # Passar apenas o caminho do modelo
-                        self.deepseek_model = Llama(model_path)
-                        logger.info(f"DeepSeek Coder carregado com API legada: {model_path}")
-                    else:
-                        raise
-            else:
-                logger.warning(f"Arquivo de modelo DeepSeek Coder não encontrado ou muito pequeno: {model_path}")
-                self.deepseek_model = None
-        except (ImportError, FileNotFoundError, ValueError) as e:
-            logger.warning(f"DeepSeek Coder não disponível: {str(e)}")
             self.deepseek_model = None
-            
-        # Phi-3 Mini
-        try:
-            from llama_cpp import Llama
-            phi3_config = self.registry.get_provider_config('phi3')
-            model_path = phi3_config['model_path']
-            
-            # Verifica se o modelo existe
-            if os.path.exists(model_path) and os.path.getsize(model_path) > 1000000:  # Tamanho mínimo de 1MB
-                try:
-                    # Primeira tentativa - API mais recente
-                    self.phi3_model = Llama(
-                        model_path=model_path,
-                        n_ctx=phi3_config['n_ctx'],
-                        n_threads=phi3_config['n_threads']
-                    )
-                    logger.info(f"Phi-3 Mini carregado com sucesso: {model_path}")
-                except TypeError as e:
-                    if "positional arguments but 3 were given" in str(e):
-                        # Segunda tentativa - API mais antiga
-                        # Passar apenas o caminho do modelo
-                        self.phi3_model = Llama(model_path)
-                        logger.info(f"Phi-3 Mini carregado com API legada: {model_path}")
-                    else:
-                        raise
-            else:
-                logger.warning(f"Arquivo de modelo Phi-3 Mini não encontrado ou muito pequeno: {model_path}")
-                self.phi3_model = None
-        except (ImportError, FileNotFoundError, ValueError) as e:
-            logger.warning(f"Phi-3 Mini não disponível: {str(e)}")
             self.phi3_model = None
 
     def _get_cache_key(self, prompt: str, system: Optional[str] = None, **kwargs) -> str:
@@ -362,7 +298,7 @@ class ModelManager:
             provider: Nome do provedor
             
         Returns:
-            Dict com configurações do provedor
+            Dict com configurações do provedor, incluindo o atributo remote
         """
         return self.registry.get_provider_config(provider)
 
@@ -390,84 +326,162 @@ class ModelManager:
         """
         logger.info(f"Gerando resposta com provedor: {provider}")
         
+        # Obtém configurações do provedor, incluindo se é remoto ou local
+        provider_config = self.registry.get_provider_config(provider)
+        is_remote = provider_config.get('remote', None)
+        
         # Verifica se o modelo está disponível
-        if provider == 'deepseek_local' and not self.deepseek_model:
+        if provider == 'deepseek-local-coder' and not self.deepseek_model:
             logger.error("Modelo DeepSeek Coder não está disponível.")
             raise ValueError("Modelo DeepSeek Coder não está disponível. Verifique se o arquivo do modelo está presente e acessível.")
-        elif provider == 'phi3' and not self.phi3_model:
+        elif provider == 'phi3-mini' and not self.phi3_model:
             logger.error("Modelo Phi-3 Mini não está disponível.")
             raise ValueError("Modelo Phi-3 Mini não está disponível. Verifique se o arquivo do modelo está presente e acessível.")
         
-        if provider == 'openai':
-            return self._generate_openai(prompt, system, **kwargs)
-        elif provider == 'openrouter':
-            if not self.openrouter_client:
-                if not self.fallback_enabled:
-                    raise ValueError("OpenRouter não configurado")
-                else:
-                    return self._generate_openai(prompt, system, **kwargs)
-            # Usar o cliente OpenRouter diretamente (não chamar _generate_openai)
-            messages = []
-            if system:
-                messages.append({"role": "system", "content": system})
-            messages.append({"role": "user", "content": prompt})
-            
-            response = self.openrouter_client.chat.completions.create(
-                model=self.model_name,
-                messages=messages,
-                temperature=kwargs.get('temperature', self.temperature),
-                max_tokens=kwargs.get('max_tokens', self.max_tokens)
-            )
-            
-            return response.choices[0].message.content, {
-                "model": response.model,
-                "usage": response.usage.model_dump(),
-                "status": "success"
-            }
-        elif provider == 'gemini':
-            if not self.gemini_model:
-                if not self.fallback_enabled:
-                    raise ValueError("Gemini não configurado")
-                else:
-                    return self._generate_openai(prompt, system, **kwargs)
-            return self._generate_gemini(prompt, system, **kwargs)
-        elif provider == 'anthropic':
-            if not self.anthropic_client:
-                if not self.fallback_enabled:
-                    raise ValueError("Anthropic não configurado")
-                else:
-                    return self._generate_openai(prompt, system, **kwargs)
-            return self._generate_anthropic(prompt, system, **kwargs)
-        elif provider == 'tinyllama':
-            if not self.tinyllama_model:
-                if not self.fallback_enabled:
-                    raise ValueError("TinyLLaMA não configurado")
-                else:
-                    return self._generate_openai(prompt, system, **kwargs)
-            return self._generate_tinyllama(prompt, system, **kwargs)
-        elif provider == 'phi1':
-            if not self.phi1_model:
-                if not self.fallback_enabled:
-                    raise ValueError("Phi-1 não configurado")
-                else:
-                    return self._generate_openai(prompt, system, **kwargs)
-            return self._generate_phi1(prompt, system, **kwargs)
-        elif provider == 'deepseek_local':
-            if not self.deepseek_model:
-                if not self.fallback_enabled:
-                    raise ValueError("DeepSeek Coder não configurado")
-                else:
-                    return self._generate_openai(prompt, system, **kwargs)
-            return self._generate_deepseek(prompt, system, **kwargs)
-        elif provider == 'phi3':
-            if not self.phi3_model:
-                if not self.fallback_enabled:
-                    raise ValueError("Phi-3 Mini não configurado")
-                else:
-                    return self._generate_openai(prompt, system, **kwargs)
-            return self._generate_phi3(prompt, system, **kwargs)
+        # Provedores remotos (API)
+        if is_remote is True:
+            if provider.startswith('openai'):
+                return self._generate_openai(prompt, system, **kwargs)
+            elif provider.startswith('openrouter'):
+                if not self.openrouter_client:
+                    if not self.fallback_enabled:
+                        raise ValueError("OpenRouter não configurado")
+                    else:
+                        return self._generate_openai(prompt, system, **kwargs)
+                # Usar o cliente OpenRouter diretamente (não chamar _generate_openai)
+                messages = []
+                if system:
+                    messages.append({"role": "system", "content": system})
+                messages.append({"role": "user", "content": prompt})
+                
+                response = self.openrouter_client.chat.completions.create(
+                    model=self.model_name,
+                    messages=messages,
+                    temperature=kwargs.get('temperature', self.temperature),
+                    max_tokens=kwargs.get('max_tokens', self.max_tokens)
+                )
+                
+                return response.choices[0].message.content, {
+                    "model": response.model,
+                    "usage": response.usage.model_dump(),
+                    "status": "success"
+                }
+            elif provider.startswith('gemini'):
+                if not self.gemini_model:
+                    if not self.fallback_enabled:
+                        raise ValueError("Gemini não configurado")
+                    else:
+                        return self._generate_openai(prompt, system, **kwargs)
+                return self._generate_gemini(prompt, system, **kwargs)
+            elif provider.startswith('anthropic'):
+                if not self.anthropic_client:
+                    if not self.fallback_enabled:
+                        raise ValueError("Anthropic não configurado")
+                    else:
+                        return self._generate_openai(prompt, system, **kwargs)
+                return self._generate_anthropic(prompt, system, **kwargs)
+        # Provedores locais (usando llama.cpp)
+        elif is_remote is False:
+            if provider == 'tinyllama-1.1b' or provider == 'tinyllama':
+                if not self.tinyllama_model:
+                    if not self.fallback_enabled:
+                        raise ValueError("TinyLLaMA não configurado")
+                    else:
+                        return self._generate_openai(prompt, system, **kwargs)
+                return self._generate_tinyllama(prompt, system, **kwargs)
+            elif provider == 'phi1':
+                if not self.phi1_model:
+                    if not self.fallback_enabled:
+                        raise ValueError("Phi-1 não configurado")
+                    else:
+                        return self._generate_openai(prompt, system, **kwargs)
+                return self._generate_phi1(prompt, system, **kwargs)
+            elif provider == 'deepseek-local-coder':
+                if not self.deepseek_model:
+                    if not self.fallback_enabled:
+                        raise ValueError("DeepSeek Coder não configurado")
+                    else:
+                        return self._generate_openai(prompt, system, **kwargs)
+                return self._generate_deepseek(prompt, system, **kwargs)
+            elif provider == 'phi3-mini':
+                if not self.phi3_model:
+                    if not self.fallback_enabled:
+                        raise ValueError("Phi-3 Mini não configurado")
+                    else:
+                        return self._generate_openai(prompt, system, **kwargs)
+                return self._generate_phi3(prompt, system, **kwargs)
+        # Fallback para comportamento anterior
         else:
-            raise ValueError(f"Provedor {provider} não suportado")
+            if provider == 'openai':
+                return self._generate_openai(prompt, system, **kwargs)
+            elif provider == 'openrouter':
+                if not self.openrouter_client:
+                    if not self.fallback_enabled:
+                        raise ValueError("OpenRouter não configurado")
+                    else:
+                        return self._generate_openai(prompt, system, **kwargs)
+                # Usar o cliente OpenRouter diretamente
+                messages = []
+                if system:
+                    messages.append({"role": "system", "content": system})
+                messages.append({"role": "user", "content": prompt})
+                
+                response = self.openrouter_client.chat.completions.create(
+                    model=self.model_name,
+                    messages=messages,
+                    temperature=kwargs.get('temperature', self.temperature),
+                    max_tokens=kwargs.get('max_tokens', self.max_tokens)
+                )
+                
+                return response.choices[0].message.content, {
+                    "model": response.model,
+                    "usage": response.usage.model_dump(),
+                    "status": "success"
+                }
+            elif provider == 'gemini':
+                if not self.gemini_model:
+                    if not self.fallback_enabled:
+                        raise ValueError("Gemini não configurado")
+                    else:
+                        return self._generate_openai(prompt, system, **kwargs)
+                return self._generate_gemini(prompt, system, **kwargs)
+            elif provider == 'anthropic':
+                if not self.anthropic_client:
+                    if not self.fallback_enabled:
+                        raise ValueError("Anthropic não configurado")
+                    else:
+                        return self._generate_openai(prompt, system, **kwargs)
+                return self._generate_anthropic(prompt, system, **kwargs)
+            elif provider == 'tinyllama':
+                if not self.tinyllama_model:
+                    if not self.fallback_enabled:
+                        raise ValueError("TinyLLaMA não configurado")
+                    else:
+                        return self._generate_openai(prompt, system, **kwargs)
+                return self._generate_tinyllama(prompt, system, **kwargs)
+            elif provider == 'phi1':
+                if not self.phi1_model:
+                    if not self.fallback_enabled:
+                        raise ValueError("Phi-1 não configurado")
+                    else:
+                        return self._generate_openai(prompt, system, **kwargs)
+                return self._generate_phi1(prompt, system, **kwargs)
+            elif provider == 'deepseek_local':
+                if not self.deepseek_model:
+                    if not self.fallback_enabled:
+                        raise ValueError("DeepSeek Coder não configurado")
+                    else:
+                        return self._generate_openai(prompt, system, **kwargs)
+                return self._generate_deepseek(prompt, system, **kwargs)
+            elif provider == 'phi3':
+                if not self.phi3_model:
+                    if not self.fallback_enabled:
+                        raise ValueError("Phi-3 Mini não configurado")
+                    else:
+                        return self._generate_openai(prompt, system, **kwargs)
+                return self._generate_phi3(prompt, system, **kwargs)
+            else:
+                raise ValueError(f"Provedor {provider} não suportado")
 
     def generate(
         self,
@@ -1199,8 +1213,28 @@ class ModelRegistry:
         return 'openai'
 
     def get_provider_config(self, provider_name: str) -> Dict[str, Any]:
+        """
+        Obtém as configurações específicas do provedor.
+        
+        Args:
+            provider_name: Nome do provedor
+            
+        Returns:
+            Dict com configurações do provedor, incluindo o atributo remote
+        """
         for p in self.providers:
             if p['name'] == provider_name:
+                # Certifique-se de que o atributo 'remote' esteja presente na resposta
+                if 'remote' not in p:
+                    # Determinar automaticamente se o modelo é remoto com base na URL ou nome
+                    url = p.get('url', '')
+                    name = p.get('name', '')
+                    if url and 'huggingface.co' in url:
+                        p['remote'] = False
+                    elif any(keyword in name.lower() for keyword in ['openai', 'openrouter', 'anthropic', 'gemini']):
+                        p['remote'] = True
+                    else:
+                        p['remote'] = None
                 return p
         return {}
 

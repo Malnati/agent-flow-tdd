@@ -32,6 +32,7 @@ models:
       prefix_pattern: gpt-3.5-turbo
       model_path: "./models/gpt-3.5-turbo.gguf"
       dir: "./models/openai"
+      remote: true
       n_ctx: 2048
       n_threads: 4
       model: gpt-3.5-turbo
@@ -41,6 +42,7 @@ models:
       prefix_pattern: gpt-4
       model_path: "./models/gpt-4.gguf"
       dir: "./models/openai"
+      remote: true
       n_ctx: 2048
       n_threads: 4
       model: gpt-4
@@ -50,6 +52,7 @@ models:
       prefix_pattern: meta-llama/llama-3-8b
       model_path: "./models/meta-llama-3-8b.gguf"
       dir: "./models/openrouter"
+      remote: true
       n_ctx: 2048
       n_threads: 4
       model: meta-llama-3-8b
@@ -59,6 +62,7 @@ models:
       prefix_pattern: deepseek-coder:7b-instruct-q4
       model_path: "./models/deepseek-coder-7b-instruct-q4.gguf"
       dir: "./models/openrouter"
+      remote: true
       n_ctx: 2048
       n_threads: 4
       model: deepseek-coder-7b-instruct-q4
@@ -68,6 +72,7 @@ models:
       prefix_pattern: gemini-pro
       model_path: "./models/gemini-pro.gguf"
       dir: "./models/gemini"
+      remote: true
       n_ctx: 2048
       n_threads: 4
       model: gemini-pro
@@ -77,6 +82,7 @@ models:
       prefix_pattern: claude-3-opus-20240229
       model_path: "./models/claude-3-opus-20240229.gguf"
       dir: "./models/anthropic"
+      remote: true
       n_ctx: 2048
       n_threads: 4
       model: claude-3-opus-20240229
@@ -86,6 +92,7 @@ models:
       prefix_pattern: tinyllama-1.1b
       model_path: "./models/tinyllama-1.1b.gguf"
       dir: "./models/tinyllama"
+      remote: false
       n_ctx: 2048
       n_threads: 4
       model: tinyllama-1.1b
@@ -95,6 +102,7 @@ models:
       prefix_pattern: phi-1
       model_path: "./models/phi-1.gguf"
       dir: "./models/phi"
+      remote: false
       n_ctx: 2048
       n_threads: 4
       model: phi-1
@@ -104,6 +112,7 @@ models:
       prefix_pattern: deepseek-local-coder
       model_path: "./models/deepseek-coder.gguf"
       dir: "./models/deepseek"
+      remote: false
       n_ctx: 2048
       n_threads: 4
       model: deepseek-local-coder
@@ -113,6 +122,7 @@ models:
       prefix_pattern: deepseek-coder-awq
       model_path: "./models/deepseek-coder-awq.gguf"
       dir: "./models/deepseek"
+      remote: false
       n_ctx: 2048
       n_threads: 4
       model: deepseek-coder-awq
@@ -122,6 +132,7 @@ models:
       prefix_pattern: phi3-mini
       model_path: "./models/phi3-mini.gguf"
       dir: "./models/phi3"
+      remote: false
       n_ctx: 2048
       n_threads: 4
       model: phi3-mini
@@ -131,6 +142,7 @@ models:
       prefix_pattern: phi3-mini-fp16
       model_path: "./models/phi3-mini.gguf"
       dir: "./models/phi3"
+      remote: false
       n_ctx: 2048
       n_threads: 4
       model: phi3-mini-fp16
