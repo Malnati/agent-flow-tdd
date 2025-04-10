@@ -2,7 +2,6 @@
 # src/core/models.py
 Gerenciador de modelos de IA com suporte a múltiplos provedores e fallback automático.
 """
-from enum import Enum
 from typing import Any, Dict, Optional, Tuple, List, Callable
 import os
 import json
@@ -45,19 +44,9 @@ def load_config() -> Dict[str, Any]:
         config = yaml.safe_load(f)
         return config["models"]
 
-class ModelProvider(str, Enum):
-    """Provedores de modelos suportados."""
-    OPENAI = "openai"
-    OPENROUTER = "openrouter"
-    GEMINI = "gemini"
-    TINYLLAMA = "tinyllama"
-    PHI1 = "phi1"
-    DEEPSEEK_LOCAL = "deepseek_local"
-    PHI3 = "phi3"
-
 class ModelConfig(BaseModel):
     """Configuração de um modelo."""
-    provider: ModelProvider
+    provider: str  # Alterado de ModelProvider para str para compatibilidade com nomes dinâmicos
     model_id: str
     api_key: str
     timeout: int
@@ -1070,18 +1059,17 @@ class ModelRegistry:
     def get_env_vars(self) -> Dict[str, str]:
         return self.config.get('env_vars', {})
 
-    class ModelProvider(str, Enum):
-        """Provedores de modelos suportados."""
-        OPENAI = "openai"
-        OPENROUTER = "openrouter"
-        GEMINI = "gemini"
-        TINYLLAMA = "tinyllama"
-        PHI1 = "phi1"
-        DEEPSEEK_LOCAL = "deepseek_local"
-        PHI3 = "phi3"
-
     def get_defaults(self) -> Dict[str, Any]:
         return self.config.get('defaults', {})
+
+    def list_provider_names_enum_safe(self) -> List[str]:
+        """
+        Retorna os nomes dos provedores em formato seguro para constantes.
+        
+        Returns:
+            Lista de nomes formatados (lowercase, underscore, sem hífen)
+        """
+        return [p['name'].replace('-', '_').lower() for p in self.providers]
 
 # Função para verificar e baixar modelos
 class ModelDownloader:
