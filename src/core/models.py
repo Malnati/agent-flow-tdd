@@ -1232,13 +1232,14 @@ class ModelRegistry:
 
 # Função para verificar e baixar modelos
 class ModelDownloader:
-    MODEL_URLS = {
-        "tinyllama": "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
-        "phi1": "https://huggingface.co/professorf/phi-1-gguf/resolve/main/phi-1-f16.gguf",
-        "deepseek": "https://huggingface.co/TheBloke/deepseek-coder-6.7B-instruct-GGUF/resolve/main/deepseek-coder-6.7b-instruct.Q4_K_M.gguf",
-        "phi3": "https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/Phi-3-mini-4k-instruct-q4.gguf"
-    }
-    MODEL_DIR = "models"
+    @staticmethod
+    def verify_and_download_models():
+        config = load_config()
+        for provider in config['providers']:
+            url = provider.get('url')
+            if url:
+                for model_name in provider['models']:
+                    ModelDownloader.download_model(model_name, url)
 
     @staticmethod
     def download_model(model_name, url):
@@ -1261,8 +1262,3 @@ class ModelDownloader:
     def is_model_available(model_name: str) -> bool:
         model_path = os.path.join(ModelDownloader.MODEL_DIR, f"{model_name}.gguf")
         return os.path.exists(model_path) and os.path.getsize(model_path) >= 1000000
-
-    @staticmethod
-    def verify_and_download_models():
-        for model_name, url in ModelDownloader.MODEL_URLS.items():
-            ModelDownloader.download_model(model_name, url)
