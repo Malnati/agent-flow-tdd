@@ -1232,31 +1232,61 @@ class ModelRegistry:
 
 # Função para verificar e baixar modelos
 class ModelDownloader:
+    MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "models")
+    
     @staticmethod
     def verify_and_download_models():
+        logger.info("Iniciando verificação de modelos...")
         config = load_config()
         for provider in config['providers']:
+            model_name = provider.get('model')
             url = provider.get('url')
-            if url:
-                model_name = provider['model']
+            if model_name and url and ModelDownloader.is_valid_url(url):
                 ModelDownloader.download_model(model_name, url)
+        logger.info("Verificação de modelos concluída.")
+
+    @staticmethod
+    def is_valid_url(url):
+        """Verifica se a URL é válida para download."""
+        try:
+            return url and url.startswith(('http://', 'https://'))
+        except Exception as e:
+            logger.warning(f"URL inválida: {str(e)}")
+            return False
 
     @staticmethod
     def download_model(model_name, url):
         model_path = os.path.join(ModelDownloader.MODEL_DIR, f"{model_name}.gguf")
         if not ModelDownloader.is_model_available(model_name):
-            print(f"📥 Baixando modelo {model_name}...")
-            os.makedirs(ModelDownloader.MODEL_DIR, exist_ok=True)
-            response = requests.get(url, stream=True)
-            if response.status_code == 200:
-                with open(model_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        f.write(chunk)
-                print(f"✅ Modelo {model_name} baixado com sucesso!")
-            else:
-                print(f"❌ Falha ao baixar o modelo {model_name}. Código de status: {response.status_code}")
+            try:
+                print(f"📥 Baixando modelo {model_name}...")
+                logger.info(f"Baixando modelo {model_name} de {url}")
+                
+                os.makedirs(ModelDownloader.MODEL_DIR, exist_ok=True)
+                
+                # Verifica se a URL é válida
+                if not url.startswith(('http://', 'https://')):
+                    print(f"⚠️ URL inválida para o modelo {model_name}: {url}")
+                    logger.warning(f"URL inválida para modelo {model_name}: {url}")
+                    return
+                
+                # Tenta fazer o download
+                response = requests.get(url, stream=True, timeout=30)
+                if response.status_code == 200:
+                    with open(model_path, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                    print(f"✅ Modelo {model_name} baixado com sucesso!")
+                    logger.info(f"Modelo {model_name} baixado com sucesso")
+                else:
+                    print(f"❌ Falha ao baixar o modelo {model_name}. Código de status: {response.status_code}")
+                    logger.error(f"Falha ao baixar modelo {model_name}. Status: {response.status_code}")
+            except Exception as e:
+                print(f"❌ Erro ao baixar o modelo {model_name}: {str(e)}")
+                logger.error(f"Erro ao baixar modelo {model_name}: {str(e)}")
         else:
             print(f"✅ Modelo {model_name} já está disponível.")
+            logger.info(f"Modelo {model_name} já está disponível")
 
     @staticmethod
     def is_model_available(model_name: str) -> bool:
