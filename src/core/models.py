@@ -1276,8 +1276,22 @@ class ModelDownloader:
             model_name = provider.get('model')
             url = provider.get('url')
             model_dir = provider.get('dir', './models')
-            if model_name and url and ModelDownloader.is_valid_url(url):
-                ModelDownloader.download_model(model_name, url, model_dir)
+            
+            # Verifica a flag remote
+            remote = provider.get('remote')
+            
+            if remote is True:
+                # Ignora modelos remotos
+                logger.debug(f"Ignorando modelo remoto: {model_name}")
+                continue
+            elif remote is False or remote is None:
+                # Processa modelos locais ou sem flag definida
+                if remote is None:
+                    logger.warning(f"Flag 'remote' não definida para o modelo {model_name}. Assumindo comportamento padrão.")
+                
+                if model_name and url and ModelDownloader.is_valid_url(url):
+                    ModelDownloader.download_model(model_name, url, model_dir)
+        
         logger.info("Verificação de modelos concluída.")
 
     @staticmethod
