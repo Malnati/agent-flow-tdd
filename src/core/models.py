@@ -178,7 +178,7 @@ class ModelManager:
                     
                     # Verifica se o modelo é local (não remoto)
                     if provider_config.get('remote', True) == False:
-                        model_path = provider_config['model_path']
+                        provider_config['model_path']
                         
                         # Verifica se o modelo existe
                         full_model_dir = os.path.join(ModelDownloader.BASE_DIR, os.path.normpath(provider_config.get('dir', 'models').lstrip('./')))
@@ -330,13 +330,19 @@ class ModelManager:
         provider_config = self.registry.get_provider_config(provider)
         is_remote = provider_config.get('remote', None)
         
-        # Verifica se o modelo está disponível
-        if provider == 'deepseek-local-coder' and not self.deepseek_model:
-            logger.error("Modelo DeepSeek Coder não está disponível.")
-            raise ValueError("Modelo DeepSeek Coder não está disponível. Verifique se o arquivo do modelo está presente e acessível.")
-        elif provider == 'phi3-mini' and not self.phi3_model:
-            logger.error("Modelo Phi-3 Mini não está disponível.")
-            raise ValueError("Modelo Phi-3 Mini não está disponível. Verifique se o arquivo do modelo está presente e acessível.")
+        # Verifica se o modelo está disponível com base na flag remote
+        if is_remote is False:
+            # Para modelos locais, verificar se a instância do modelo está carregada
+            attr_name = f"{provider.replace('-', '_')}_model".replace('tinyllama_1.1b', 'tinyllama')
+            model_instance = getattr(self, attr_name, None)
+            
+            if not model_instance:
+                logger.error(f"Modelo {provider} não está disponível localmente.")
+                if self.fallback_enabled:
+                    logger.warning(f"Usando fallback para modelo {provider}")
+                    return self._generate_openai(prompt, system, **kwargs)
+                else:
+                    raise ValueError(f"Modelo {provider} não está disponível localmente. Verifique se o arquivo do modelo está presente e acessível.")
         
         # Provedores remotos (API)
         if is_remote is True:
@@ -383,32 +389,12 @@ class ModelManager:
         # Provedores locais (usando llama.cpp)
         elif is_remote is False:
             if provider == 'tinyllama-1.1b' or provider == 'tinyllama':
-                if not self.tinyllama_model:
-                    if not self.fallback_enabled:
-                        raise ValueError("TinyLLaMA não configurado")
-                    else:
-                        return self._generate_openai(prompt, system, **kwargs)
                 return self._generate_tinyllama(prompt, system, **kwargs)
             elif provider == 'phi1':
-                if not self.phi1_model:
-                    if not self.fallback_enabled:
-                        raise ValueError("Phi-1 não configurado")
-                    else:
-                        return self._generate_openai(prompt, system, **kwargs)
                 return self._generate_phi1(prompt, system, **kwargs)
             elif provider == 'deepseek-local-coder':
-                if not self.deepseek_model:
-                    if not self.fallback_enabled:
-                        raise ValueError("DeepSeek Coder não configurado")
-                    else:
-                        return self._generate_openai(prompt, system, **kwargs)
                 return self._generate_deepseek(prompt, system, **kwargs)
             elif provider == 'phi3-mini':
-                if not self.phi3_model:
-                    if not self.fallback_enabled:
-                        raise ValueError("Phi-3 Mini não configurado")
-                    else:
-                        return self._generate_openai(prompt, system, **kwargs)
                 return self._generate_phi3(prompt, system, **kwargs)
         # Fallback para comportamento anterior
         else:
@@ -453,32 +439,12 @@ class ModelManager:
                         return self._generate_openai(prompt, system, **kwargs)
                 return self._generate_anthropic(prompt, system, **kwargs)
             elif provider == 'tinyllama':
-                if not self.tinyllama_model:
-                    if not self.fallback_enabled:
-                        raise ValueError("TinyLLaMA não configurado")
-                    else:
-                        return self._generate_openai(prompt, system, **kwargs)
                 return self._generate_tinyllama(prompt, system, **kwargs)
             elif provider == 'phi1':
-                if not self.phi1_model:
-                    if not self.fallback_enabled:
-                        raise ValueError("Phi-1 não configurado")
-                    else:
-                        return self._generate_openai(prompt, system, **kwargs)
                 return self._generate_phi1(prompt, system, **kwargs)
             elif provider == 'deepseek_local':
-                if not self.deepseek_model:
-                    if not self.fallback_enabled:
-                        raise ValueError("DeepSeek Coder não configurado")
-                    else:
-                        return self._generate_openai(prompt, system, **kwargs)
                 return self._generate_deepseek(prompt, system, **kwargs)
             elif provider == 'phi3':
-                if not self.phi3_model:
-                    if not self.fallback_enabled:
-                        raise ValueError("Phi-3 Mini não configurado")
-                    else:
-                        return self._generate_openai(prompt, system, **kwargs)
                 return self._generate_phi3(prompt, system, **kwargs)
             else:
                 raise ValueError(f"Provedor {provider} não suportado")
