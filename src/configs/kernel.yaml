@@ -31,6 +31,7 @@ models:
     - name: openai-gpt-3.5-turbo                          # Provedor OpenAI via API oficial
       prefix_pattern: gpt-3.5-turbo
       model_path: "./models/gpt-3.5-turbo.gguf"
+      dir: "./models/openai"
       n_ctx: 2048
       n_threads: 4
       model: gpt-3.5-turbo
@@ -39,6 +40,7 @@ models:
     - name: openai-gpt-4                          # Provedor OpenAI via API oficial
       prefix_pattern: gpt-4
       model_path: "./models/gpt-4.gguf"
+      dir: "./models/openai"
       n_ctx: 2048
       n_threads: 4
       model: gpt-4
@@ -47,6 +49,7 @@ models:
     - name: openrouter-meta-llama-3-8b                      # Provedor OpenRouter via API
       prefix_pattern: meta-llama/llama-3-8b
       model_path: "./models/meta-llama-3-8b.gguf"
+      dir: "./models/openrouter"
       n_ctx: 2048
       n_threads: 4
       model: meta-llama-3-8b
@@ -55,6 +58,7 @@ models:
     - name: openrouter-deepseek-coder-7b-instruct-q4                      # Provedor OpenRouter via API
       prefix_pattern: deepseek-coder:7b-instruct-q4
       model_path: "./models/deepseek-coder-7b-instruct-q4.gguf"
+      dir: "./models/openrouter"
       n_ctx: 2048
       n_threads: 4
       model: deepseek-coder-7b-instruct-q4
@@ -63,6 +67,7 @@ models:
     - name: gemini-pro                          # Provedor Gemini
       prefix_pattern: gemini-pro
       model_path: "./models/gemini-pro.gguf"
+      dir: "./models/gemini"
       n_ctx: 2048
       n_threads: 4
       model: gemini-pro
@@ -71,6 +76,7 @@ models:
     - name: anthropic-claude-3-opus-20240229                       # Provedor Anthropic
       prefix_pattern: claude-3-opus-20240229
       model_path: "./models/claude-3-opus-20240229.gguf"
+      dir: "./models/anthropic"
       n_ctx: 2048
       n_threads: 4
       model: claude-3-opus-20240229
@@ -79,6 +85,7 @@ models:
     - name: tinyllama-1.1b                       # Provedor TinyLlama
       prefix_pattern: tinyllama-1.1b
       model_path: "./models/tinyllama-1.1b.gguf"
+      dir: "./models/tinyllama"
       n_ctx: 2048
       n_threads: 4
       model: tinyllama-1.1b
@@ -87,6 +94,7 @@ models:
     - name: phi1                            # Modelo local executado via llama.cpp
       prefix_pattern: phi-1
       model_path: "./models/phi-1.gguf"
+      dir: "./models/phi"
       n_ctx: 2048
       n_threads: 4
       model: phi-1
@@ -95,6 +103,7 @@ models:
     - name: deepseek-local-coder                  # Provedor DeepSeek local
       prefix_pattern: deepseek-local-coder
       model_path: "./models/deepseek-coder.gguf"
+      dir: "./models/deepseek"
       n_ctx: 2048
       n_threads: 4
       model: deepseek-local-coder
@@ -103,6 +112,7 @@ models:
     - name: deepseek-coder-awq                  # Provedor DeepSeek local
       prefix_pattern: deepseek-coder-awq
       model_path: "./models/deepseek-coder-awq.gguf"
+      dir: "./models/deepseek"
       n_ctx: 2048
       n_threads: 4
       model: deepseek-coder-awq
@@ -111,6 +121,7 @@ models:
     - name: phi3-mini                            # Modelo local executado via llama.cpp
       prefix_pattern: phi3-mini
       model_path: "./models/phi3-mini.gguf"
+      dir: "./models/phi3"
       n_ctx: 2048
       n_threads: 4
       model: phi3-mini
@@ -119,6 +130,7 @@ models:
     - name: phi3-mini-fp16                            # Modelo local executado via llama.cpp
       prefix_pattern: phi3-mini-fp16
       model_path: "./models/phi3-mini.gguf"
+      dir: "./models/phi3"
       n_ctx: 2048
       n_threads: 4
       model: phi3-mini-fp16

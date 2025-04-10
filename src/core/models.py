@@ -1232,7 +1232,7 @@ class ModelRegistry:
 
 # Função para verificar e baixar modelos
 class ModelDownloader:
-    MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "models")
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     
     @staticmethod
     def verify_and_download_models():
@@ -1241,8 +1241,9 @@ class ModelDownloader:
         for provider in config['providers']:
             model_name = provider.get('model')
             url = provider.get('url')
+            model_dir = provider.get('dir', './models')
             if model_name and url and ModelDownloader.is_valid_url(url):
-                ModelDownloader.download_model(model_name, url)
+                ModelDownloader.download_model(model_name, url, model_dir)
         logger.info("Verificação de modelos concluída.")
 
     @staticmethod
@@ -1255,14 +1256,18 @@ class ModelDownloader:
             return False
 
     @staticmethod
-    def download_model(model_name, url):
-        model_path = os.path.join(ModelDownloader.MODEL_DIR, f"{model_name}.gguf")
-        if not ModelDownloader.is_model_available(model_name):
+    def download_model(model_name, url, model_dir='./models'):
+        # Normaliza o caminho do diretório do modelo
+        full_model_dir = os.path.join(ModelDownloader.BASE_DIR, os.path.normpath(model_dir.lstrip('./')))
+        model_path = os.path.join(full_model_dir, f"{model_name}.gguf")
+        
+        if not ModelDownloader.is_model_available(model_name, model_dir):
             try:
                 print(f"📥 Baixando modelo {model_name}...")
                 logger.info(f"Baixando modelo {model_name} de {url}")
                 
-                os.makedirs(ModelDownloader.MODEL_DIR, exist_ok=True)
+                # Garante que o diretório exista
+                os.makedirs(full_model_dir, exist_ok=True)
                 
                 # Verifica se a URL é válida
                 if not url.startswith(('http://', 'https://')):
@@ -1289,6 +1294,7 @@ class ModelDownloader:
             logger.info(f"Modelo {model_name} já está disponível")
 
     @staticmethod
-    def is_model_available(model_name: str) -> bool:
-        model_path = os.path.join(ModelDownloader.MODEL_DIR, f"{model_name}.gguf")
+    def is_model_available(model_name: str, model_dir='./models') -> bool:
+        full_model_dir = os.path.join(ModelDownloader.BASE_DIR, os.path.normpath(model_dir.lstrip('./')))
+        model_path = os.path.join(full_model_dir, f"{model_name}.gguf")
         return os.path.exists(model_path) and os.path.getsize(model_path) >= 1000000
