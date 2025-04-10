@@ -28,57 +28,98 @@ models:
     ttl: 300       # Tempo de validade das respostas em cache (segundos)
 
   providers:
-    - name: openai                          # Provedor OpenAI via API oficial
-      prefix_patterns: ["gpt-", "text-"]
-      models: ["gpt-3.5-turbo", "gpt-4"]
-      url: "https://api.openai.com/v1/models"
+    - name: openai-gpt-3.5-turbo                          # Provedor OpenAI via API oficial
+      prefix_pattern: gpt-3.5-turbo
+      model_path: "./models/gpt-3.5-turbo.gguf"
+      n_ctx: 2048
+      n_threads: 4
+      model: gpt-3.5-turbo
+      url: "https://api.openai.com/v1/models/gpt-3.5-turbo"
 
-    - name: openrouter                      # Provedor OpenRouter via API
-      prefix_patterns: ["meta-llama/", "mistral/", "deepseek-coder:"]
-      base_url: "https://openrouter.ai/api/v1"
-      models: ["meta-llama/llama-3-8b", "deepseek-coder:7b-instruct-q4"]
-      url: "https://openrouter.ai/api/v1/models"
+    - name: openai-gpt-4                          # Provedor OpenAI via API oficial
+      prefix_pattern: gpt-4
+      model_path: "./models/gpt-4.gguf"
+      n_ctx: 2048
+      n_threads: 4
+      model: gpt-4
+      url: "https://api.openai.com/v1/models/gpt-4"
 
-    - name: gemini                          # Provedor Gemini
-      prefix_patterns: ["gemini-"]
-      default_model: "gemini-pro"
-      models: ["gemini-pro"]
-      url: "https://gemini.api/models"
+    - name: openrouter-meta-llama-3-8b                      # Provedor OpenRouter via API
+      prefix_pattern: meta-llama/llama-3-8b
+      model_path: "./models/meta-llama-3-8b.gguf"
+      n_ctx: 2048
+      n_threads: 4
+      model: meta-llama-3-8b
+      url: "https://openrouter.ai/api/v1/models/meta-llama/llama-3-8b"
 
-    - name: anthropic                       # Provedor Anthropic
-      prefix_patterns: ["claude-"]
-      models: ["claude-3-opus-20240229"]
-      url: "https://anthropic.api/models"
+    - name: openrouter-deepseek-coder-7b-instruct-q4                      # Provedor OpenRouter via API
+      prefix_pattern: deepseek-coder:7b-instruct-q4
+      model_path: "./models/deepseek-coder-7b-instruct-q4.gguf"
+      n_ctx: 2048
+      n_threads: 4
+      model: deepseek-coder-7b-instruct-q4
+      url: "https://openrouter.ai/api/v1/models/deepseek-coder:7b-instruct-q4"
 
-    - name: tinyllama                       # Provedor TinyLlama
-      prefix_patterns: ["tinyllama-"]
+    - name: gemini-pro                          # Provedor Gemini
+      prefix_pattern: gemini-pro
+      model_path: "./models/gemini-pro.gguf"
+      n_ctx: 2048
+      n_threads: 4
+      model: gemini-pro
+      url: "https://gemini.api/models/gemini-pro"
+
+    - name: anthropic-claude-3-opus-20240229                       # Provedor Anthropic
+      prefix_pattern: claude-3-opus-20240229
+      model_path: "./models/claude-3-opus-20240229.gguf"
+      n_ctx: 2048
+      n_threads: 4
+      model: claude-3-opus-20240229
+      url: "https://anthropic.api/models/claude-3-opus-20240229"
+
+    - name: tinyllama-1.1b                       # Provedor TinyLlama
+      prefix_pattern: tinyllama-1.1b
       model_path: "./models/tinyllama-1.1b.gguf"
       n_ctx: 2048
       n_threads: 4
-      models: ["tinyllama-1.1b"]
+      model: tinyllama-1.1b
       url: "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
 
     - name: phi1                            # Modelo local executado via llama.cpp
-      prefix_patterns: ["phi-1"]
+      prefix_pattern: phi-1
       model_path: "./models/phi-1.gguf"
       n_ctx: 2048
       n_threads: 4
-      models: ["phi-1"]
+      model: phi-1
       url: "https://huggingface.co/professorf/phi-1-gguf/resolve/main/phi-1-f16.gguf"
 
-    - name: deepseek_local                  # Provedor DeepSeek local
-      prefix_patterns: ["deepseek-local-"]
+    - name: deepseek-local-coder                  # Provedor DeepSeek local
+      prefix_pattern: deepseek-local-coder
       model_path: "./models/deepseek-coder.gguf"
       n_ctx: 2048
       n_threads: 4
-      models: ["deepseek-local-coder"]
+      model: deepseek-local-coder
       url: "https://huggingface.co/TheBloke/deepseek-coder-6.7B-instruct-GGUF/resolve/main/deepseek-coder-6.7b-instruct.Q4_K_M.gguf"
 
-    - name: phi3                            # Modelo local executado via llama.cpp
-      prefix_patterns: ["phi3-"]
+    - name: deepseek-coder-awq                  # Provedor DeepSeek local
+      prefix_pattern: deepseek-coder-awq
+      model_path: "./models/deepseek-coder-awq.gguf"
+      n_ctx: 2048
+      n_threads: 4
+      model: deepseek-coder-awq
+      url: "https://huggingface.co/TheBloke/deepseek-coder-6.7B-instruct-AWQ/tree/main"
+
+    - name: phi3-mini                            # Modelo local executado via llama.cpp
+      prefix_pattern: phi3-mini
       model_path: "./models/phi3-mini.gguf"
       n_ctx: 2048
       n_threads: 4
-      models: ["phi3-mini", "phi3-mini-fp16"]
+      model: phi3-mini
       url: "https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/raw/main/Phi-3-mini-4k-instruct-q4.gguf"
-      url_fp16: "https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/raw/main/Phi-3-mini-4k-instruct-fp16.gguf"
+
+    - name: phi3-mini-fp16                            # Modelo local executado via llama.cpp
+      prefix_pattern: phi3-mini-fp16
+      model_path: "./models/phi3-mini.gguf"
+      n_ctx: 2048
+      n_threads: 4
+      model: phi3-mini-fp16
+      url: "https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/raw/main/Phi-3-mini-4k-instruct-fp16.gguf"

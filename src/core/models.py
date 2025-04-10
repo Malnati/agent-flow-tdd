@@ -1238,8 +1238,8 @@ class ModelDownloader:
         for provider in config['providers']:
             url = provider.get('url')
             if url:
-                for model_name in provider['models']:
-                    ModelDownloader.download_model(model_name, url)
+                model_name = provider['model']
+                ModelDownloader.download_model(model_name, url)
 
     @staticmethod
     def download_model(model_name, url):
