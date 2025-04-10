@@ -168,9 +168,9 @@ class ModelManager:
                         logger.info(f"Cliente OpenAI configurado com sucesso")
                         
                     elif 'openrouter' in provider_name.lower():
-                        base_url = provider.get('base_url')
+                        base_url = provider.get('api_url')
                         if not base_url:
-                            logger.warning(f"Provedor {provider_name} não tem base_url definido no kernel.yaml")
+                            logger.warning(f"Provedor {provider_name} não tem api_url definido no kernel.yaml")
                             continue
                             
                         self.openrouter_client = OpenAI(
