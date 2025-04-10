@@ -1092,9 +1092,10 @@ class ModelRegistry:
                 # Certifique-se de que o atributo 'remote' esteja presente na resposta
                 if 'remote' not in p:
                     # Determinar automaticamente se o modelo é remoto com base na URL ou nome
-                    url = p.get('url', '')
+                    download_url = p.get('download_url', '')
+                    p.get('api_url', '')
                     name = p.get('name', '')
-                    if url and 'huggingface.co' in url:
+                    if download_url and 'huggingface.co' in download_url:
                         p['remote'] = False
                     elif any(keyword in name.lower() for keyword in ['openai', 'openrouter', 'anthropic', 'gemini']):
                         p['remote'] = True
@@ -1138,7 +1139,7 @@ class ModelDownloader:
         config = load_config()
         for provider in config['providers']:
             model_name = provider.get('model')
-            url = provider.get('url')
+            download_url = provider.get('download_url')
             model_dir = provider.get('dir', './models')
             
             # Verifica a flag remote
@@ -1153,8 +1154,8 @@ class ModelDownloader:
                 if remote is None:
                     logger.warning(f"Flag 'remote' não definida para o modelo {model_name}. Assumindo comportamento padrão.")
                 
-                if model_name and url and ModelDownloader.is_valid_url(url):
-                    ModelDownloader.download_model(model_name, url, model_dir)
+                if model_name and download_url and ModelDownloader.is_valid_url(download_url):
+                    ModelDownloader.download_model(model_name, download_url, model_dir)
         
         logger.info("Verificação de modelos concluída.")
 
@@ -1168,7 +1169,7 @@ class ModelDownloader:
             return False
 
     @staticmethod
-    def download_model(model_name, url, model_dir='./models'):
+    def download_model(model_name, download_url, model_dir='./models'):
         # Normaliza o caminho do diretório do modelo
         full_model_dir = os.path.join(ModelDownloader.BASE_DIR, os.path.normpath(model_dir.lstrip('./')))
         model_path = os.path.join(full_model_dir, f"{model_name}.gguf")
@@ -1176,19 +1177,19 @@ class ModelDownloader:
         if not ModelDownloader.is_model_available(model_name, model_dir):
             try:
                 print(f"📥 Baixando modelo {model_name}...")
-                logger.info(f"Baixando modelo {model_name} de {url}")
+                logger.info(f"Baixando modelo {model_name} de {download_url}")
                 
                 # Garante que o diretório exista
                 os.makedirs(full_model_dir, exist_ok=True)
                 
                 # Verifica se a URL é válida
-                if not url.startswith(('http://', 'https://')):
-                    print(f"⚠️ URL inválida para o modelo {model_name}: {url}")
-                    logger.warning(f"URL inválida para modelo {model_name}: {url}")
+                if not download_url.startswith(('http://', 'https://')):
+                    print(f"⚠️ URL inválida para o modelo {model_name}: {download_url}")
+                    logger.warning(f"URL inválida para modelo {model_name}: {download_url}")
                     return
                 
                 # Tenta fazer o download
-                response = requests.get(url, stream=True, timeout=30)
+                response = requests.get(download_url, stream=True, timeout=30)
                 if response.status_code == 200:
                     with open(model_path, 'wb') as f:
                         for chunk in response.iter_content(chunk_size=8192):
