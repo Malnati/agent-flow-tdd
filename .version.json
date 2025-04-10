@@ -1,5 +1,5 @@
 {
-    "current": "0.1.18",
+    "current": "0.1.19",
     "manifest": {
         "include": [
             "LICENSE",
@@ -121,6 +121,12 @@
             "commit": "refactor: atualizar vers\u00e3o do projeto para 0.1.17 e ajustar makefile\n\neste commit atualiza a vers\u00e3o do projeto para 0.1.17 no arquivo `.version.json` e modifica o `makefile` para utilizar o shell padr\u00e3o em vez de comandos bash, simplificando a execu\u00e7\u00e3o dos scripts de incremento de vers\u00e3o e publica\u00e7\u00e3o no pypi. essas mudan\u00e7as visam melhorar a legibilidade e a efici\u00eancia do processo de publica\u00e7\u00e3o.",
             "increment_type": "patch",
             "previous_version": "0.1.17"
+        },
+        "0.1.19": {
+            "date": "2025-04-10",
+            "commit": "refactor: alterar tipo do atributo 'provider' na classe modelconfig de modelprovider para str\n\neste commit modifica a classe `modelconfig`, alterando o tipo do atributo `provider` de `modelprovider` para `str`, permitindo compatibilidade com nomes din\u00e2micos. al\u00e9m disso, a classe `modelregistry` foi atualizada para incluir um novo m\u00e9todo que retorna os nomes dos provedores em um formato seguro. essas mudan\u00e7as visam aumentar a flexibilidade e a adaptabilidade do sistema ao lidar com diferentes provedores de modelos.",
+            "increment_type": "patch",
+            "previous_version": "0.1.18"
         }
     }
 }

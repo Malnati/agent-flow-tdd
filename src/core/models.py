@@ -2,8 +2,7 @@
 # src/core/models.py
 Gerenciador de modelos de IA com suporte a múltiplos provedores e fallback automático.
 """
-from enum import Enum
-from typing import Any, Dict, Optional, Tuple, List
+from typing import Any, Dict, Optional, Tuple, List, Callable
 import os
 import json
 import yaml
@@ -45,19 +44,9 @@ def load_config() -> Dict[str, Any]:
         config = yaml.safe_load(f)
         return config["models"]
 
-class ModelProvider(str, Enum):
-    """Provedores de modelos suportados."""
-    OPENAI = "openai"
-    OPENROUTER = "openrouter"
-    GEMINI = "gemini"
-    TINYLLAMA = "tinyllama"
-    PHI1 = "phi1"
-    DEEPSEEK_LOCAL = "deepseek_local"
-    PHI3 = "phi3"
-
 class ModelConfig(BaseModel):
     """Configuração de um modelo."""
-    provider: ModelProvider
+    provider: str  # Alterado de ModelProvider para str para compatibilidade com nomes dinâmicos
     model_id: str
     api_key: str
     timeout: int
@@ -164,128 +153,64 @@ class ModelManager:
         else:
             self.anthropic_client = None
 
-        # TinyLLaMA
+        # Modelos locais (executados via llama.cpp)
+        self._setup_local_models()
+
+    def _setup_local_models(self) -> None:
+        """Inicializa os modelos locais via llama.cpp"""
         try:
             from llama_cpp import Llama
-            tinyllama_config = self.registry.get_provider_config('tinyllama')
-            model_path = tinyllama_config['model_path']
-            
-            # Verifica se o modelo existe
-            if os.path.exists(model_path) and os.path.getsize(model_path) > 1000000:  # Tamanho mínimo de 1MB
+            # Inicializa todos os modelos locais disponíveis
+            for provider_name in ['tinyllama-1.1b', 'phi1', 'deepseek-local-coder', 'phi3-mini', 'phi3-mini-fp16']:
                 try:
-                    # Primeira tentativa - API mais recente
-                    self.tinyllama_model = Llama(
-                        model_path=model_path,
-                        n_ctx=tinyllama_config['n_ctx'],
-                        n_threads=tinyllama_config['n_threads']
-                    )
-                    logger.info(f"TinyLLaMA carregado com sucesso: {model_path}")
-                except TypeError as e:
-                    if "positional arguments but 3 were given" in str(e):
-                        # Segunda tentativa - API mais antiga
-                        # Passar apenas o caminho do modelo
-                        self.tinyllama_model = Llama(model_path)
-                        logger.info(f"TinyLLaMA carregado com API legada: {model_path}")
-                    else:
-                        raise
-            else:
-                logger.warning(f"Arquivo de modelo TinyLLaMA não encontrado ou muito pequeno: {model_path}")
-                self.tinyllama_model = None
-        except (ImportError, FileNotFoundError, ValueError) as e:
-            logger.warning(f"TinyLLaMA não disponível: {str(e)}")
+                    provider_config = self.registry.get_provider_config(provider_name)
+                    
+                    # Verifica se o modelo é local (não remoto)
+                    if provider_config.get('remote', True) == False:
+                        provider_config['model_path']
+                        
+                        # Verifica se o modelo existe
+                        full_model_dir = os.path.join(ModelDownloader.BASE_DIR, os.path.normpath(provider_config.get('dir', 'models').lstrip('./')))
+                        model_file = os.path.join(full_model_dir, f"{provider_config['model']}.gguf")
+                        
+                        if os.path.exists(model_file) and os.path.getsize(model_file) > 1000000:  # Tamanho mínimo de 1MB
+                            try:
+                                # Primeira tentativa - API mais recente
+                                model = Llama(
+                                    model_path=model_file,
+                                    n_ctx=provider_config.get('n_ctx', 2048),
+                                    n_threads=provider_config.get('n_threads', 4)
+                                )
+                                logger.info(f"Modelo {provider_name} carregado com sucesso: {model_file}")
+                                
+                                # Armazena o modelo carregado
+                                attr_name = f"{provider_name.replace('-', '_')}_model".replace('tinyllama_1.1b', 'tinyllama')
+                                setattr(self, attr_name, model)
+                                
+                            except TypeError as e:
+                                if "positional arguments but 3 were given" in str(e):
+                                    # Segunda tentativa - API mais antiga
+                                    model = Llama(model_file)
+                                    logger.info(f"Modelo {provider_name} carregado com API legada: {model_file}")
+                                    
+                                    # Armazena o modelo carregado
+                                    attr_name = f"{provider_name.replace('-', '_')}_model".replace('tinyllama_1.1b', 'tinyllama')
+                                    setattr(self, attr_name, model)
+                                else:
+                                    logger.warning(f"Erro ao carregar modelo {provider_name}: {str(e)}")
+                                    raise
+                        else:
+                            logger.warning(f"Arquivo de modelo {provider_name} não encontrado ou muito pequeno: {model_file}")
+                            attr_name = f"{provider_name.replace('-', '_')}_model".replace('tinyllama_1.1b', 'tinyllama')
+                            setattr(self, attr_name, None)
+                except Exception as e:
+                    logger.warning(f"Erro ao configurar modelo {provider_name}: {str(e)}")
+        except ImportError as e:
+            logger.warning(f"llama_cpp não disponível: {str(e)}")
+            # Define todos os atributos de modelo como None
             self.tinyllama_model = None
-            
-        # Phi-1
-        try:
-            from llama_cpp import Llama
-            phi1_config = self.registry.get_provider_config('phi1')
-            model_path = phi1_config['model_path']
-            
-            # Verifica se o modelo existe
-            if os.path.exists(model_path) and os.path.getsize(model_path) > 1000000:  # Tamanho mínimo de 1MB
-                try:
-                    # Primeira tentativa - API mais recente
-                    self.phi1_model = Llama(
-                        model_path=model_path,
-                        n_ctx=phi1_config['n_ctx'],
-                        n_threads=phi1_config['n_threads']
-                    )
-                    logger.info(f"Phi-1 carregado com sucesso: {model_path}")
-                except TypeError as e:
-                    if "positional arguments but 3 were given" in str(e):
-                        # Segunda tentativa - API mais antiga
-                        # Passar apenas o caminho do modelo
-                        self.phi1_model = Llama(model_path)
-                        logger.info(f"Phi-1 carregado com API legada: {model_path}")
-                    else:
-                        raise
-            else:
-                logger.warning(f"Arquivo de modelo Phi-1 não encontrado ou muito pequeno: {model_path}")
-                self.phi1_model = None
-        except (ImportError, FileNotFoundError, ValueError) as e:
-            logger.warning(f"Phi-1 não disponível: {str(e)}")
             self.phi1_model = None
-        
-        # DeepSeek Coder
-        try:
-            from llama_cpp import Llama
-            deepseek_config = self.registry.get_provider_config('deepseek_local')
-            model_path = deepseek_config['model_path']
-            
-            # Verifica se o modelo existe
-            if os.path.exists(model_path) and os.path.getsize(model_path) > 1000000:  # Tamanho mínimo de 1MB
-                try:
-                    # Primeira tentativa - API mais recente
-                    self.deepseek_model = Llama(
-                        model_path=model_path,
-                        n_ctx=deepseek_config['n_ctx'],
-                        n_threads=deepseek_config['n_threads']
-                    )
-                    logger.info(f"DeepSeek Coder carregado com sucesso: {model_path}")
-                except TypeError as e:
-                    if "positional arguments but 3 were given" in str(e):
-                        # Segunda tentativa - API mais antiga
-                        # Passar apenas o caminho do modelo
-                        self.deepseek_model = Llama(model_path)
-                        logger.info(f"DeepSeek Coder carregado com API legada: {model_path}")
-                    else:
-                        raise
-            else:
-                logger.warning(f"Arquivo de modelo DeepSeek Coder não encontrado ou muito pequeno: {model_path}")
-                self.deepseek_model = None
-        except (ImportError, FileNotFoundError, ValueError) as e:
-            logger.warning(f"DeepSeek Coder não disponível: {str(e)}")
             self.deepseek_model = None
-            
-        # Phi-3 Mini
-        try:
-            from llama_cpp import Llama
-            phi3_config = self.registry.get_provider_config('phi3')
-            model_path = phi3_config['model_path']
-            
-            # Verifica se o modelo existe
-            if os.path.exists(model_path) and os.path.getsize(model_path) > 1000000:  # Tamanho mínimo de 1MB
-                try:
-                    # Primeira tentativa - API mais recente
-                    self.phi3_model = Llama(
-                        model_path=model_path,
-                        n_ctx=phi3_config['n_ctx'],
-                        n_threads=phi3_config['n_threads']
-                    )
-                    logger.info(f"Phi-3 Mini carregado com sucesso: {model_path}")
-                except TypeError as e:
-                    if "positional arguments but 3 were given" in str(e):
-                        # Segunda tentativa - API mais antiga
-                        # Passar apenas o caminho do modelo
-                        self.phi3_model = Llama(model_path)
-                        logger.info(f"Phi-3 Mini carregado com API legada: {model_path}")
-                    else:
-                        raise
-            else:
-                logger.warning(f"Arquivo de modelo Phi-3 Mini não encontrado ou muito pequeno: {model_path}")
-                self.phi3_model = None
-        except (ImportError, FileNotFoundError, ValueError) as e:
-            logger.warning(f"Phi-3 Mini não disponível: {str(e)}")
             self.phi3_model = None
 
     def _get_cache_key(self, prompt: str, system: Optional[str] = None, **kwargs) -> str:
@@ -362,7 +287,7 @@ class ModelManager:
             provider: Nome do provedor
             
         Returns:
-            Dict com configurações do provedor
+            Dict com configurações do provedor, incluindo o atributo remote
         """
         return self.registry.get_provider_config(provider)
 
@@ -390,84 +315,128 @@ class ModelManager:
         """
         logger.info(f"Gerando resposta com provedor: {provider}")
         
-        # Verifica se o modelo está disponível
-        if provider == 'deepseek_local' and not self.deepseek_model:
-            logger.error("Modelo DeepSeek Coder não está disponível.")
-            raise ValueError("Modelo DeepSeek Coder não está disponível. Verifique se o arquivo do modelo está presente e acessível.")
-        elif provider == 'phi3' and not self.phi3_model:
-            logger.error("Modelo Phi-3 Mini não está disponível.")
-            raise ValueError("Modelo Phi-3 Mini não está disponível. Verifique se o arquivo do modelo está presente e acessível.")
+        # Obtém configurações do provedor, incluindo se é remoto ou local
+        provider_config = self.registry.get_provider_config(provider)
+        is_remote = provider_config.get('remote', None)
         
-        if provider == 'openai':
-            return self._generate_openai(prompt, system, **kwargs)
-        elif provider == 'openrouter':
-            if not self.openrouter_client:
-                if not self.fallback_enabled:
-                    raise ValueError("OpenRouter não configurado")
-                else:
-                    return self._generate_openai(prompt, system, **kwargs)
-            # Usar o cliente OpenRouter diretamente (não chamar _generate_openai)
-            messages = []
-            if system:
-                messages.append({"role": "system", "content": system})
-            messages.append({"role": "user", "content": prompt})
+        # Verifica se o modelo está disponível com base na flag remote
+        if is_remote is False:
+            # Para modelos locais, verificar se a instância do modelo está carregada
+            attr_name = f"{provider.replace('-', '_')}_model".replace('tinyllama_1.1b', 'tinyllama')
+            model_instance = getattr(self, attr_name, None)
             
-            response = self.openrouter_client.chat.completions.create(
-                model=self.model_name,
-                messages=messages,
-                temperature=kwargs.get('temperature', self.temperature),
-                max_tokens=kwargs.get('max_tokens', self.max_tokens)
-            )
-            
-            return response.choices[0].message.content, {
-                "model": response.model,
-                "usage": response.usage.model_dump(),
-                "status": "success"
-            }
-        elif provider == 'gemini':
-            if not self.gemini_model:
-                if not self.fallback_enabled:
-                    raise ValueError("Gemini não configurado")
-                else:
+            if not model_instance:
+                logger.error(f"Modelo {provider} não está disponível localmente.")
+                if self.fallback_enabled:
+                    logger.warning(f"Usando fallback para modelo {provider}")
                     return self._generate_openai(prompt, system, **kwargs)
-            return self._generate_gemini(prompt, system, **kwargs)
-        elif provider == 'anthropic':
-            if not self.anthropic_client:
-                if not self.fallback_enabled:
-                    raise ValueError("Anthropic não configurado")
                 else:
-                    return self._generate_openai(prompt, system, **kwargs)
-            return self._generate_anthropic(prompt, system, **kwargs)
-        elif provider == 'tinyllama':
-            if not self.tinyllama_model:
-                if not self.fallback_enabled:
-                    raise ValueError("TinyLLaMA não configurado")
-                else:
-                    return self._generate_openai(prompt, system, **kwargs)
-            return self._generate_tinyllama(prompt, system, **kwargs)
-        elif provider == 'phi1':
-            if not self.phi1_model:
-                if not self.fallback_enabled:
-                    raise ValueError("Phi-1 não configurado")
-                else:
-                    return self._generate_openai(prompt, system, **kwargs)
-            return self._generate_phi1(prompt, system, **kwargs)
-        elif provider == 'deepseek_local':
-            if not self.deepseek_model:
-                if not self.fallback_enabled:
-                    raise ValueError("DeepSeek Coder não configurado")
-                else:
-                    return self._generate_openai(prompt, system, **kwargs)
-            return self._generate_deepseek(prompt, system, **kwargs)
-        elif provider == 'phi3':
-            if not self.phi3_model:
-                if not self.fallback_enabled:
-                    raise ValueError("Phi-3 Mini não configurado")
-                else:
-                    return self._generate_openai(prompt, system, **kwargs)
-            return self._generate_phi3(prompt, system, **kwargs)
+                    raise ValueError(f"Modelo {provider} não está disponível localmente. Verifique se o arquivo do modelo está presente e acessível.")
+        
+        # Provedores remotos (API)
+        if is_remote is True:
+            if provider.startswith('openai'):
+                return self._generate_openai(prompt, system, **kwargs)
+            elif provider.startswith('openrouter'):
+                if not self.openrouter_client:
+                    if not self.fallback_enabled:
+                        raise ValueError("OpenRouter não configurado")
+                    else:
+                        return self._generate_openai(prompt, system, **kwargs)
+                # Usar o cliente OpenRouter diretamente (não chamar _generate_openai)
+                messages = []
+                if system:
+                    messages.append({"role": "system", "content": system})
+                messages.append({"role": "user", "content": prompt})
+                
+                response = self.openrouter_client.chat.completions.create(
+                    model=self.model_name,
+                    messages=messages,
+                    temperature=kwargs.get('temperature', self.temperature),
+                    max_tokens=kwargs.get('max_tokens', self.max_tokens)
+                )
+                
+                return response.choices[0].message.content, {
+                    "model": response.model,
+                    "usage": response.usage.model_dump(),
+                    "status": "success"
+                }
+            elif provider.startswith('gemini'):
+                if not self.gemini_model:
+                    if not self.fallback_enabled:
+                        raise ValueError("Gemini não configurado")
+                    else:
+                        return self._generate_openai(prompt, system, **kwargs)
+                return self._generate_gemini(prompt, system, **kwargs)
+            elif provider.startswith('anthropic'):
+                if not self.anthropic_client:
+                    if not self.fallback_enabled:
+                        raise ValueError("Anthropic não configurado")
+                    else:
+                        return self._generate_openai(prompt, system, **kwargs)
+                return self._generate_anthropic(prompt, system, **kwargs)
+        # Provedores locais (usando llama.cpp)
+        elif is_remote is False:
+            if provider == 'tinyllama-1.1b' or provider == 'tinyllama':
+                return self._generate_tinyllama(prompt, system, **kwargs)
+            elif provider == 'phi1':
+                return self._generate_phi1(prompt, system, **kwargs)
+            elif provider == 'deepseek-local-coder':
+                return self._generate_deepseek(prompt, system, **kwargs)
+            elif provider == 'phi3-mini':
+                return self._generate_phi3(prompt, system, **kwargs)
+        # Fallback para comportamento anterior
         else:
-            raise ValueError(f"Provedor {provider} não suportado")
+            if provider == 'openai':
+                return self._generate_openai(prompt, system, **kwargs)
+            elif provider == 'openrouter':
+                if not self.openrouter_client:
+                    if not self.fallback_enabled:
+                        raise ValueError("OpenRouter não configurado")
+                    else:
+                        return self._generate_openai(prompt, system, **kwargs)
+                # Usar o cliente OpenRouter diretamente
+                messages = []
+                if system:
+                    messages.append({"role": "system", "content": system})
+                messages.append({"role": "user", "content": prompt})
+                
+                response = self.openrouter_client.chat.completions.create(
+                    model=self.model_name,
+                    messages=messages,
+                    temperature=kwargs.get('temperature', self.temperature),
+                    max_tokens=kwargs.get('max_tokens', self.max_tokens)
+                )
+                
+                return response.choices[0].message.content, {
+                    "model": response.model,
+                    "usage": response.usage.model_dump(),
+                    "status": "success"
+                }
+            elif provider == 'gemini':
+                if not self.gemini_model:
+                    if not self.fallback_enabled:
+                        raise ValueError("Gemini não configurado")
+                    else:
+                        return self._generate_openai(prompt, system, **kwargs)
+                return self._generate_gemini(prompt, system, **kwargs)
+            elif provider == 'anthropic':
+                if not self.anthropic_client:
+                    if not self.fallback_enabled:
+                        raise ValueError("Anthropic não configurado")
+                    else:
+                        return self._generate_openai(prompt, system, **kwargs)
+                return self._generate_anthropic(prompt, system, **kwargs)
+            elif provider == 'tinyllama':
+                return self._generate_tinyllama(prompt, system, **kwargs)
+            elif provider == 'phi1':
+                return self._generate_phi1(prompt, system, **kwargs)
+            elif provider == 'deepseek_local':
+                return self._generate_deepseek(prompt, system, **kwargs)
+            elif provider == 'phi3':
+                return self._generate_phi3(prompt, system, **kwargs)
+            else:
+                raise ValueError(f"Provedor {provider} não suportado")
 
     def generate(
         self,
@@ -804,26 +773,49 @@ class ModelManager:
             "usage": {}
         }
 
-    def _generate_tinyllama(self, prompt: str, system: Optional[str] = None, **kwargs) -> Tuple[str, Dict[str, Any]]:
-        """Gera resposta usando TinyLLaMA."""
-        if not self.tinyllama_model:
-            raise ValueError("TinyLLaMA não configurado")
+    def _generate_local_model(
+        self,
+        provider_name: str,
+        prompt: str,
+        system: Optional[str],
+        formatter: Callable[[str, str], str],
+        stop: List[str],
+        model_id: str,
+        **kwargs
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        Método genérico para gerar respostas usando modelos locais.
+        
+        Args:
+            provider_name: Nome do provedor
+            prompt: Prompt para o modelo
+            system: Prompt de sistema (opcional)
+            formatter: Função que formata o prompt completo
+            stop: Lista de strings de parada
+            model_id: Identificador do modelo para metadados
+            **kwargs: Argumentos adicionais
+            
+        Returns:
+            Tupla (resposta, metadados)
+        """
+        # Obtém o atributo com o modelo
+        attr_name = f"{provider_name.replace('-', '_')}_model".replace('tinyllama_1.1b', 'tinyllama')
+        model_instance = getattr(self, attr_name, None)
+        
+        if not model_instance:
+            raise ValueError(f"Modelo {provider_name} não está disponível.")
             
         try:
-            # Formata o prompt
-            full_prompt = ""
-            if system:
-                full_prompt += f"<|system|>\n{system} Arbitro \n"
-            full_prompt += f"<|user|>\n{prompt} Arbitro \n<|assistant|>\n"
+            # Formata o prompt usando a função específica
+            full_prompt = formatter(system, prompt)
             
             # Parâmetros para geração
-            tinyllama_config = self.registry.get_provider_config('tinyllama')
-            max_tokens = kwargs.get('max_tokens', self.max_tokens) or tinyllama_config.get('default_max_tokens', 256)
+            provider_config = self.registry.get_provider_config(provider_name)
+            max_tokens = kwargs.get('max_tokens', self.max_tokens) or provider_config.get('default_max_tokens', 512)
             temperature = kwargs.get('temperature', self.temperature)
-            stop = [" Arbitro ", "<|user|>", "<|system|>", "<|assistant|>"]
             
-            # Usa apenas a API direta, que funciona em todas as versões
-            response = self.tinyllama_model(
+            # Usa a API do modelo
+            response = model_instance(
                 full_prompt,
                 max_tokens=max_tokens,
                 temperature=temperature,
@@ -854,7 +846,7 @@ class ModelManager:
                 # Mantém o texto original em caso de erro
             
             return text, {
-                "model": "tinyllama-1.1b",
+                "model": model_id,
                 "usage": {
                     "prompt_tokens": len(full_prompt.split()),
                     "completion_tokens": len(text.split()),
@@ -863,7 +855,7 @@ class ModelManager:
             }
             
         except Exception as e:
-            logger.error(f"Erro ao gerar resposta com TinyLLaMA: {str(e)}")
+            logger.error(f"Erro ao gerar resposta com {provider_name}: {str(e)}")
             # Retorna estrutura padrão em caso de erro
             text = json.dumps({
                 "name": "Sistema Genérico",
@@ -874,7 +866,7 @@ class ModelManager:
             }, ensure_ascii=False)
             
             return text, {
-                "model": "tinyllama-1.1b",
+                "model": model_id,
                 "error": str(e),
                 "usage": {
                     "prompt_tokens": len(prompt.split()),
@@ -882,256 +874,86 @@ class ModelManager:
                     "total_tokens": len(prompt.split()) + len(text.split())
                 }
             }
+
+    def _generate_tinyllama(self, prompt: str, system: Optional[str] = None, **kwargs) -> Tuple[str, Dict[str, Any]]:
+        """Gera resposta usando TinyLLaMA."""
+        def formatter(system, prompt):
+            full_prompt = ""
+            if system:
+                full_prompt += f"<|system|>\n{system} Arbitro \n"
+            full_prompt += f"<|user|>\n{prompt} Arbitro \n<|assistant|>\n"
+            return full_prompt
+            
+        stop = [" Arbitro ", "<|user|>", "<|system|>", "<|assistant|>"]
+        return self._generate_local_model(
+            provider_name='tinyllama',
+            prompt=prompt,
+            system=system,
+            formatter=formatter,
+            stop=stop,
+            model_id="tinyllama-1.1b",
+            **kwargs
+        )
 
     def _generate_phi1(self, prompt: str, system: Optional[str] = None, **kwargs) -> Tuple[str, Dict[str, Any]]:
         """Gera resposta usando Phi-1."""
-        if not self.phi1_model:
-            raise ValueError("Phi-1 não configurado")
-            
-        try:
-            # Formata o prompt
+        def formatter(system, prompt):
             full_prompt = ""
             if system:
                 full_prompt += f"<|system|>\n{system} Arbitro \n"
             full_prompt += f"<|user|>\n{prompt} Arbitro \n<|assistant|>\n"
+            return full_prompt
             
-            # Parâmetros para geração
-            phi1_config = self.registry.get_provider_config('phi1')
-            max_tokens = kwargs.get('max_tokens', self.max_tokens) or phi1_config.get('default_max_tokens', 100)
-            temperature = kwargs.get('temperature', self.temperature)
-            stop = [" Arbitro ", "<|user|>", "<|system|>", "<|assistant|>"]
-            
-            # Usa apenas a API direta, que funciona em todas as versões
-            response = self.phi1_model(
-                full_prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                stop=stop
-            )
-            text = response["choices"][0]["text"].strip()
-            
-            # Tenta extrair JSON se presente
-            try:
-                if '{' in text and '}' in text:
-                    start = text.find('{')
-                    end = text.rfind('}') + 1
-                    json_str = text[start:end]
-                    
-                    # Limpa o JSON
-                    json_str = json_str.replace('\n', ' ').replace('\r', '')
-                    while '  ' in json_str:
-                        json_str = json_str.replace('  ', ' ')
-                    
-                    # Valida se é um JSON válido
-                    json_data = json.loads(json_str)
-                    text = json.dumps(json_data, ensure_ascii=False)
-                else:
-                    # Se não encontrou JSON, retorna texto normal
-                    text = text
-            except Exception as e:
-                logger.error(f"Erro ao processar resposta JSON: {str(e)}")
-                # Mantém o texto original em caso de erro
-            
-            return text, {
-                "model": "phi-1",
-                "usage": {
-                    "prompt_tokens": len(full_prompt.split()),
-                    "completion_tokens": len(text.split()),
-                    "total_tokens": len(full_prompt.split()) + len(text.split())
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"Erro ao gerar resposta com Phi-1: {str(e)}")
-            # Retorna estrutura padrão em caso de erro
-            text = json.dumps({
-                "name": "Sistema Genérico",
-                "description": "Sistema a ser especificado",
-                "objectives": ["Definir objetivos específicos"],
-                "requirements": ["Definir requisitos específicos"],
-                "constraints": ["Definir restrições do sistema"]
-            }, ensure_ascii=False)
-            
-            return text, {
-                "model": "phi-1",
-                "error": str(e),
-                "usage": {
-                    "prompt_tokens": len(prompt.split()),
-                    "completion_tokens": len(text.split()),
-                    "total_tokens": len(prompt.split()) + len(text.split())
-                }
-            }
+        stop = [" Arbitro ", "<|user|>", "<|system|>", "<|assistant|>"]
+        return self._generate_local_model(
+            provider_name='phi1',
+            prompt=prompt,
+            system=system,
+            formatter=formatter,
+            stop=stop,
+            model_id="phi-1",
+            **kwargs
+        )
 
     def _generate_deepseek(self, prompt: str, system: Optional[str] = None, **kwargs) -> Tuple[str, Dict[str, Any]]:
         """Gera resposta usando DeepSeek Coder."""
-        if not self.deepseek_model:
-            raise ValueError("DeepSeek Coder não configurado")
-            
-        try:
-            # Formata o prompt para DeepSeek Coder
+        def formatter(system, prompt):
             full_prompt = ""
             if system:
                 full_prompt += f" \n{system}\n Arbitro \n"
-
             full_prompt += f"<user>\n{prompt}\n</user>\n<assistant>\n"
+            return full_prompt
             
-            # Parâmetros para geração
-            deepseek_config = self.registry.get_provider_config('deepseek_local')
-            max_tokens = kwargs.get('max_tokens', self.max_tokens) or deepseek_config.get('default_max_tokens', 512)
-            temperature = kwargs.get('temperature', self.temperature)
-            stop = ["</assistant>", "<user>", " ", "</user>", " Arbitro "]
-            
-            # Usa apenas a API direta, que funciona em todas as versões
-            response = self.deepseek_model(
-                full_prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                stop=stop
-            )
-            text = response["choices"][0]["text"].strip()
-            
-            # Tenta extrair JSON se presente
-            try:
-                if '{' in text and '}' in text:
-                    start = text.find('{')
-                    end = text.rfind('}') + 1
-                    json_str = text[start:end]
-                    
-                    # Limpa o JSON
-                    json_str = json_str.replace('\n', ' ').replace('\r', '')
-                    while '  ' in json_str:
-                        json_str = json_str.replace('  ', ' ')
-                    
-                    # Valida se é um JSON válido
-                    json_data = json.loads(json_str)
-                    text = json.dumps(json_data, ensure_ascii=False)
-                else:
-                    # Se não encontrou JSON, retorna texto normal
-                    text = text
-            except Exception as e:
-                logger.error(f"Erro ao processar resposta JSON: {str(e)}")
-                # Mantém o texto original em caso de erro
-            
-            # Usa um ID de modelo consistente para metadados
-            model_id = "deepseek-coder-local"
-            
-            return text, {
-                "model": model_id,
-                "usage": {
-                    "prompt_tokens": len(full_prompt.split()),
-                    "completion_tokens": len(text.split()),
-                    "total_tokens": len(full_prompt.split()) + len(text.split())
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"Erro ao gerar resposta com DeepSeek Coder: {str(e)}")
-            # Retorna estrutura padrão em caso de erro
-            text = json.dumps({
-                "name": "Sistema Genérico",
-                "description": "Sistema a ser especificado",
-                "objectives": ["Definir objetivos específicos"],
-                "requirements": ["Definir requisitos específicos"],
-                "constraints": ["Definir restrições do sistema"]
-            }, ensure_ascii=False)
-            
-            # Usa um ID de modelo consistente para metadados
-            model_id = "deepseek-coder-local"
-            
-            return text, {
-                "model": model_id,
-                "error": str(e),
-                "usage": {
-                    "prompt_tokens": len(prompt.split()),
-                    "completion_tokens": len(text.split()),
-                    "total_tokens": len(prompt.split()) + len(text.split())
-                }
-            }
+        stop = ["</assistant>", "<user>", " ", "</user>", " Arbitro "]
+        return self._generate_local_model(
+            provider_name='deepseek',
+            prompt=prompt,
+            system=system,
+            formatter=formatter,
+            stop=stop,
+            model_id="deepseek-coder-local",
+            **kwargs
+        )
 
     def _generate_phi3(self, prompt: str, system: Optional[str] = None, **kwargs) -> Tuple[str, Dict[str, Any]]:
         """Gera resposta usando Phi-3 Mini."""
-        if not self.phi3_model:
-            raise ValueError("Phi-3 Mini não configurado")
-            
-        try:
-            # Formata o prompt para Phi-3 Mini
+        def formatter(system, prompt):
             full_prompt = ""
             if system:
                 full_prompt += f"<|system|>\n{system}\n"
             full_prompt += f"<|user|>\n{prompt}\n<|assistant|>\n"
+            return full_prompt
             
-            # Parâmetros para geração
-            phi3_config = self.registry.get_provider_config('phi3')
-            max_tokens = kwargs.get('max_tokens', self.max_tokens) or phi3_config.get('default_max_tokens', 512)
-            temperature = kwargs.get('temperature', self.temperature)
-            stop = ["<|user|>", "<|system|>", "<|assistant|>"]
-            
-            # Usa apenas a API direta, que funciona em todas as versões
-            response = self.phi3_model(
-                full_prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                stop=stop
-            )
-            text = response["choices"][0]["text"].strip()
-            
-            # Tenta extrair JSON se presente
-            try:
-                if '{' in text and '}' in text:
-                    start = text.find('{')
-                    end = text.rfind('}') + 1
-                    json_str = text[start:end]
-                    
-                    # Limpa o JSON
-                    json_str = json_str.replace('\n', ' ').replace('\r', '')
-                    while '  ' in json_str:
-                        json_str = json_str.replace('  ', ' ')
-                    
-                    # Valida se é um JSON válido
-                    json_data = json.loads(json_str)
-                    text = json.dumps(json_data, ensure_ascii=False)
-                else:
-                    # Se não encontrou JSON, retorna texto normal
-                    text = text
-            except Exception as e:
-                logger.error(f"Erro ao processar resposta JSON: {str(e)}")
-                # Mantém o texto original em caso de erro
-            
-            # Usa nome padronizado do modelo
-            model_id = "phi3-mini"
-            
-            return text, {
-                "model": model_id,
-                "usage": {
-                    "prompt_tokens": len(full_prompt.split()),
-                    "completion_tokens": len(text.split()),
-                    "total_tokens": len(full_prompt.split()) + len(text.split())
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"Erro ao gerar resposta com Phi-3 Mini: {str(e)}")
-            # Retorna estrutura padrão em caso de erro
-            text = json.dumps({
-                "name": "Sistema Genérico",
-                "description": "Sistema a ser especificado",
-                "objectives": ["Definir objetivos específicos"],
-                "requirements": ["Definir requisitos específicos"],
-                "constraints": ["Definir restrições do sistema"]
-            }, ensure_ascii=False)
-            
-            # Usa nome padronizado do modelo
-            model_id = "phi3-mini"
-            
-            return text, {
-                "model": model_id,
-                "error": str(e),
-                "usage": {
-                    "prompt_tokens": len(prompt.split()),
-                    "completion_tokens": len(text.split()),
-                    "total_tokens": len(prompt.split()) + len(text.split())
-                }
-            }
+        stop = ["<|user|>", "<|system|>", "<|assistant|>"]
+        return self._generate_local_model(
+            provider_name='phi3',
+            prompt=prompt,
+            system=system,
+            formatter=formatter,
+            stop=stop,
+            model_id="phi3-mini",
+            **kwargs
+        )
 
 class ModelRegistry:
     def __init__(self, config_path: Optional[str] = None):
@@ -1199,8 +1021,28 @@ class ModelRegistry:
         return 'openai'
 
     def get_provider_config(self, provider_name: str) -> Dict[str, Any]:
+        """
+        Obtém as configurações específicas do provedor.
+        
+        Args:
+            provider_name: Nome do provedor
+            
+        Returns:
+            Dict com configurações do provedor, incluindo o atributo remote
+        """
         for p in self.providers:
             if p['name'] == provider_name:
+                # Certifique-se de que o atributo 'remote' esteja presente na resposta
+                if 'remote' not in p:
+                    # Determinar automaticamente se o modelo é remoto com base na URL ou nome
+                    url = p.get('url', '')
+                    name = p.get('name', '')
+                    if url and 'huggingface.co' in url:
+                        p['remote'] = False
+                    elif any(keyword in name.lower() for keyword in ['openai', 'openrouter', 'anthropic', 'gemini']):
+                        p['remote'] = True
+                    else:
+                        p['remote'] = None
                 return p
         return {}
 
@@ -1217,52 +1059,97 @@ class ModelRegistry:
     def get_env_vars(self) -> Dict[str, str]:
         return self.config.get('env_vars', {})
 
-    class ModelProvider(str, Enum):
-        """Provedores de modelos suportados."""
-        OPENAI = "openai"
-        OPENROUTER = "openrouter"
-        GEMINI = "gemini"
-        TINYLLAMA = "tinyllama"
-        PHI1 = "phi1"
-        DEEPSEEK_LOCAL = "deepseek_local"
-        PHI3 = "phi3"
-
     def get_defaults(self) -> Dict[str, Any]:
         return self.config.get('defaults', {})
 
+    def list_provider_names_enum_safe(self) -> List[str]:
+        """
+        Retorna os nomes dos provedores em formato seguro para constantes.
+        
+        Returns:
+            Lista de nomes formatados (lowercase, underscore, sem hífen)
+        """
+        return [p['name'].replace('-', '_').lower() for p in self.providers]
+
 # Função para verificar e baixar modelos
 class ModelDownloader:
-    MODEL_URLS = {
-        "tinyllama": "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
-        "phi1": "https://huggingface.co/professorf/phi-1-gguf/resolve/main/phi-1-f16.gguf",
-        "deepseek": "https://huggingface.co/TheBloke/deepseek-coder-6.7B-instruct-GGUF/resolve/main/deepseek-coder-6.7b-instruct.Q4_K_M.gguf",
-        "phi3": "https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/Phi-3-mini-4k-instruct-q4.gguf"
-    }
-    MODEL_DIR = "models"
-
-    @staticmethod
-    def download_model(model_name, url):
-        model_path = os.path.join(ModelDownloader.MODEL_DIR, f"{model_name}.gguf")
-        if not ModelDownloader.is_model_available(model_name):
-            print(f"📥 Baixando modelo {model_name}...")
-            os.makedirs(ModelDownloader.MODEL_DIR, exist_ok=True)
-            response = requests.get(url, stream=True)
-            if response.status_code == 200:
-                with open(model_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        f.write(chunk)
-                print(f"✅ Modelo {model_name} baixado com sucesso!")
-            else:
-                print(f"❌ Falha ao baixar o modelo {model_name}. Código de status: {response.status_code}")
-        else:
-            print(f"✅ Modelo {model_name} já está disponível.")
-
-    @staticmethod
-    def is_model_available(model_name: str) -> bool:
-        model_path = os.path.join(ModelDownloader.MODEL_DIR, f"{model_name}.gguf")
-        return os.path.exists(model_path) and os.path.getsize(model_path) >= 1000000
-
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    
     @staticmethod
     def verify_and_download_models():
-        for model_name, url in ModelDownloader.MODEL_URLS.items():
-            ModelDownloader.download_model(model_name, url)
+        logger.info("Iniciando verificação de modelos...")
+        config = load_config()
+        for provider in config['providers']:
+            model_name = provider.get('model')
+            url = provider.get('url')
+            model_dir = provider.get('dir', './models')
+            
+            # Verifica a flag remote
+            remote = provider.get('remote')
+            
+            if remote is True:
+                # Ignora modelos remotos
+                logger.debug(f"Ignorando modelo remoto: {model_name}")
+                continue
+            elif remote is False or remote is None:
+                # Processa modelos locais ou sem flag definida
+                if remote is None:
+                    logger.warning(f"Flag 'remote' não definida para o modelo {model_name}. Assumindo comportamento padrão.")
+                
+                if model_name and url and ModelDownloader.is_valid_url(url):
+                    ModelDownloader.download_model(model_name, url, model_dir)
+        
+        logger.info("Verificação de modelos concluída.")
+
+    @staticmethod
+    def is_valid_url(url):
+        """Verifica se a URL é válida para download."""
+        try:
+            return url and url.startswith(('http://', 'https://'))
+        except Exception as e:
+            logger.warning(f"URL inválida: {str(e)}")
+            return False
+
+    @staticmethod
+    def download_model(model_name, url, model_dir='./models'):
+        # Normaliza o caminho do diretório do modelo
+        full_model_dir = os.path.join(ModelDownloader.BASE_DIR, os.path.normpath(model_dir.lstrip('./')))
+        model_path = os.path.join(full_model_dir, f"{model_name}.gguf")
+        
+        if not ModelDownloader.is_model_available(model_name, model_dir):
+            try:
+                print(f"📥 Baixando modelo {model_name}...")
+                logger.info(f"Baixando modelo {model_name} de {url}")
+                
+                # Garante que o diretório exista
+                os.makedirs(full_model_dir, exist_ok=True)
+                
+                # Verifica se a URL é válida
+                if not url.startswith(('http://', 'https://')):
+                    print(f"⚠️ URL inválida para o modelo {model_name}: {url}")
+                    logger.warning(f"URL inválida para modelo {model_name}: {url}")
+                    return
+                
+                # Tenta fazer o download
+                response = requests.get(url, stream=True, timeout=30)
+                if response.status_code == 200:
+                    with open(model_path, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                    print(f"✅ Modelo {model_name} baixado com sucesso!")
+                    logger.info(f"Modelo {model_name} baixado com sucesso")
+                else:
+                    print(f"❌ Falha ao baixar o modelo {model_name}. Código de status: {response.status_code}")
+                    logger.error(f"Falha ao baixar modelo {model_name}. Status: {response.status_code}")
+            except Exception as e:
+                print(f"❌ Erro ao baixar o modelo {model_name}: {str(e)}")
+                logger.error(f"Erro ao baixar modelo {model_name}: {str(e)}")
+        else:
+            print(f"✅ Modelo {model_name} já está disponível.")
+            logger.info(f"Modelo {model_name} já está disponível")
+
+    @staticmethod
+    def is_model_available(model_name: str, model_dir='./models') -> bool:
+        full_model_dir = os.path.join(ModelDownloader.BASE_DIR, os.path.normpath(model_dir.lstrip('./')))
+        model_path = os.path.join(full_model_dir, f"{model_name}.gguf")
+        return os.path.exists(model_path) and os.path.getsize(model_path) >= 1000000
