@@ -1,6 +1,6 @@
 models:
   defaults:
-    model: gpt-3.5-turbo             # Modelo principal padrão
+    model: deepseek-local-coder                    # Modelo principal padrão
     elevation_model: phi3-mini      # Modelo de fallback se o principal falhar
     temperature: 0.7                # Temperatura padrão para geração
     max_tokens: 1024                # Máximo de tokens gerados por resposta
