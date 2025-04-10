@@ -50,6 +50,7 @@ class CustomDevelopCommand(develop, PreInstallCommand):
         ModelDownloader.verify_and_download_models()
 
 # Dependências principais
+
 install_requires = []
 
 # Lê a versão do arquivo .version.json

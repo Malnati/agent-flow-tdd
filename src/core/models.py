@@ -972,6 +972,7 @@ class ModelManager:
             full_prompt = ""
             if system:
                 full_prompt += f" \n{system}\n Arbitro \n"
+
             full_prompt += f"<user>\n{prompt}\n</user>\n<assistant>\n"
             
             # Parâmetros para geração
