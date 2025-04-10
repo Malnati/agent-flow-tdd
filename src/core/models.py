@@ -120,39 +120,88 @@ class ModelManager:
     def _setup_clients(self) -> None:
         """Inicializa clientes para diferentes provedores"""
         env = self.registry.get_env_vars()
+        logger.info("Iniciando configuração de clientes para provedores remotos...")
         
-        # OpenAI
-        self.openai_client = OpenAI(
-            api_key=get_env_var(env['openai_key']),
-            timeout=self.timeout
-        )
+        # Inicializa os dicionários para armazenar clientes e modelos
+        self.openai_client = None
+        self.openrouter_client = None
+        self.gemini_model = None
+        self.anthropic_client = None
         
-        # OpenRouter (opcional)
-        openrouter_key = get_env_var(env['openrouter_key'])
-        if openrouter_key:
-            self.openrouter_client = OpenAI(
-                base_url=self.registry.get_provider_config('openrouter')['base_url'],
-                api_key=openrouter_key,
-                timeout=self.timeout
-            )
-        else:
-            self.openrouter_client = None
-            
-        # Gemini (opcional)
-        gemini_key = get_env_var(env['gemini_key'])
-        if gemini_key:
-            genai.configure(api_key=gemini_key)
-            self.gemini_model = genai.GenerativeModel(self.registry.get_provider_config('gemini')['default_model'])
-        else:
-            self.gemini_model = None
-            
-        # Anthropic (opcional)
-        anthropic_key = get_env_var(env['anthropic_key'])
-        if anthropic_key:
-            self.anthropic_client = Anthropic(api_key=anthropic_key)
-        else:
-            self.anthropic_client = None
-
+        # Obtém os provedores de modelos do arquivo de configuração
+        config = load_config()
+        
+        # Mapeia os tipos de provedores para suas respectivas classes de cliente
+        provider_types = {
+            'openai': OpenAI,
+            'openrouter': OpenAI,
+            'anthropic': Anthropic
+        }
+        
+        # Itera sobre todos os provedores definidos na configuração
+        for provider in config['providers']:
+            try:
+                provider_name = provider.get('name')
+                
+                # Verifica se o modelo é remoto
+                if provider.get('remote', False) == True:
+                    logger.debug(f"Configurando cliente para provedor remoto: {provider_name}")
+                    
+                    # Obtém o nome da variável de ambiente para a chave de API
+                    key_name = provider.get('key_name')
+                    if not key_name:
+                        logger.warning(f"Provedor {provider_name} não tem key_name definido no kernel.yaml")
+                        continue
+                    
+                    # Obtém a chave de API
+                    api_key = get_env_var(env.get(key_name))
+                    if not api_key:
+                        logger.warning(f"Chave de API não encontrada para o provedor {provider_name} (variável: {key_name})")
+                        continue
+                    
+                    # Configura cliente com base no tipo de provedor
+                    if 'openai' in provider_name.lower():
+                        self.openai_client = OpenAI(
+                            api_key=api_key,
+                            timeout=self.timeout
+                        )
+                        logger.info(f"Cliente OpenAI configurado com sucesso")
+                        
+                    elif 'openrouter' in provider_name.lower():
+                        base_url = provider.get('base_url')
+                        if not base_url:
+                            logger.warning(f"Provedor {provider_name} não tem base_url definido no kernel.yaml")
+                            continue
+                            
+                        self.openrouter_client = OpenAI(
+                            base_url=base_url,
+                            api_key=api_key,
+                            timeout=self.timeout
+                        )
+                        logger.info(f"Cliente OpenRouter configurado com sucesso")
+                        
+                    elif 'gemini' in provider_name.lower():
+                        default_model = provider.get('default_model')
+                        if not default_model:
+                            logger.warning(f"Provedor {provider_name} não tem default_model definido no kernel.yaml")
+                            continue
+                            
+                        genai.configure(api_key=api_key)
+                        self.gemini_model = genai.GenerativeModel(default_model)
+                        logger.info(f"Modelo Gemini configurado com sucesso: {default_model}")
+                        
+                    elif 'anthropic' in provider_name.lower():
+                        self.anthropic_client = Anthropic(api_key=api_key)
+                        logger.info(f"Cliente Anthropic configurado com sucesso")
+                        
+                    else:
+                        logger.warning(f"Tipo de provedor remoto desconhecido: {provider_name}")
+                        
+            except Exception as e:
+                logger.error(f"Erro ao configurar cliente para o provedor {provider_name}: {str(e)}")
+        
+        logger.info("Configuração de clientes remotos concluída")
+        
         # Modelos locais (executados via llama.cpp)
         self._setup_local_models()
 

@@ -33,6 +33,7 @@ models:
       model_path: "./models/gpt-3.5-turbo.gguf"
       dir: "./models/openai"
       remote: true
+      key_name: "openai_key"
       n_ctx: 2048
       n_threads: 4
       model: gpt-3.5-turbo
@@ -43,6 +44,7 @@ models:
       model_path: "./models/gpt-4.gguf"
       dir: "./models/openai"
       remote: true
+      key_name: "openai_key"
       n_ctx: 2048
       n_threads: 4
       model: gpt-4
@@ -53,6 +55,8 @@ models:
       model_path: "./models/meta-llama-3-8b.gguf"
       dir: "./models/openrouter"
       remote: true
+      key_name: "openrouter_key"
+      base_url: "https://openrouter.ai/api/v1"
       n_ctx: 2048
       n_threads: 4
       model: meta-llama-3-8b
@@ -63,6 +67,8 @@ models:
       model_path: "./models/deepseek-coder-7b-instruct-q4.gguf"
       dir: "./models/openrouter"
       remote: true
+      key_name: "openrouter_key"
+      base_url: "https://openrouter.ai/api/v1"
       n_ctx: 2048
       n_threads: 4
       model: deepseek-coder-7b-instruct-q4
@@ -73,6 +79,8 @@ models:
       model_path: "./models/gemini-pro.gguf"
       dir: "./models/gemini"
       remote: true
+      key_name: "gemini_key"
+      default_model: "gemini-pro"
       n_ctx: 2048
       n_threads: 4
       model: gemini-pro
@@ -83,6 +91,7 @@ models:
       model_path: "./models/claude-3-opus-20240229.gguf"
       dir: "./models/anthropic"
       remote: true
+      key_name: "anthropic_key"
       n_ctx: 2048
       n_threads: 4
       model: claude-3-opus-20240229
