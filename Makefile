@@ -1,17 +1,12 @@
 # Makefile para o projeto prompt-tdd
 
-.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs test-e2e publish download-model docs-serve docs-build docs-deploy docs-generate status orchestrator
+.PHONY: help install test run clean autoflake dev db-init db-clean db-backup logs test-e2e publish docs-serve docs-build docs-deploy docs-generate status orchestrator
 
 # Configuração do ambiente virtual
 VENV = .venv
 PYTHON = python3
 PIP = $(PYTHON) -m pip
 PYTEST = $(VENV)/bin/pytest
-
-# URL e nome do modelo TinyLLaMA
-MODEL_URL = https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
-MODEL_NAME = tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
-MODEL_DIR = models
 
 # Define um dir	para cache do Python
 export PYTHONPYCACHEPREFIX=cache
@@ -36,8 +31,6 @@ help:
 	@echo "Ambiente:"
 	@echo "  make install      - Instala dependências do projeto"
 	@echo "  make clean        - Remove arquivos temporários"
-	@echo "  make download-model - Baixa o modelo TinyLLaMA"
-	@echo "  make download-phi1  - Baixa o modelo Phi-1"
 	@echo ""
 	@echo "Documentação:"
 	@echo "  make docs-serve   - Inicia servidor local da documentação"
