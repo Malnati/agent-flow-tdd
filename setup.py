@@ -9,7 +9,6 @@ from setuptools import find_packages, setup
 from setuptools.command.develop import develop
 from setuptools.command.install import install
 import pkg_resources
-import os
 from src.core.models import ModelDownloader
 
 class PreInstallCommand:

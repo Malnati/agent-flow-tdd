@@ -12,11 +12,10 @@ import argparse
 import uuid
 from typing import Dict, Any
 from dataclasses import dataclass
-from pathlib import Path
 from rich.console import Console
 
 from src.core.agents import AgentOrchestrator
-from src.core.models import ModelManager, ModelDownloader
+from src.core.models import ModelManager
 from src.core.db import DatabaseManager
 from src.core.logger import get_logger
 
@@ -50,15 +49,6 @@ def get_orchestrator() -> AgentOrchestrator:
     try:
         # Inicializa componentes
         model_manager = ModelManager()
-        
-        # Verifica se o modelo é o tinyllama e se está disponível
-        if model_manager.model_name.startswith("tinyllama-") and not model_manager.tinyllama_model:
-            logger.warning("Modelo TinyLlama não disponível. Iniciando com modelo OpenAI como fallback.")
-            # Define o modelo para um modelo que não requer arquivo local
-            os.environ["DEFAULT_MODEL"] = "gpt-3.5-turbo"
-            # Reinicializa o model_manager com o novo modelo padrão
-            model_manager = ModelManager()
-            
         db = DatabaseManager()
         
         # Cria e configura orquestrador - apenas nome do modelo como parâmetro
