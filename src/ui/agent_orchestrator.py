@@ -34,18 +34,6 @@ DATA_DIR = BASE_DIR / "data"
 os.makedirs(LOG_DIR, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
 
-# Modelos disponíveis para seleção
-MODEL_OPTIONS = [
-    "tinyllama-1.1b",
-    "phi-1",
-    "deepseek-coder-6.7b",
-    "phi3-mini",
-    "gpt-3.5-turbo",
-    "gpt-4",
-    "gemini-pro",
-    "claude-3-opus"
-]
-
 # Configuração de logging
 logger = get_logger(__name__)
 
@@ -53,10 +41,22 @@ class PromptGenTab(Vertical):
     """Aba de geração de prompts."""
     
     def compose(self) -> ComposeResult:
+        # Inicializamos um ModelManager temporário para obter a lista de modelos disponíveis
+        modelos = []
+        try:
+            manager = ModelManager()
+            # Extraímos todos os modelos de todas as categorias em uma lista plana
+            for categoria_modelos in manager.get_available_models().values():
+                modelos.extend(categoria_modelos)
+            logger.info(f"Modelos disponíveis para o PromptGenTab: {len(modelos)}")
+        except Exception as e:
+            logger.error(f"Erro ao obter modelos disponíveis: {str(e)}", exc_info=True)
+            modelos = ["gpt-3.5-turbo"]  # Modelo fallback
+        
         yield Static("Digite o prompt abaixo:")
         yield Input(placeholder="Digite seu prompt...", id="prompt_input")
         yield Static("Selecione o modelo:")
-        yield OptionList(*MODEL_OPTIONS, id="model_list")
+        yield OptionList(*modelos, id="model_list")
         yield Static("Resultado da geração:")
         yield Pretty({}, id="result_output")
     
@@ -103,26 +103,6 @@ class TDDPromptApp(App):
     
     selected_tab = reactive("Gen")
 
-    def _get_available_models(self):
-        """Obtém a lista de modelos disponíveis no sistema."""
-        modelos = []
-        
-        # Modelos locais
-        modelos.append("tinyllama-1.1b")
-        modelos.append("phi-1")
-        modelos.append("deepseek-coder-6.7b")  # Nome correto para o modelo DeepSeek
-        modelos.append("phi3-mini")  # Nome padronizado para o modelo Phi-3
-        
-        # Modelos remotos (sempre incluídos como opções)
-        modelos.append("gpt-3.5-turbo")
-        modelos.append("gpt-4")
-        modelos.append("gemini-pro")
-        modelos.append("claude-3-opus")
-        
-        return modelos
-
-    
-    
     def _get_orchestrator(self, modelo):
         """
         Obtém uma instância do orquestrador de agentes com o modelo selecionado.
@@ -208,11 +188,17 @@ class TDDPromptApp(App):
         # Inicializa o ModelManager para obter a lista de modelos disponíveis
         try:
             self.model_manager = ModelManager()
-            self.available_models = self._get_available_models()
+            # Obtemos todos os modelos disponíveis dinamicamente
+            models_by_provider = self.model_manager.get_available_models()
+            # Criamos uma lista plana com todos os modelos de todas as categorias
+            self.available_models = [
+                modelo for modelos in models_by_provider.values() for modelo in modelos
+            ]
             logger.info(f"Modelos disponíveis: {self.available_models}")
         except Exception as e:
             logger.error(f"Erro ao inicializar ModelManager: {str(e)}", exc_info=True)
             self.notify(f"Erro ao inicializar: {str(e)}", severity="error")
+            self.available_models = ["gpt-3.5-turbo"]  # Modelo fallback
             
         # Inicializa o DatabaseManager para registrar execuções
         try:
@@ -278,12 +264,12 @@ class TDDPromptApp(App):
             try:
                 option_list = self.query_one("#model_list", OptionList)
                 if option_list.highlighted is not None:
-                    modelo = MODEL_OPTIONS[option_list.highlighted]
+                    modelo = self.available_models[option_list.highlighted]
                 else:
-                    modelo = "tinyllama-1.1b"  # Modelo padrão
+                    modelo = self.available_models[0] if self.available_models else "gpt-3.5-turbo"  # Modelo padrão
                     self.notify("Nenhum modelo selecionado, usando modelo padrão", severity="warning")
             except NoMatches:
-                modelo = "tinyllama-1.1b"  # Modelo padrão
+                modelo = self.available_models[0] if self.available_models else "gpt-3.5-turbo"  # Modelo padrão
                 self.notify("Lista de modelos não encontrada, usando modelo padrão", severity="warning")
                 
             logger.info(f"Prompt submetido, gerando conteúdo...")
