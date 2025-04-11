@@ -24,6 +24,7 @@ from src.core.models import ModelManager
 from src.core.agents import AgentOrchestrator
 from src.core.db import DatabaseManager
 from src.core.logger import get_logger
+from src.core.models import ModelRegistry
 
 # Obter caminho da raiz do projeto
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -51,7 +52,17 @@ class PromptGenTab(Vertical):
             logger.info(f"Modelos disponíveis para o PromptGenTab: {len(modelos)}")
         except Exception as e:
             logger.error(f"Erro ao obter modelos disponíveis: {str(e)}", exc_info=True)
-            modelos = ["gpt-3.5-turbo"]  # Modelo fallback
+            # O ModelManager já tenta usar o fallback_model interno, vamos tentar novamente com padrão mínimo
+            try:
+                # Tenta obter o modelo de fallback do ModelRegistry
+                registry = ModelRegistry()
+                fallback_model = registry.get_fallback_model()
+                modelos = [fallback_model]
+                logger.warning(f"Usando modelo de fallback: {fallback_model}")
+            except Exception:
+                # Último recurso: hardcoded
+                modelos = ["gpt-3.5-turbo"]
+                logger.error("Usando modelo fallback hardcoded: gpt-3.5-turbo")
         
         yield Static("Digite o prompt abaixo:")
         yield Input(placeholder="Digite seu prompt...", id="prompt_input")
@@ -164,7 +175,16 @@ class TDDPromptApp(App):
         except Exception as e:
             logger.error(f"Erro ao inicializar ModelManager: {str(e)}", exc_info=True)
             self.notify(f"Erro ao inicializar: {str(e)}", severity="error")
-            self.available_models = ["gpt-3.5-turbo"]  # Modelo fallback
+            # Tenta obter o modelo de fallback do ModelRegistry
+            try:
+                registry = ModelRegistry()
+                fallback_model = registry.get_fallback_model()
+                self.available_models = [fallback_model]
+                logger.warning(f"Usando modelo de fallback: {fallback_model}")
+            except Exception:
+                # Último recurso: fallback hardcoded
+                self.available_models = ["gpt-3.5-turbo"]
+                logger.error("Usando modelo fallback hardcoded: gpt-3.5-turbo")
             
         # Inicializa o DatabaseManager para registrar execuções
         try:

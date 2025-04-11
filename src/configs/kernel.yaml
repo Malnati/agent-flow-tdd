@@ -2,6 +2,7 @@ models:
   defaults:
     model: deepseek-local-coder                    # Modelo principal padrão
     elevation_model: phi3-mini      # Modelo de fallback se o principal falhar
+    fallback_model: gpt-3.5-turbo   # Modelo usado quando há falha técnica no modelo principal
     temperature: 0.7                # Temperatura padrão para geração
     max_tokens: 1024                # Máximo de tokens gerados por resposta
     timeout: 15                     # Tempo limite de resposta do modelo (segundos)
@@ -9,7 +10,8 @@ models:
 
   env_vars:
     default_model: DEFAULT_MODEL              # Variável de ambiente para modelo padrão
-    elevation_model: ELEVATION_MODEL          # Variável de ambiente para fallback
+    elevation_model: ELEVATION_MODEL          # Variável de ambiente para modelo de elevação
+    fallback_model: FALLBACK_MODEL            # Variável de ambiente para modelo de fallback
     openai_key: OPENAI_API_KEY                # Chave de API para OpenAI
     openrouter_key: OPENROUTER_API_KEY        # Chave de API para OpenRouter
     gemini_key: GEMINI_API_KEY                # Chave de API para Gemini

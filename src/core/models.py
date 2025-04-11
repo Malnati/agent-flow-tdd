@@ -70,6 +70,7 @@ class ModelManager:
         defaults = self.registry.get_defaults()
         self.model_name = model_name or get_env_var(env['default_model'], defaults['model'])
         self.elevation_model = get_env_var(env['elevation_model'], defaults['elevation_model'])
+        self.fallback_model = get_env_var(env['fallback_model'], defaults['fallback_model'])
         
         # Configurações de retry e timeout
         self.max_retries = int(get_env_var(env['max_retries'], str(defaults['max_retries'])))
@@ -85,14 +86,31 @@ class ModelManager:
         # Inicializa banco de dados
         self.db = DatabaseManager()
         
-        # Inicializa clientes
-        self._setup_clients()
-        
-        # Configurações padrão
-        self.temperature = defaults['temperature']
-        self.max_tokens = defaults['max_tokens']
-        
-        logger.info(f"ModelManager inicializado com modelo {self.model_name}")
+        # Tenta inicializar clientes com o modelo solicitado
+        try:
+            # Inicializa clientes
+            self._setup_clients()
+            
+            # Configurações padrão
+            self.temperature = defaults['temperature']
+            self.max_tokens = defaults['max_tokens']
+            
+            logger.info(f"ModelManager inicializado com modelo {self.model_name}")
+        except Exception as e:
+            # Se fallback estiver habilitado e ocorrer erro ao inicializar, tenta com modelo de fallback
+            if self.fallback_enabled and self.model_name != self.fallback_model:
+                logger.warning(f"Erro ao inicializar modelo {self.model_name}: {str(e)}. Tentando com modelo de fallback {self.fallback_model}")
+                self.model_name = self.fallback_model
+                
+                # Tenta novamente com o modelo de fallback
+                self._setup_clients()
+                self.temperature = defaults['temperature']
+                self.max_tokens = defaults['max_tokens']
+                logger.info(f"ModelManager inicializado com modelo de fallback {self.model_name}")
+            else:
+                # Se fallback estiver desabilitado ou também falhar, propaga a exceção
+                logger.error(f"Erro ao inicializar modelo {self.model_name} e fallback está desabilitado ou falhou")
+                raise
 
     def configure(self, model: Optional[str] = None, temperature: float = None, max_tokens: Optional[int] = None) -> None:
         """
@@ -1025,6 +1043,24 @@ class ModelRegistry:
 
     def get_default_model(self) -> str:
         return self.config['defaults']['model']
+
+    def get_fallback_model(self) -> str:
+        """
+        Obtém o modelo de fallback configurado.
+        
+        Returns:
+            String com o nome do modelo de fallback
+        """
+        return self.config['defaults']['fallback_model']
+        
+    def get_elevation_model(self) -> str:
+        """
+        Obtém o modelo de elevação configurado.
+        
+        Returns:
+            String com o nome do modelo de elevação
+        """
+        return self.config['defaults']['elevation_model']
 
     def get_provider_by_model_id(self, model_id: str) -> Optional[Dict[str, Any]]:
         for provider in self.providers:
