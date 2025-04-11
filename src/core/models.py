@@ -120,38 +120,88 @@ class ModelManager:
     def _setup_clients(self) -> None:
         """Inicializa clientes para diferentes provedores"""
         env = self.registry.get_env_vars()
+        logger.info("Iniciando configuração de clientes para provedores remotos...")
         
-        # OpenAI
-        self.openai_client = OpenAI(
-            api_key=get_env_var(env['openai_key']),
-            timeout=self.timeout
-        )
+        # Inicializa os dicionários para armazenar clientes e modelos
+        self.openai_client = None
+        self.openrouter_client = None
+        self.gemini_model = None
+        self.anthropic_client = None
+
+        # Obtém os provedores de modelos do arquivo de configuração
+        config = load_config()
         
-        # OpenRouter (opcional)
-        openrouter_key = get_env_var(env['openrouter_key'])
-        if openrouter_key:
-            self.openrouter_client = OpenAI(
-                base_url=self.registry.get_provider_config('openrouter')['base_url'],
-                api_key=openrouter_key,
-                timeout=self.timeout
-            )
-        else:
-            self.openrouter_client = None
-            
-        # Gemini (opcional)
-        gemini_key = get_env_var(env['gemini_key'])
-        if gemini_key:
-            genai.configure(api_key=gemini_key)
-            self.gemini_model = genai.GenerativeModel(self.registry.get_provider_config('gemini')['default_model'])
-        else:
-            self.gemini_model = None
-            
-        # Anthropic (opcional)
-        anthropic_key = get_env_var(env['anthropic_key'])
-        if anthropic_key:
-            self.anthropic_client = Anthropic(api_key=anthropic_key)
-        else:
-            self.anthropic_client = None
+        # Mapeia os tipos de provedores para suas respectivas classes de cliente
+        provider_types = {
+            'openai': OpenAI,
+            'openrouter': OpenAI,
+            'anthropic': Anthropic
+        }
+        
+        # Itera sobre todos os provedores definidos na configuração
+        for provider in config['providers']:
+            try:
+                provider_name = provider.get('name')
+                
+                # Verifica se o modelo é remoto
+                if provider.get('remote', False) == True:
+                    logger.debug(f"Configurando cliente para provedor remoto: {provider_name}")
+                    
+                    # Obtém o nome da variável de ambiente para a chave de API
+                    key_name = provider.get('key_name')
+                    if not key_name:
+                        logger.warning(f"Provedor {provider_name} não tem key_name definido no kernel.yaml")
+                        continue
+                    
+                    # Obtém a chave de API
+                    api_key = get_env_var(env.get(key_name))
+                    if not api_key:
+                        logger.warning(f"Chave de API não encontrada para o provedor {provider_name} (variável: {key_name})")
+                        continue
+                    
+                    # Configura cliente com base no tipo de provedor
+                    if 'openai' in provider_name.lower():
+                        self.openai_client = OpenAI(
+                            api_key=api_key,
+                            timeout=self.timeout
+                        )
+                        logger.info(f"Cliente OpenAI configurado com sucesso")
+                        
+                    elif 'openrouter' in provider_name.lower():
+                        base_url = provider.get('api_url')
+                        if not base_url:
+                            logger.warning(f"Provedor {provider_name} não tem api_url definido no kernel.yaml")
+                            continue
+                            
+                        self.openrouter_client = OpenAI(
+                            base_url=base_url,
+                            api_key=api_key,
+                            timeout=self.timeout
+                        )
+                        logger.info(f"Cliente OpenRouter configurado com sucesso")
+                        
+                    elif 'gemini' in provider_name.lower():
+                        default_model = provider.get('default_model')
+                        if not default_model:
+                            logger.warning(f"Provedor {provider_name} não tem default_model definido no kernel.yaml")
+                            continue
+                            
+                        genai.configure(api_key=api_key)
+                        self.gemini_model = genai.GenerativeModel(default_model)
+                        logger.info(f"Modelo Gemini configurado com sucesso: {default_model}")
+                        
+                    elif 'anthropic' in provider_name.lower():
+                        self.anthropic_client = Anthropic(api_key=api_key)
+                        logger.info(f"Cliente Anthropic configurado com sucesso")
+                        
+                    else:
+                        logger.warning(f"Tipo de provedor remoto desconhecido: {provider_name}")
+                        
+            except Exception as e:
+                logger.error(f"Erro ao configurar cliente para o provedor {provider_name}: {str(e)}")
+        
+        logger.info("Configuração de clientes remotos concluída")
+        
 
         # Modelos locais (executados via llama.cpp)
         self._setup_local_models()
@@ -160,26 +210,32 @@ class ModelManager:
         """Inicializa os modelos locais via llama.cpp"""
         try:
             from llama_cpp import Llama
-            # Inicializa todos os modelos locais disponíveis
-            for provider_name in ['tinyllama-1.1b', 'phi1', 'deepseek-local-coder', 'phi3-mini', 'phi3-mini-fp16']:
+            
+            # Obtém os provedores de modelos do arquivo de configuração
+            config = load_config()
+            
+            # Itera sobre todos os provedores definidos na configuração
+            for provider in config['providers']:
                 try:
-                    provider_config = self.registry.get_provider_config(provider_name)
-                    
+                    provider_name = provider.get('name')
                     # Verifica se o modelo é local (não remoto)
-                    if provider_config.get('remote', True) == False:
-                        provider_config['model_path']
+                    if provider.get('remote', True) == False:
+                        model_name = provider.get('model')
+                        model_dir = provider.get('dir', './models')
+                        n_ctx = provider.get('n_ctx', 2048)
+                        n_threads = provider.get('n_threads', 4)
                         
                         # Verifica se o modelo existe
-                        full_model_dir = os.path.join(ModelDownloader.BASE_DIR, os.path.normpath(provider_config.get('dir', 'models').lstrip('./')))
-                        model_file = os.path.join(full_model_dir, f"{provider_config['model']}.gguf")
+                        full_model_dir = os.path.join(ModelDownloader.BASE_DIR, os.path.normpath(model_dir.lstrip('./')))
+                        model_file = os.path.join(full_model_dir, f"{model_name}.gguf")
                         
                         if os.path.exists(model_file) and os.path.getsize(model_file) > 1000000:  # Tamanho mínimo de 1MB
                             try:
                                 # Primeira tentativa - API mais recente
                                 model = Llama(
                                     model_path=model_file,
-                                    n_ctx=provider_config.get('n_ctx', 2048),
-                                    n_threads=provider_config.get('n_threads', 4)
+                                    n_ctx=n_ctx,
+                                    n_threads=n_threads
                                 )
                                 logger.info(f"Modelo {provider_name} carregado com sucesso: {model_file}")
                                 
@@ -207,11 +263,13 @@ class ModelManager:
                     logger.warning(f"Erro ao configurar modelo {provider_name}: {str(e)}")
         except ImportError as e:
             logger.warning(f"llama_cpp não disponível: {str(e)}")
-            # Define todos os atributos de modelo como None
-            self.tinyllama_model = None
-            self.phi1_model = None
-            self.deepseek_model = None
-            self.phi3_model = None
+            # Define atributos de modelo como None para todos os modelos locais
+            config = load_config()
+            for provider in config['providers']:
+                if provider.get('remote', True) == False:
+                    provider_name = provider.get('name')
+                    attr_name = f"{provider_name.replace('-', '_')}_model".replace('tinyllama_1.1b', 'tinyllama')
+                    setattr(self, attr_name, None)
 
     def _get_cache_key(self, prompt: str, system: Optional[str] = None, **kwargs) -> str:
         """
@@ -1035,9 +1093,10 @@ class ModelRegistry:
                 # Certifique-se de que o atributo 'remote' esteja presente na resposta
                 if 'remote' not in p:
                     # Determinar automaticamente se o modelo é remoto com base na URL ou nome
-                    url = p.get('url', '')
+                    download_url = p.get('download_url', '')
+                    p.get('api_url', '')
                     name = p.get('name', '')
-                    if url and 'huggingface.co' in url:
+                    if download_url and 'huggingface.co' in download_url:
                         p['remote'] = False
                     elif any(keyword in name.lower() for keyword in ['openai', 'openrouter', 'anthropic', 'gemini']):
                         p['remote'] = True
@@ -1081,7 +1140,7 @@ class ModelDownloader:
         config = load_config()
         for provider in config['providers']:
             model_name = provider.get('model')
-            url = provider.get('url')
+            download_url = provider.get('download_url')
             model_dir = provider.get('dir', './models')
             
             # Verifica a flag remote
@@ -1096,8 +1155,8 @@ class ModelDownloader:
                 if remote is None:
                     logger.warning(f"Flag 'remote' não definida para o modelo {model_name}. Assumindo comportamento padrão.")
                 
-                if model_name and url and ModelDownloader.is_valid_url(url):
-                    ModelDownloader.download_model(model_name, url, model_dir)
+                if model_name and download_url and ModelDownloader.is_valid_url(download_url):
+                    ModelDownloader.download_model(model_name, download_url, model_dir)
         
         logger.info("Verificação de modelos concluída.")
 
@@ -1111,7 +1170,7 @@ class ModelDownloader:
             return False
 
     @staticmethod
-    def download_model(model_name, url, model_dir='./models'):
+    def download_model(model_name, download_url, model_dir='./models'):
         # Normaliza o caminho do diretório do modelo
         full_model_dir = os.path.join(ModelDownloader.BASE_DIR, os.path.normpath(model_dir.lstrip('./')))
         model_path = os.path.join(full_model_dir, f"{model_name}.gguf")
@@ -1119,19 +1178,19 @@ class ModelDownloader:
         if not ModelDownloader.is_model_available(model_name, model_dir):
             try:
                 print(f"📥 Baixando modelo {model_name}...")
-                logger.info(f"Baixando modelo {model_name} de {url}")
+                logger.info(f"Baixando modelo {model_name} de {download_url}")
                 
                 # Garante que o diretório exista
                 os.makedirs(full_model_dir, exist_ok=True)
                 
                 # Verifica se a URL é válida
-                if not url.startswith(('http://', 'https://')):
-                    print(f"⚠️ URL inválida para o modelo {model_name}: {url}")
-                    logger.warning(f"URL inválida para modelo {model_name}: {url}")
+                if not download_url.startswith(('http://', 'https://')):
+                    print(f"⚠️ URL inválida para o modelo {model_name}: {download_url}")
+                    logger.warning(f"URL inválida para modelo {model_name}: {download_url}")
                     return
                 
                 # Tenta fazer o download
-                response = requests.get(url, stream=True, timeout=30)
+                response = requests.get(download_url, stream=True, timeout=30)
                 if response.status_code == 200:
                     with open(model_path, 'wb') as f:
                         for chunk in response.iter_content(chunk_size=8192):

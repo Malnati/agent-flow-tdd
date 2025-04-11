@@ -1,5 +1,5 @@
 {
-    "current": "0.1.19",
+    "current": "0.1.20",
     "manifest": {
         "include": [
             "LICENSE",
@@ -127,6 +127,12 @@
             "commit": "refactor: alterar tipo do atributo 'provider' na classe modelconfig de modelprovider para str\n\neste commit modifica a classe `modelconfig`, alterando o tipo do atributo `provider` de `modelprovider` para `str`, permitindo compatibilidade com nomes din\u00e2micos. al\u00e9m disso, a classe `modelregistry` foi atualizada para incluir um novo m\u00e9todo que retorna os nomes dos provedores em um formato seguro. essas mudan\u00e7as visam aumentar a flexibilidade e a adaptabilidade do sistema ao lidar com diferentes provedores de modelos.",
             "increment_type": "patch",
             "previous_version": "0.1.18"
+        },
+        "0.1.20": {
+            "date": "2025-04-10",
+            "commit": "refactor: unificar funcionalidades no arquivo prompt_tdd.py e ajustar mensagens de log no modelmanager\n\neste commit unifica as funcionalidades do sistema no arquivo `prompt_tdd.py`, proporcionando um \u00fanico ponto de entrada. al\u00e9m disso, as mensagens de log na classe `modelmanager` foram ajustadas para refletir a mudan\u00e7a de `base_url` para `api_url`, melhorando a clareza das informa\u00e7\u00f5es registradas. essas altera\u00e7\u00f5es visam aumentar a organiza\u00e7\u00e3o e a legibilidade do c\u00f3digo.",
+            "increment_type": "patch",
+            "previous_version": "0.1.19"
         }
     }
 }
