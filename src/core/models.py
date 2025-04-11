@@ -127,7 +127,7 @@ class ModelManager:
         self.openrouter_client = None
         self.gemini_model = None
         self.anthropic_client = None
-        
+
         # Obtém os provedores de modelos do arquivo de configuração
         config = load_config()
         
@@ -202,6 +202,7 @@ class ModelManager:
         
         logger.info("Configuração de clientes remotos concluída")
         
+
         # Modelos locais (executados via llama.cpp)
         self._setup_local_models()
 
