@@ -123,30 +123,37 @@ class AgentOrchestrator:
                 except Exception as e:
                     logger.warning(f"Falha no guardrail {guardrail_id}: {str(e)}")
                     raw_responses.append({"guardrail": guardrail_id, "error": str(e)})
+            
+            # Cria um dicionário para agregar as informações coletadas por todos os guardrails
+            info = {}
+            
+            # Percorre todos os resultados dos guardrails dinamicamente
+            for guardrail_result in guardrail_results.values():
+                # Extrai o campo 'name' se disponível
+                if "name" in guardrail_result and not info.get("name"):
+                    info["name"] = guardrail_result["name"]
                     
-            # Verifica se temos o resultado do guardrail principal (identificador de título)
-            if not guardrail_results or "identificar_titulo" not in guardrail_results:
-                logger.error("Guardrail principal 'identificar_titulo' não processado com sucesso")
+                # Extrai o campo 'description' se disponível
+                if "description" in guardrail_result and not info.get("description"):
+                    info["description"] = guardrail_result["description"]
+                    
+                # Extrai o campo 'fields' se disponível
+                if "fields" in guardrail_result and not info.get("fields"):
+                    info["fields"] = guardrail_result["fields"]
+            
+            # Verifica se os campos obrigatórios foram extraídos
+            if not info.get("name") or not info.get("description"):
+                logger.error("Campos obrigatórios (name, description) não encontrados nos resultados dos guardrails")
                 return AgentResult(
-                    output="Erro na extração de informações principais",
+                    output="Erro na extração de informações mínimas necessárias (nome e descrição)",
                     items=[],
                     guardrails=[],
                     raw_responses=raw_responses
                 )
-                
-            # Obtém as informações do guardrail principal
-            info = guardrail_results["identificar_titulo"]
             
-            # Combina informações de outros guardrails se disponíveis
-            if "identificar_descricao" in guardrail_results and "description" in guardrail_results["identificar_descricao"]:
-                info["description"] = guardrail_results["identificar_descricao"]["description"]
-                
-            if "identificar_campos" in guardrail_results and "fields" in guardrail_results["identificar_campos"]:
-                info["fields"] = guardrail_results["identificar_campos"]["fields"]
-                
             # Gera prompt TDD
             try:
-                # Prepara as informações para o guardrail
+                # Prepara as informações para o guardrail, usando valores padrão caso não encontrados
                 title = info.get("name", "")
                 description = info.get("description", "")
                 fields = info.get("fields", [])
