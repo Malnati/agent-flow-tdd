@@ -331,5 +331,3 @@ class TokenValidator:
             TokenValidator.validate_openai_token(required=True)
             and TokenValidator.validate_github_token(required=False)
         )
-
-# A classe VersionAnalyzer foi movida para src/core/version.py

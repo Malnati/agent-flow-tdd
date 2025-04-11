@@ -57,42 +57,63 @@ class ModelConfig(BaseModel):
 class ModelManager:
     """Gerenciador de modelos de IA."""
 
-    def __init__(self, model_name: Optional[str] = None):
+    def __init__(self, model_name: Optional[str] = None, fallback_model: Optional[str] = None, 
+                 elevation_model: Optional[str] = None):
         """
         Inicializa o gerenciador com configurações do modelo.
         
         Args:
             model_name: Nome do modelo a ser usado (opcional)
+            fallback_model: Nome do modelo de fallback a ser usado (opcional)
+            elevation_model: Nome do modelo de elevação a ser usado (opcional)
         """
         self.registry = ModelRegistry()
         self.config = self.registry.config
         env = self.registry.get_env_vars()
         defaults = self.registry.get_defaults()
-        self.model_name = model_name or get_env_var(env['default_model'], defaults['model'])
-        self.elevation_model = get_env_var(env['elevation_model'], defaults['elevation_model'])
         
-        # Configurações de retry e timeout
-        self.max_retries = int(get_env_var(env['max_retries'], str(defaults['max_retries'])))
-        self.timeout = int(get_env_var(env['model_timeout'], str(defaults['timeout'])))
+        # Usa parâmetros explícitos se fornecidos, senão usa os valores padrão do arquivo de configuração
+        self.model_name = model_name or defaults["model"]
+        self.elevation_model = elevation_model or defaults["elevation_model"]
+        self.fallback_model = fallback_model or defaults["fallback_model"]
+        self.timeout = defaults["timeout"]
+        self.max_retries = defaults["max_retries"]
         
-        # Configuração de fallback
+        # Configuração de fallback - mantém a variável de ambiente aqui por ser útil em tempo de execução
         self.fallback_enabled = get_env_var(env['fallback_enabled'], str(self.config['fallback']['enabled'])).lower() == 'true'
         
-        # Cache de respostas
+        # Cache de respostas - mantém as variáveis de ambiente aqui por serem úteis em tempo de execução
         self.cache_enabled = get_env_var(env['cache_enabled'], str(self.config['cache']['enabled'])).lower() == 'true'
         self.cache_ttl = int(get_env_var(env['cache_ttl'], str(self.config['cache']['ttl'])))
         
         # Inicializa banco de dados
         self.db = DatabaseManager()
         
-        # Inicializa clientes
-        self._setup_clients()
-        
-        # Configurações padrão
-        self.temperature = defaults['temperature']
-        self.max_tokens = defaults['max_tokens']
-        
-        logger.info(f"ModelManager inicializado com modelo {self.model_name}")
+        # Tenta inicializar clientes com o modelo solicitado
+        try:
+            # Inicializa clientes
+            self._setup_clients()
+            
+            # Configurações padrão
+            self.temperature = defaults['temperature']
+            self.max_tokens = defaults['max_tokens']
+            
+            logger.info(f"ModelManager inicializado com modelo {self.model_name}")
+        except Exception as e:
+            # Se fallback estiver habilitado e ocorrer erro ao inicializar, tenta com modelo de fallback
+            if self.fallback_enabled and self.model_name != self.fallback_model:
+                logger.warning(f"Erro ao inicializar modelo {self.model_name}: {str(e)}. Tentando com modelo de fallback {self.fallback_model}")
+                self.model_name = self.fallback_model
+                
+                # Tenta novamente com o modelo de fallback
+                self._setup_clients()
+                self.temperature = defaults['temperature']
+                self.max_tokens = defaults['max_tokens']
+                logger.info(f"ModelManager inicializado com modelo de fallback {self.model_name}")
+            else:
+                # Se fallback estiver desabilitado ou também falhar, propaga a exceção
+                logger.error(f"Erro ao inicializar modelo {self.model_name} e fallback está desabilitado ou falhou")
+                raise
 
     def configure(self, model: Optional[str] = None, temperature: float = None, max_tokens: Optional[int] = None) -> None:
         """
@@ -1025,6 +1046,24 @@ class ModelRegistry:
 
     def get_default_model(self) -> str:
         return self.config['defaults']['model']
+
+    def get_fallback_model(self) -> str:
+        """
+        Obtém o modelo de fallback configurado.
+        
+        Returns:
+            String com o nome do modelo de fallback
+        """
+        return self.config['defaults']['fallback_model']
+        
+    def get_elevation_model(self) -> str:
+        """
+        Obtém o modelo de elevação configurado.
+        
+        Returns:
+            String com o nome do modelo de elevação
+        """
+        return self.config['defaults']['elevation_model']
 
     def get_provider_by_model_id(self, model_id: str) -> Optional[Dict[str, Any]]:
         for provider in self.providers:

@@ -10,13 +10,12 @@ import sys
 import json
 import argparse
 import uuid
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from dataclasses import dataclass
-from pathlib import Path
 from rich.console import Console
 
 from src.core.agents import AgentOrchestrator
-from src.core.models import ModelManager, ModelDownloader
+from src.core.models import ModelManager
 from src.core.db import DatabaseManager
 from src.core.logger import get_logger
 
@@ -40,25 +39,19 @@ class Response:
 
 # ----- Funções utilitárias compartilhadas -----
 
-def get_orchestrator() -> AgentOrchestrator:
+def get_orchestrator(model_name: Optional[str] = None) -> AgentOrchestrator:
     """
     Obtém uma instância configurada do orquestrador de agentes.
+    
+    Args:
+        model_name: Nome do modelo a ser usado (opcional)
     
     Returns:
         AgentOrchestrator configurado
     """
     try:
         # Inicializa componentes
-        model_manager = ModelManager()
-        
-        # Verifica se o modelo é o tinyllama e se está disponível
-        if model_manager.model_name.startswith("tinyllama-") and not model_manager.tinyllama_model:
-            logger.warning("Modelo TinyLlama não disponível. Iniciando com modelo OpenAI como fallback.")
-            # Define o modelo para um modelo que não requer arquivo local
-            os.environ["DEFAULT_MODEL"] = "gpt-3.5-turbo"
-            # Reinicializa o model_manager com o novo modelo padrão
-            model_manager = ModelManager()
-            
+        model_manager = ModelManager(model_name=model_name)
         db = DatabaseManager()
         
         # Cria e configura orquestrador - apenas nome do modelo como parâmetro
@@ -91,13 +84,13 @@ def run_cli_mode(args):
         # Imprime o cabeçalho
         print("🖥️ CLI do projeto prompt-tdd")
         
-        # Define o modelo via variável de ambiente se especificado
-        if hasattr(args, 'model') and args.model:
-            os.environ["DEFAULT_MODEL"] = args.model
-            print(f"🤖 Usando modelo: {args.model}")
+        # Executa o orquestrador com o modelo especificado (se fornecido)
+        model_name = args.model if hasattr(args, 'model') else None
+        orchestrator = get_orchestrator(model_name=model_name)
         
-        # Executa o orquestrador
-        orchestrator = get_orchestrator()
+        # Imprime o modelo utilizado
+        print(f"🤖 Usando modelo: {orchestrator.model_manager.model_name}")
+        
         result = orchestrator.execute(
             prompt=args.prompt, 
             format=args.format
@@ -128,9 +121,14 @@ def run_cli_mode(args):
 class MCPHandler:
     """Manipulador do protocolo MCP."""
     
-    def __init__(self):
-        """Inicializa o manipulador MCP."""
-        self.model_manager = ModelManager()
+    def __init__(self, model_name: Optional[str] = None):
+        """
+        Inicializa o manipulador MCP.
+        
+        Args:
+            model_name: Nome do modelo a ser usado (opcional)
+        """
+        self.model_manager = ModelManager(model_name=model_name)
         self.db = DatabaseManager()
         # Cria e configura orquestrador - apenas nome do modelo como parâmetro
         self.orchestrator = AgentOrchestrator(self.model_manager.model_name)
@@ -138,7 +136,7 @@ class MCPHandler:
         self.orchestrator.model_manager = self.model_manager
         # Define o db como atributo separado
         self.orchestrator.db = self.db
-        logger.info("MCPHandler inicializado")
+        logger.info(f"MCPHandler inicializado com modelo {self.model_manager.model_name}")
         
     def process_message(self, message: Message) -> Response:
         """
@@ -246,54 +244,10 @@ def run_mcp_mode():
     handler = MCPHandler()
     handler.run()
 
-def check_model_availability():
-    """
-    Verifica se o modelo TinyLlama está disponível e tenta baixá-lo se necessário.
-    """
-    try:
-        # Verifica a variável de ambiente para determinar se deve usar modelo local
-        use_local_model = os.environ.get("USE_LOCAL_MODEL", "true").lower() == "true"
-        if not use_local_model:
-            logger.info("Configurado para não usar modelo local, pulando verificação de disponibilidade")
-            return
-            
-        # Verifica se o modelo TinyLLaMA está disponível
-        if not ModelDownloader.is_model_available("tinyllama"):
-            logger.warning(f"Modelo TinyLLaMA não encontrado ou incompleto.")
-            logger.info("Tentando baixar o modelo usando ModelDownloader...")
-            try:
-                ModelDownloader.download_model("tinyllama", ModelDownloader.MODEL_URLS["tinyllama"])
-                logger.info("Modelo TinyLLaMA baixado com sucesso!")
-            except Exception as e:
-                logger.warning(f"Falha ao baixar o modelo TinyLLaMA: {str(e)}")
-                logger.warning("O sistema usará um modelo de fallback.")
-        else:
-            logger.info(f"Modelo TinyLLaMA encontrado.")
-
-        # Verifica se o modelo Phi-1 está disponível
-        if not ModelDownloader.is_model_available("phi1"):
-            logger.warning(f"Modelo Phi-1 não encontrado ou incompleto.")
-            logger.info("Tentando baixar o modelo usando ModelDownloader...")
-            try:
-                ModelDownloader.download_model("phi1", ModelDownloader.MODEL_URLS["phi1"])
-                logger.info("Modelo Phi-1 baixado com sucesso!")
-            except Exception as e:
-                logger.warning(f"Falha ao baixar o modelo Phi-1: {str(e)}")
-                logger.warning("O sistema usará um modelo de fallback para Phi-1.")
-        else:
-            logger.info(f"Modelo Phi-1 encontrado.")
-            
-    except Exception as e:
-        logger.warning(f"Erro ao verificar/baixar modelos: {str(e)}")
-        logger.warning("O sistema usará um modelo de fallback.")
-
 # ----- Função principal -----
 
 def main():
     """Função principal que unifica todas as entradas."""
-    # Verifica a disponibilidade do modelo
-    check_model_availability()
-    
     parser = argparse.ArgumentParser(description="Prompt TDD - Sistema unificado")
     subparsers = parser.add_subparsers(dest="mode", help="Modo de execução")
     
