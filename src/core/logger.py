@@ -1,4 +1,7 @@
 # src/core/logger.py
+"""
+Módulo para configuração e logging do sistema.
+"""
 import os
 import logging
 import logging.handlers

@@ -15,7 +15,7 @@ logging:
       WARNING: 30
       ERROR: 40
       CRITICAL: 50
-    default: "INFO"
+    default: "DEBUG"
   format:
     default: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     detailed: "%(asctime)s - %(name)s - %(levelname)s - %(message)s - [%(filename)s:%(lineno)d]"
