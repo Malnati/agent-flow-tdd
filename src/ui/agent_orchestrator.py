@@ -24,7 +24,6 @@ from src.core.models import ModelManager
 from src.core.agents import AgentOrchestrator
 from src.core.db import DatabaseManager
 from src.core.logger import get_logger
-from src.core.models import ModelRegistry
 
 # Obter caminho da raiz do projeto
 BASE_DIR = Path(__file__).resolve().parent.parent.parent

@@ -72,19 +72,17 @@ class ModelManager:
         env = self.registry.get_env_vars()
         defaults = self.registry.get_defaults()
         
-        # Usa parâmetros explícitos se fornecidos, senão usa variáveis de ambiente ou padrões
-        self.model_name = model_name or get_env_var(env['default_model'], defaults['model'])
-        self.elevation_model = elevation_model or get_env_var(env['elevation_model'], defaults['elevation_model'])
-        self.fallback_model = fallback_model or get_env_var(env['fallback_model'], defaults['fallback_model'])
+        # Usa parâmetros explícitos se fornecidos, senão usa os valores padrão do arquivo de configuração
+        self.model_name = model_name or defaults["model"]
+        self.elevation_model = elevation_model or defaults["elevation_model"]
+        self.fallback_model = fallback_model or defaults["fallback_model"]
+        self.timeout = defaults["timeout"]
+        self.max_retries = defaults["max_retries"]
         
-        # Configurações de retry e timeout
-        self.max_retries = int(get_env_var(env['max_retries'], str(defaults['max_retries'])))
-        self.timeout = int(get_env_var(env['model_timeout'], str(defaults['timeout'])))
-        
-        # Configuração de fallback
+        # Configuração de fallback - mantém a variável de ambiente aqui por ser útil em tempo de execução
         self.fallback_enabled = get_env_var(env['fallback_enabled'], str(self.config['fallback']['enabled'])).lower() == 'true'
         
-        # Cache de respostas
+        # Cache de respostas - mantém as variáveis de ambiente aqui por serem úteis em tempo de execução
         self.cache_enabled = get_env_var(env['cache_enabled'], str(self.config['cache']['enabled'])).lower() == 'true'
         self.cache_ttl = int(get_env_var(env['cache_ttl'], str(self.config['cache']['ttl'])))
         
