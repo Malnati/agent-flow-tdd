@@ -18,6 +18,9 @@ def load_config() -> Dict[str, Any]:
     
     Returns:
         Dict com configurações
+        
+    Raises:
+        RuntimeError: Quando o arquivo de configuração está ausente ou é inválido
     """
     try:
         # Tenta carregar o arquivo JSON
@@ -27,19 +30,12 @@ def load_config() -> Dict[str, Any]:
                 config = json.load(f)
                 logger.info(f"Configurações carregadas com sucesso de: {agents_config_path}")
                 return config
+        else:
+            raise FileNotFoundError(f"Arquivo de configuração não encontrado: {agents_config_path}")
                 
     except Exception as e:
         logger.error(f"FALHA - load_config | Erro: {str(e)}")
-        # Retorna uma configuração mínima padrão como fallback
-        return {
-            "GuardRails": {
-                "Input": {},
-                "Output": {}
-            },
-            "prompts": {
-                "system": "Você é um assistente especializado em análise e desenvolvimento de software."
-            }
-        }
+        raise RuntimeError(f"Erro ao carregar arquivo de configuração: {str(e)}")
 
 # Configurações globais
 CONFIG = load_config()
@@ -113,42 +109,40 @@ class AgentOrchestrator:
         try:
             logger.info(f"Iniciando execução para prompt: {prompt[:50]}...")
             
-            # Extrai informações do prompt usando guardrail de identificação de título
-            try:
-                info = self.input_guardrails["identificar_titulo"].process(prompt)
-                logger.debug(f"Informações de título extraídas: {info}")
-            except Exception as e:
-                logger.error(f"Erro no guardrail identificar_titulo: {str(e)}")
+            # Dicionário para armazenar os resultados dos guardrails de entrada
+            guardrail_results = {}
+            raw_responses = []
+            
+            # Processa cada guardrail de entrada dinamicamente
+            for guardrail_id, guardrail in self.input_guardrails.items():
+                try:
+                    result = guardrail.process(prompt)
+                    guardrail_results[guardrail_id] = result
+                    raw_responses.append({"guardrail": guardrail_id, "response": result})
+                    logger.debug(f"Informações extraídas por {guardrail_id}: {result}")
+                except Exception as e:
+                    logger.warning(f"Falha no guardrail {guardrail_id}: {str(e)}")
+                    raw_responses.append({"guardrail": guardrail_id, "error": str(e)})
+                    
+            # Verifica se temos o resultado do guardrail principal (identificador de título)
+            if not guardrail_results or "identificar_titulo" not in guardrail_results:
+                logger.error("Guardrail principal 'identificar_titulo' não processado com sucesso")
                 return AgentResult(
-                    output=f"Erro na extração de título: {str(e)}",
+                    output="Erro na extração de informações principais",
                     items=[],
                     guardrails=[],
-                    raw_responses=[]
+                    raw_responses=raw_responses
                 )
                 
-            # Extrai descrição detalhada
-            try:
-                description_info = self.input_guardrails["identificar_descricao"].process(prompt)
-                logger.debug(f"Informações de descrição extraídas: {description_info}")
+            # Obtém as informações do guardrail principal
+            info = guardrail_results["identificar_titulo"]
+            
+            # Combina informações de outros guardrails se disponíveis
+            if "identificar_descricao" in guardrail_results and "description" in guardrail_results["identificar_descricao"]:
+                info["description"] = guardrail_results["identificar_descricao"]["description"]
                 
-                # Combina informações
-                if "description" in description_info:
-                    info["description"] = description_info["description"]
-            except Exception as e:
-                logger.error(f"Erro no guardrail identificar_descricao: {str(e)}")
-                # Continua mesmo se falhar
-                
-            # Extrai campos
-            try:
-                fields_info = self.input_guardrails["identificar_campos"].process(prompt)
-                logger.debug(f"Informações de campos extraídas: {fields_info}")
-                
-                # Combina informações
-                if "fields" in fields_info:
-                    info["fields"] = fields_info["fields"]
-            except Exception as e:
-                logger.error(f"Erro no guardrail identificar_campos: {str(e)}")
-                # Continua mesmo se falhar
+            if "identificar_campos" in guardrail_results and "fields" in guardrail_results["identificar_campos"]:
+                info["fields"] = guardrail_results["identificar_campos"]["fields"]
                 
             # Gera prompt TDD
             try:
@@ -183,7 +177,7 @@ class AgentOrchestrator:
                         )
                         logger.debug(f"Resultado da verificação de coerência: {coherence_result}")
                     except Exception as e:
-                        logger.error(f"Erro na verificação de coerência: {str(e)}")
+                        logger.warning(f"Erro na verificação de coerência: {str(e)}")
                 
                 return AgentResult(
                     output=result,
@@ -192,11 +186,7 @@ class AgentOrchestrator:
                         {"name": "gerar_prompt_tdd", "result": result},
                         {"name": "verificar_coerencia", "result": coherence_result} if coherence_result else {}
                     ],
-                    raw_responses=[
-                        {"guardrail": "identificar_titulo", "response": info},
-                        {"guardrail": "identificar_descricao", "response": description_info},
-                        {"guardrail": "identificar_campos", "response": fields_info}
-                    ]
+                    raw_responses=raw_responses
                 )
                 
             except Exception as e:
@@ -205,7 +195,7 @@ class AgentOrchestrator:
                     output=f"Erro na geração do resultado: {str(e)}",
                     items=[],
                     guardrails=[],
-                    raw_responses=[]
+                    raw_responses=raw_responses
                 )
                 
         except Exception as e:
