@@ -9,9 +9,6 @@ models:
     max_retries: 2                  # Quantidade de tentativas em caso de erro
 
   env_vars:
-    default_model: DEFAULT_MODEL              # Variável de ambiente para modelo padrão
-    elevation_model: ELEVATION_MODEL          # Variável de ambiente para modelo de elevação
-    fallback_model: FALLBACK_MODEL            # Variável de ambiente para modelo de fallback
     openai_key: OPENAI_API_KEY                # Chave de API para OpenAI
     openrouter_key: OPENROUTER_API_KEY        # Chave de API para OpenRouter
     gemini_key: GEMINI_API_KEY                # Chave de API para Gemini

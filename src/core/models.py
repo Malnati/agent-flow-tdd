@@ -57,20 +57,25 @@ class ModelConfig(BaseModel):
 class ModelManager:
     """Gerenciador de modelos de IA."""
 
-    def __init__(self, model_name: Optional[str] = None):
+    def __init__(self, model_name: Optional[str] = None, fallback_model: Optional[str] = None, 
+                 elevation_model: Optional[str] = None):
         """
         Inicializa o gerenciador com configurações do modelo.
         
         Args:
             model_name: Nome do modelo a ser usado (opcional)
+            fallback_model: Nome do modelo de fallback a ser usado (opcional)
+            elevation_model: Nome do modelo de elevação a ser usado (opcional)
         """
         self.registry = ModelRegistry()
         self.config = self.registry.config
         env = self.registry.get_env_vars()
         defaults = self.registry.get_defaults()
+        
+        # Usa parâmetros explícitos se fornecidos, senão usa variáveis de ambiente ou padrões
         self.model_name = model_name or get_env_var(env['default_model'], defaults['model'])
-        self.elevation_model = get_env_var(env['elevation_model'], defaults['elevation_model'])
-        self.fallback_model = get_env_var(env['fallback_model'], defaults['fallback_model'])
+        self.elevation_model = elevation_model or get_env_var(env['elevation_model'], defaults['elevation_model'])
+        self.fallback_model = fallback_model or get_env_var(env['fallback_model'], defaults['fallback_model'])
         
         # Configurações de retry e timeout
         self.max_retries = int(get_env_var(env['max_retries'], str(defaults['max_retries'])))

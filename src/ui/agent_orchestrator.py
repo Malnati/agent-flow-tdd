@@ -52,22 +52,17 @@ class PromptGenTab(Vertical):
             logger.info(f"Modelos disponíveis para o PromptGenTab: {len(modelos)}")
         except Exception as e:
             logger.error(f"Erro ao obter modelos disponíveis: {str(e)}", exc_info=True)
-            # O ModelManager já tenta usar o fallback_model interno, vamos tentar novamente com padrão mínimo
-            try:
-                # Tenta obter o modelo de fallback do ModelRegistry
-                registry = ModelRegistry()
-                fallback_model = registry.get_fallback_model()
-                modelos = [fallback_model]
-                logger.warning(f"Usando modelo de fallback: {fallback_model}")
-            except Exception:
-                # Último recurso: hardcoded
-                modelos = ["gpt-3.5-turbo"]
-                logger.error("Usando modelo fallback hardcoded: gpt-3.5-turbo")
+            # Propaga a exceção para ser tratada pela aplicação principal
+            raise
         
         yield Static("Digite o prompt abaixo:")
         yield Input(placeholder="Digite seu prompt...", id="prompt_input")
         yield Static("Selecione o modelo:")
         yield OptionList(*modelos, id="model_list")
+        yield Static("Modelo de fallback (opcional):")
+        yield OptionList(*modelos, id="fallback_model_list")
+        yield Static("Modelo de elevação (opcional):")
+        yield OptionList(*modelos, id="elevation_model_list")
         yield Static("Resultado da geração:")
         yield Pretty({}, id="result_output")
     
@@ -114,45 +109,51 @@ class TDDPromptApp(App):
     
     selected_tab = reactive("Gen")
 
-    def _get_orchestrator(self, modelo):
+    def _get_orchestrator(self, modelo: str = None) -> AgentOrchestrator:
         """
-        Obtém uma instância do orquestrador de agentes com o modelo selecionado.
+        Inicializa e retorna um AgentOrchestrator com os modelos selecionados.
         
         Args:
-            modelo: Nome do modelo a ser usado
+            modelo: Nome do modelo principal (opcional)
             
         Returns:
-            AgentOrchestrator configurado
+            Uma instância de AgentOrchestrator configurada
         """
         try:
-            # Inicializa o ModelManager com o modelo selecionado pelo usuário
-            # O próprio ModelManager gerencia os aliases de modelos e lógica de fallback
-            logger.info(f"Criando ModelManager com modelo: {modelo}")
-            model_manager = ModelManager(model_name=modelo)
+            # Obtém modelo principal
+            selected_model = modelo or self.tui.prompt_gen_tab.model_list.selected
+            logger.debug(f"Modelo selecionado: {selected_model}")
             
-            # Inicializa o DatabaseManager
-            db = DatabaseManager(db_path=str(DATA_DIR / "agent_logs.db"))
+            # Obtém modelo de fallback (se selecionado)
+            fallback_model = None
+            if hasattr(self.tui.prompt_gen_tab, 'fallback_model_list') and \
+               self.tui.prompt_gen_tab.fallback_model_list:
+                fallback_model = self.tui.prompt_gen_tab.fallback_model_list.selected
+                logger.debug(f"Modelo de fallback selecionado: {fallback_model}")
             
-            # Cria o orquestrador com o modelo selecionado
-            orchestrator = AgentOrchestrator(model_manager.model_name)
+            # Obtém modelo de elevação (se selecionado)
+            elevation_model = None
+            if hasattr(self.tui.prompt_gen_tab, 'elevation_model_list') and \
+               self.tui.prompt_gen_tab.elevation_model_list:
+                elevation_model = self.tui.prompt_gen_tab.elevation_model_list.selected
+                logger.debug(f"Modelo de elevação selecionado: {elevation_model}")
             
-            # Atribui o model_manager como atributo
-            orchestrator.model_manager = model_manager
+            # Inicializa o gerenciador de modelos com os modelos selecionados
+            model_manager = ModelManager(
+                model_name=selected_model,
+                fallback_model=fallback_model,
+                elevation_model=elevation_model
+            )
             
-            # Define o db como atributo separado
-            orchestrator.db = db
+            # Inicializa o gerenciador de banco de dados para logging de execuções
+            db_manager = DatabaseManager()
             
-            # Se o nome do modelo final for diferente do solicitado, notifica o usuário
-            if model_manager.model_name != modelo:
-                logger.warning(f"Usando modelo alternativo: {model_manager.model_name} em vez de {modelo}")
-                self.notify(f"Usando modelo alternativo: {model_manager.model_name}", severity="warning")
-            
-            logger.info(f"Orquestrador inicializado com modelo {model_manager.model_name}")
-            return orchestrator
-            
+            return AgentOrchestrator(
+                model_manager=model_manager,
+                db_manager=db_manager
+            )
         except Exception as e:
-            logger.error(f"Erro ao criar orquestrador: {str(e)}")
-            self.notify(f"Erro ao inicializar o modelo: {str(e)}", severity="error")
+            logger.error(f"Erro ao inicializar orchestrator: {str(e)}")
             raise
     
     def compose(self) -> ComposeResult:
@@ -175,16 +176,6 @@ class TDDPromptApp(App):
         except Exception as e:
             logger.error(f"Erro ao inicializar ModelManager: {str(e)}", exc_info=True)
             self.notify(f"Erro ao inicializar: {str(e)}", severity="error")
-            # Tenta obter o modelo de fallback do ModelRegistry
-            try:
-                registry = ModelRegistry()
-                fallback_model = registry.get_fallback_model()
-                self.available_models = [fallback_model]
-                logger.warning(f"Usando modelo de fallback: {fallback_model}")
-            except Exception:
-                # Último recurso: fallback hardcoded
-                self.available_models = ["gpt-3.5-turbo"]
-                logger.error("Usando modelo fallback hardcoded: gpt-3.5-turbo")
             
         # Inicializa o DatabaseManager para registrar execuções
         try:
