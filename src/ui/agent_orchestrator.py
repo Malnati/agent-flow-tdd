@@ -114,50 +114,11 @@ class TDDPromptApp(App):
             AgentOrchestrator configurado
         """
         try:
-            # Ajusta nome do modelo para APIs externas se necessário
-            modelo_a_usar = modelo
-            if modelo == "deepseek-coder-6.7b":
-                # Para chamadas de API externa, usamos um nome diferente
-                modelo_a_usar = "deepseek-coder"
+            # Inicializa o ModelManager com o modelo selecionado pelo usuário
+            # O próprio ModelManager gerencia os aliases de modelos e lógica de fallback
+            logger.info(f"Criando ModelManager com modelo: {modelo}")
+            model_manager = ModelManager(model_name=modelo)
             
-            # Inicializa componentes
-            model_manager = ModelManager(model_name=modelo_a_usar)
-            
-            # Verifica disponibilidade do modelo local selecionado e aplica fallback se necessário
-            fallback_aplicado = False
-            
-            # Se for tinyllama e não estiver disponível, usa fallback
-            if modelo.startswith("tinyllama-") and not model_manager.tinyllama_model:
-                logger.warning("Modelo TinyLlama não disponível. Usando modelo alternativo.")
-                self.notify("Modelo TinyLlama não disponível, usando modelo alternativo.", severity="warning")
-                modelo_a_usar = "gpt-3.5-turbo"
-                fallback_aplicado = True
-            
-            # Se for phi-1 e não estiver disponível, usa fallback
-            elif modelo == "phi-1" and not model_manager.phi1_model:
-                logger.warning("Modelo Phi-1 não disponível. Usando modelo alternativo.")
-                self.notify("Modelo Phi-1 não disponível, usando modelo alternativo.", severity="warning")
-                modelo_a_usar = "gpt-3.5-turbo"
-                fallback_aplicado = True
-            
-            # Se for deepseek e não estiver disponível, usa fallback
-            elif modelo == "deepseek-coder-6.7b" and not model_manager.deepseek_model:
-                logger.warning("Modelo DeepSeek não disponível. Usando modelo alternativo.")
-                self.notify("Modelo DeepSeek não disponível, usando modelo alternativo.", severity="warning")
-                modelo_a_usar = "gpt-3.5-turbo"
-                fallback_aplicado = True
-            
-            # Se for phi3 e não estiver disponível, usa fallback
-            elif modelo == "phi3-mini" and not model_manager.phi3_model:
-                logger.warning("Modelo Phi-3 Mini não disponível. Usando modelo alternativo.")
-                self.notify("Modelo Phi-3 Mini não disponível, usando modelo alternativo.", severity="warning")
-                modelo_a_usar = "gpt-3.5-turbo"
-                fallback_aplicado = True
-            
-            # Se aplicou fallback, reinicializa o ModelManager com o novo modelo
-            if fallback_aplicado:
-                model_manager = ModelManager(model_name=modelo_a_usar)
-                
             # Inicializa o DatabaseManager
             db = DatabaseManager(db_path=str(DATA_DIR / "agent_logs.db"))
             
@@ -169,6 +130,11 @@ class TDDPromptApp(App):
             
             # Define o db como atributo separado
             orchestrator.db = db
+            
+            # Se o nome do modelo final for diferente do solicitado, notifica o usuário
+            if model_manager.model_name != modelo:
+                logger.warning(f"Usando modelo alternativo: {model_manager.model_name} em vez de {modelo}")
+                self.notify(f"Usando modelo alternativo: {model_manager.model_name}", severity="warning")
             
             logger.info(f"Orquestrador inicializado com modelo {model_manager.model_name}")
             return orchestrator
