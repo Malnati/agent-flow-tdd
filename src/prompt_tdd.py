@@ -246,54 +246,10 @@ def run_mcp_mode():
     handler = MCPHandler()
     handler.run()
 
-def check_model_availability():
-    """
-    Verifica se o modelo TinyLlama está disponível e tenta baixá-lo se necessário.
-    """
-    try:
-        # Verifica a variável de ambiente para determinar se deve usar modelo local
-        use_local_model = os.environ.get("USE_LOCAL_MODEL", "true").lower() == "true"
-        if not use_local_model:
-            logger.info("Configurado para não usar modelo local, pulando verificação de disponibilidade")
-            return
-            
-        # Verifica se o modelo TinyLLaMA está disponível
-        if not ModelDownloader.is_model_available("tinyllama"):
-            logger.warning(f"Modelo TinyLLaMA não encontrado ou incompleto.")
-            logger.info("Tentando baixar o modelo usando ModelDownloader...")
-            try:
-                ModelDownloader.download_model("tinyllama", ModelDownloader.MODEL_URLS["tinyllama"])
-                logger.info("Modelo TinyLLaMA baixado com sucesso!")
-            except Exception as e:
-                logger.warning(f"Falha ao baixar o modelo TinyLLaMA: {str(e)}")
-                logger.warning("O sistema usará um modelo de fallback.")
-        else:
-            logger.info(f"Modelo TinyLLaMA encontrado.")
-
-        # Verifica se o modelo Phi-1 está disponível
-        if not ModelDownloader.is_model_available("phi1"):
-            logger.warning(f"Modelo Phi-1 não encontrado ou incompleto.")
-            logger.info("Tentando baixar o modelo usando ModelDownloader...")
-            try:
-                ModelDownloader.download_model("phi1", ModelDownloader.MODEL_URLS["phi1"])
-                logger.info("Modelo Phi-1 baixado com sucesso!")
-            except Exception as e:
-                logger.warning(f"Falha ao baixar o modelo Phi-1: {str(e)}")
-                logger.warning("O sistema usará um modelo de fallback para Phi-1.")
-        else:
-            logger.info(f"Modelo Phi-1 encontrado.")
-            
-    except Exception as e:
-        logger.warning(f"Erro ao verificar/baixar modelos: {str(e)}")
-        logger.warning("O sistema usará um modelo de fallback.")
-
 # ----- Função principal -----
 
 def main():
     """Função principal que unifica todas as entradas."""
-    # Verifica a disponibilidade do modelo
-    check_model_availability()
-    
     parser = argparse.ArgumentParser(description="Prompt TDD - Sistema unificado")
     subparsers = parser.add_subparsers(dest="mode", help="Modo de execução")
     
