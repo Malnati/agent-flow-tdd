@@ -10,7 +10,7 @@ import sys
 import json
 import argparse
 import uuid
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from dataclasses import dataclass
 from rich.console import Console
 
@@ -39,16 +39,19 @@ class Response:
 
 # ----- Funções utilitárias compartilhadas -----
 
-def get_orchestrator() -> AgentOrchestrator:
+def get_orchestrator(model_name: Optional[str] = None) -> AgentOrchestrator:
     """
     Obtém uma instância configurada do orquestrador de agentes.
+    
+    Args:
+        model_name: Nome do modelo a ser usado (opcional)
     
     Returns:
         AgentOrchestrator configurado
     """
     try:
         # Inicializa componentes
-        model_manager = ModelManager()
+        model_manager = ModelManager(model_name=model_name)
         db = DatabaseManager()
         
         # Cria e configura orquestrador - apenas nome do modelo como parâmetro
@@ -81,13 +84,13 @@ def run_cli_mode(args):
         # Imprime o cabeçalho
         print("🖥️ CLI do projeto prompt-tdd")
         
-        # Define o modelo via variável de ambiente se especificado
-        if hasattr(args, 'model') and args.model:
-            os.environ["DEFAULT_MODEL"] = args.model
-            print(f"🤖 Usando modelo: {args.model}")
+        # Executa o orquestrador com o modelo especificado (se fornecido)
+        model_name = args.model if hasattr(args, 'model') else None
+        orchestrator = get_orchestrator(model_name=model_name)
         
-        # Executa o orquestrador
-        orchestrator = get_orchestrator()
+        # Imprime o modelo utilizado
+        print(f"🤖 Usando modelo: {orchestrator.model_manager.model_name}")
+        
         result = orchestrator.execute(
             prompt=args.prompt, 
             format=args.format
@@ -118,9 +121,14 @@ def run_cli_mode(args):
 class MCPHandler:
     """Manipulador do protocolo MCP."""
     
-    def __init__(self):
-        """Inicializa o manipulador MCP."""
-        self.model_manager = ModelManager()
+    def __init__(self, model_name: Optional[str] = None):
+        """
+        Inicializa o manipulador MCP.
+        
+        Args:
+            model_name: Nome do modelo a ser usado (opcional)
+        """
+        self.model_manager = ModelManager(model_name=model_name)
         self.db = DatabaseManager()
         # Cria e configura orquestrador - apenas nome do modelo como parâmetro
         self.orchestrator = AgentOrchestrator(self.model_manager.model_name)
@@ -128,7 +136,7 @@ class MCPHandler:
         self.orchestrator.model_manager = self.model_manager
         # Define o db como atributo separado
         self.orchestrator.db = self.db
-        logger.info("MCPHandler inicializado")
+        logger.info(f"MCPHandler inicializado com modelo {self.model_manager.model_name}")
         
     def process_message(self, message: Message) -> Response:
         """
